@@ -74,11 +74,11 @@
           <div class="world-channel" @click="selectWorldChannel()">
             <div class="channel-icon">#</div>
             <div class="channel-info">
-              <div class="channel-name">{{ t('worldChannel').toUpperCase() }}</div>
-              <div class="channel-desc">{{ t('globalChannel') }}</div>
+              <div class="channel-name">{{ t('chat.worldChannel').toUpperCase() }}</div>
+              <div class="channel-desc">{{ t('chat.globalChannel') }}</div>
             </div>
             <div class="channel-status">
-              <span class="online-count">{{ worldChannelUsers }} {{ t('online') }}</span>
+              <span class="online-count">{{ worldChannelUsers }} {{ t('chat.online') }}</span>
               <span class="unread-badge" v-if="worldUnreadCount > 0">{{ worldUnreadCount }}</span>
             </div>
           </div>
@@ -470,6 +470,8 @@ const selectRoom = (roomId: string) => {
 const selectWorldChannel = () => {
   currentChannel.value = 'world'
   chatStore.setCurrentRoom(null)
+  // 加入世界频道
+  websocketService.joinWorld()
   // 加载世界频道消息
   loadWorldChannelMessages()
   nextTick(() => {
@@ -477,22 +479,48 @@ const selectWorldChannel = () => {
   })
 }
 
-const loadWorldChannelMessages = () => {
-  // 模拟世界频道消息
-  worldMessages.value = [
-    {
-      id: '1',
-      sender: 'system',
-      content: 'Welcome to the World Channel! This is a global public channel.',
-      timestamp: new Date().toISOString()
-    },
-    {
-      id: '2',
-      sender: 'alice',
-      content: 'Hello everyone! Matrix protocol is amazing!',
-      timestamp: new Date(Date.now() - 300000).toISOString()
+const loadWorldChannelMessages = async () => {
+  try {
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+    const response = await fetch(`${apiUrl}/rooms/world/messages`, {
+      headers: {
+        'Authorization': `Bearer ${authStore.token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (response.ok) {
+      const messages = await response.json()
+      worldMessages.value = messages.map((msg: any) => ({
+        id: msg.id,
+        sender: msg.sender?.username || msg.sender?.displayName || 'unknown',
+        content: msg.content,
+        timestamp: new Date(msg.timestamp).toISOString()
+      }))
+    } else {
+      console.error('Failed to load world messages')
+      // 回退到模拟数据
+      worldMessages.value = [
+        {
+          id: '1',
+          sender: 'system',
+          content: t('chat.worldChannelWelcome'),
+          timestamp: new Date().toISOString()
+        }
+      ]
     }
-  ]
+  } catch (error) {
+    console.error('Error loading world messages:', error)
+    // 回退到模拟数据
+    worldMessages.value = [
+      {
+        id: '1',
+        sender: 'system',
+        content: t('chat.worldChannelWelcome'),
+        timestamp: new Date().toISOString()
+      }
+    ]
+  }
 }
 
 // 消息发送
@@ -524,14 +552,35 @@ const sendMessage = async () => {
 }
 
 const sendWorldMessage = async (content: string) => {
-  // 模拟发送到世界频道
-  const newMessage = {
-    id: Date.now().toString(),
-    sender: authStore.currentUser?.username || 'anonymous',
-    content,
-    timestamp: new Date().toISOString()
+  try {
+    // 通过WebSocket发送世界频道消息
+    websocketService.sendWorldMessage(content)
+
+    // 也通过HTTP API发送（作为备份）
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+    const response = await fetch(`${apiUrl}/rooms/world/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authStore.token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ content })
+    })
+
+    if (!response.ok) {
+      console.error('Failed to send world message via HTTP')
+    }
+  } catch (error) {
+    console.error('Error sending world message:', error)
+    // 回退到本地添加消息
+    const newMessage = {
+      id: Date.now().toString(),
+      sender: authStore.currentUser?.username || 'anonymous',
+      content,
+      timestamp: new Date().toISOString()
+    }
+    worldMessages.value.push(newMessage)
   }
-  worldMessages.value.push(newMessage)
 }
 
 // 输入处理
@@ -542,14 +591,16 @@ const handleTyping = () => {
 
   // 发送正在输入指示
   if (currentChannel.value === 'world') {
-    // 世界频道输入指示
+    websocketService.sendTypingIndicator('world', true)
   } else if (chatStore.currentRoomId) {
     websocketService.sendTypingIndicator(chatStore.currentRoomId, true)
   }
 
   // 3秒后停止输入指示
   typingTimeout.value = setTimeout(() => {
-    if (chatStore.currentRoomId) {
+    if (currentChannel.value === 'world') {
+      websocketService.sendTypingIndicator('world', false)
+    } else if (chatStore.currentRoomId) {
       websocketService.sendTypingIndicator(chatStore.currentRoomId, false)
     }
   }, 3000)
@@ -655,6 +706,33 @@ const handleClickOutside = (event: Event) => {
   }
 }
 
+// WebSocket事件处理
+const handleWorldMessage = (messageData: any) => {
+  const newMessage = {
+    id: messageData.id,
+    sender: messageData.sender?.username || messageData.sender?.displayName || 'unknown',
+    content: messageData.content,
+    timestamp: new Date(messageData.timestamp).toISOString()
+  }
+  worldMessages.value.push(newMessage)
+
+  // 如果当前在世界频道，滚动到底部
+  if (currentChannel.value === 'world') {
+    nextTick(() => {
+      scrollToBottom()
+    })
+  }
+}
+
+const handleWorldJoined = (data: any) => {
+  console.log('Successfully joined world channel:', data)
+}
+
+const handleTypingIndicator = (data: any) => {
+  // 处理输入指示
+  console.log('Typing indicator:', data)
+}
+
 // 生命周期
 onMounted(async () => {
   console.log('Matrix chat interface initialized')
@@ -662,6 +740,11 @@ onMounted(async () => {
   // 连接WebSocket
   websocketService.connect()
   websocketService.startHeartbeat()
+
+  // 设置WebSocket事件监听
+  websocketService.on('worldMessage', handleWorldMessage)
+  websocketService.on('worldJoined', handleWorldJoined)
+  websocketService.on('typingIndicator', handleTypingIndicator)
 
   // 加载房间列表
   await chatStore.fetchRooms()
@@ -677,6 +760,12 @@ onUnmounted(() => {
   if (typingTimeout.value) {
     clearTimeout(typingTimeout.value)
   }
+
+  // 清理WebSocket事件监听
+  websocketService.off('worldMessage', handleWorldMessage)
+  websocketService.off('worldJoined', handleWorldJoined)
+  websocketService.off('typingIndicator', handleTypingIndicator)
+
   websocketService.disconnect()
 
   // 移除事件监听

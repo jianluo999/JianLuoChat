@@ -63,7 +63,9 @@ const zh = {
     sendMessage: '发送消息',
     messagePlaceholder: '输入消息...',
     online: '在线',
-    offline: '离线'
+    offline: '离线',
+    worldChannelWelcome: '欢迎来到世界频道！这是一个全球公共聊天空间。',
+    globalChannel: '全球公共频道'
   }
 }
 
@@ -130,7 +132,9 @@ const en = {
     sendMessage: 'Send Message',
     messagePlaceholder: 'Type a message...',
     online: 'Online',
-    offline: 'Offline'
+    offline: 'Offline',
+    worldChannelWelcome: 'Welcome to the World Channel! This is a global public chat space.',
+    globalChannel: 'Global Public Channel'
   }
 }
 

@@ -37,6 +37,41 @@ public class RoomController {
     }
 
     /**
+     * 发送消息到世界频道
+     */
+    @PostMapping("/world/messages")
+    public ResponseEntity<?> sendWorldMessage(@RequestBody Map<String, String> request, @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        try {
+            User user = userPrincipal.getUser();
+            String content = request.get("content");
+
+            if (content == null || content.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "消息内容不能为空"));
+            }
+
+            Map<String, Object> result = matrixRoomService.sendMessage(user, matrixRoomService.getWorldChannel().join().get("id").toString(), content).join();
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * 获取世界频道消息历史
+     */
+    @GetMapping("/world/messages")
+    public ResponseEntity<?> getWorldMessages(@RequestParam(defaultValue = "50") int limit, @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        try {
+            User user = userPrincipal.getUser();
+            String worldRoomId = matrixRoomService.getWorldChannel().join().get("id").toString();
+            List<Map<String, Object>> messages = matrixRoomService.getRoomMessages(user, worldRoomId, limit).join();
+            return ResponseEntity.ok(messages);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * 获取用户的私密房间
      */
     @GetMapping("/private")

@@ -22,6 +22,9 @@ public class RoomService {
     
     @Autowired
     private RoomRepository roomRepository;
+
+    @Autowired
+    private UserRepository userRepository;
     
     @Autowired
     private RoomMemberRepository roomMemberRepository;
@@ -37,20 +40,46 @@ public class RoomService {
      */
     public Room getOrCreateWorldChannel() {
         Optional<Room> worldRoom = roomRepository.findByTypeAndIsActiveTrue(Room.RoomType.WORLD);
-        
+
         if (worldRoom.isPresent()) {
             return worldRoom.get();
         }
-        
-        // 创建世界频道（系统用户作为所有者）
-        Room worldChannel = new Room("世界频道", Room.RoomType.WORLD, null);
+
+        // 获取或创建系统用户作为世界频道的所有者
+        User systemUser = getOrCreateSystemUser();
+
+        // 创建世界频道
+        Room worldChannel = new Room("世界频道", Room.RoomType.WORLD, systemUser);
         worldChannel.setDescription("所有用户都可以参与的公共聊天频道");
         worldChannel.setMaxMembers(null); // 无限制
-        
+
         Room savedRoom = roomRepository.save(worldChannel);
         logger.info("Created world channel: {}", savedRoom.getRoomCode());
-        
+
         return savedRoom;
+    }
+
+    /**
+     * 获取或创建系统用户
+     */
+    private User getOrCreateSystemUser() {
+        Optional<User> systemUser = userRepository.findByUsername("system");
+
+        if (systemUser.isPresent()) {
+            return systemUser.get();
+        }
+
+        // 创建系统用户
+        User newSystemUser = new User();
+        newSystemUser.setUsername("system");
+        newSystemUser.setEmail("system@jianluochat.com");
+        newSystemUser.setDisplayName("System");
+        newSystemUser.setPassword("$2a$10$dummy.password.hash"); // 虚拟密码哈希
+
+        User savedSystemUser = userRepository.save(newSystemUser);
+        logger.info("Created system user: {}", savedSystemUser.getUsername());
+
+        return savedSystemUser;
     }
 
     /**

@@ -232,6 +232,26 @@ public class MatrixHomeserver {
     }
     
     /**
+     * 检查用户是否已登录
+     */
+    public boolean isUserLoggedIn(String userId) {
+        MatrixUserSession session = userSessions.get(userId);
+        return session != null && session.isActive();
+    }
+
+    /**
+     * 创建用户会话（简化版本）
+     */
+    public void createUserSession(String userId) {
+        String accessToken = "mda_" + UUID.randomUUID().toString().replace("-", "");
+        String deviceId = "JIANLUOCHAT_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+
+        MatrixUserSession session = new MatrixUserSession(userId, accessToken, deviceId);
+        userSessions.put(userId, session);
+        logger.info("Created Matrix session for user: {} (device: {})", userId, deviceId);
+    }
+
+    /**
      * 发送Matrix消息
      * 体现Matrix协议的消息事件系统
      */

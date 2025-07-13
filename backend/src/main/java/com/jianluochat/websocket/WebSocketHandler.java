@@ -8,6 +8,7 @@ import com.jianluochat.entity.User;
 import com.jianluochat.repository.UserRepository;
 import com.jianluochat.service.MessageService;
 import com.jianluochat.service.RoomService;
+import com.jianluochat.service.MatrixRoomService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,9 @@ public class WebSocketHandler implements org.springframework.web.socket.WebSocke
     @Autowired
     private MessageService messageService;
 
+    @Autowired
+    private MatrixRoomService matrixRoomService;
+
     public WebSocketHandler() {
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
@@ -47,7 +51,15 @@ public class WebSocketHandler implements org.springframework.web.socket.WebSocke
         if (userId != null) {
             sessions.put(userId, session);
             logger.info("WebSocket connection established for user: {}", userId);
-            
+
+            // 自动登录用户到Matrix会话
+            try {
+                matrixRoomService.ensureUserLoggedIn(userId);
+                logger.info("User {} logged into Matrix session", userId);
+            } catch (Exception e) {
+                logger.warn("Failed to log user {} into Matrix: {}", userId, e.getMessage());
+            }
+
             // Send welcome message
             sendMessage(session, new WebSocketMessage("CONNECTED", "Welcome to JianluoChat!", null));
         }
@@ -103,6 +115,12 @@ public class WebSocketHandler implements org.springframework.web.socket.WebSocke
                 break;
             case "CHAT_MESSAGE":
                 handleChatMessage(session, userId, message);
+                break;
+            case "WORLD_MESSAGE":
+                handleWorldMessage(session, userId, message);
+                break;
+            case "JOIN_WORLD":
+                handleJoinWorld(session, userId);
                 break;
             case "TYPING":
                 handleTypingIndicator(userId, message);
@@ -199,6 +217,53 @@ public class WebSocketHandler implements org.springframework.web.socket.WebSocke
         }
     }
 
+    private void handleWorldMessage(WebSocketSession session, String userId, WebSocketMessage<?> message) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = (Map<String, Object>) message.getData();
+            String content = (String) data.get("content");
+
+            if (content == null || content.trim().isEmpty()) {
+                sendErrorMessage(session, "消息内容不能为空");
+                return;
+            }
+
+            // 获取用户信息（userId是用户名，不是ID）
+            User user = userRepository.findByUsername(userId).orElse(null);
+            if (user == null) {
+                sendErrorMessage(session, "用户不存在");
+                return;
+            }
+
+            // 通过MatrixRoomService发送到世界频道
+            String worldRoomId = matrixRoomService.getWorldChannel().join().get("id").toString();
+            Map<String, Object> messageResult = matrixRoomService.sendMessage(user, worldRoomId, content).join();
+
+            // 广播消息给所有连接的用户
+            broadcastToAllUsers(new WebSocketMessage<>("WORLD_MESSAGE", "世界频道消息", messageResult));
+
+            logger.info("World message sent by user {}: {}", userId, content);
+        } catch (Exception e) {
+            logger.error("Error handling world message: {}", e.getMessage());
+            sendErrorMessage(session, "发送世界频道消息失败: " + e.getMessage());
+        }
+    }
+
+    private void handleJoinWorld(WebSocketSession session, String userId) {
+        try {
+            // 标记用户加入世界频道
+            userRooms.put(userId, "WORLD");
+
+            // 发送确认消息
+            sendMessage(session, new WebSocketMessage<>("WORLD_JOINED", "成功加入世界频道", Map.of("channel", "world")));
+
+            logger.info("User {} joined world channel", userId);
+        } catch (Exception e) {
+            logger.error("Error handling join world: {}", e.getMessage());
+            sendErrorMessage(session, "加入世界频道失败");
+        }
+    }
+
     private void handleTypingIndicator(String userId, WebSocketMessage<?> message) {
         try {
             @SuppressWarnings("unchecked")
@@ -281,6 +346,31 @@ public class WebSocketHandler implements org.springframework.web.socket.WebSocke
             if (roomCode.equals(entry.getValue()) && !senderId.equals(entry.getKey())) {
                 String userId = entry.getKey();
                 WebSocketSession session = sessions.get(userId);
+                if (session != null && session.isOpen()) {
+                    sendMessage(session, message);
+                }
+            }
+        }
+    }
+
+    /**
+     * 广播消息给所有连接的用户
+     */
+    private void broadcastToAllUsers(WebSocketMessage<?> message) {
+        for (WebSocketSession session : sessions.values()) {
+            if (session != null && session.isOpen()) {
+                sendMessage(session, message);
+            }
+        }
+    }
+
+    /**
+     * 广播消息给除发送者外的所有用户
+     */
+    private void broadcastToAllUsersExceptSender(String senderId, WebSocketMessage<?> message) {
+        for (Map.Entry<String, WebSocketSession> entry : sessions.entrySet()) {
+            if (!senderId.equals(entry.getKey())) {
+                WebSocketSession session = entry.getValue();
                 if (session != null && session.isOpen()) {
                     sendMessage(session, message);
                 }

@@ -132,6 +132,30 @@ public class MatrixRoomService {
     }
 
     /**
+     * 确保用户已登录到Matrix会话
+     */
+    public void ensureUserLoggedIn(String username) {
+        try {
+            String matrixUserId = matrixHomeserver.buildMatrixUserId(username);
+
+            // 检查用户是否已经有活跃的Matrix会话
+            if (!matrixHomeserver.isUserLoggedIn(matrixUserId)) {
+                // 自动创建Matrix会话（简化版本）
+                matrixHomeserver.createUserSession(matrixUserId);
+                logger.info("Created Matrix session for user: {}", matrixUserId);
+
+                // 自动加入世界频道
+                String worldRoomId = getWorldChannel().join().get("id").toString();
+                matrixHomeserver.joinRoom(matrixUserId, worldRoomId).join();
+                logger.info("User {} joined world channel: {}", matrixUserId, worldRoomId);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to ensure user {} is logged in: {}", username, e.getMessage());
+            throw new RuntimeException("Failed to log user into Matrix", e);
+        }
+    }
+
+    /**
      * 发送消息到房间
      */
     public CompletableFuture<Map<String, Object>> sendMessage(User sender, String roomId, String message) {

@@ -14,6 +14,7 @@ class WebSocketService {
   private maxReconnectAttempts = 5
   private reconnectDelay = 1000
   private heartbeatInterval: number | null = null
+  private eventListeners: { [key: string]: Function[] } = {}
 
   connect() {
     const authStore = useAuthStore()
@@ -83,6 +84,15 @@ class WebSocketService {
           })
         }
         break
+      case 'WORLD_MESSAGE':
+        this.emit('worldMessage', data.data)
+        break
+      case 'WORLD_JOINED':
+        this.emit('worldJoined', data.data)
+        break
+      case 'TYPING_INDICATOR':
+        this.emit('typingIndicator', data.data)
+        break
       case 'PONG':
         // 心跳响应
         break
@@ -91,6 +101,25 @@ class WebSocketService {
         break
       default:
         console.log('Unknown message type:', data.type, data)
+    }
+  }
+
+  on(event: string, callback: Function) {
+    if (!this.eventListeners[event]) {
+      this.eventListeners[event] = []
+    }
+    this.eventListeners[event].push(callback)
+  }
+
+  off(event: string, callback: Function) {
+    if (this.eventListeners[event]) {
+      this.eventListeners[event] = this.eventListeners[event].filter(cb => cb !== callback)
+    }
+  }
+
+  private emit(event: string, data: any) {
+    if (this.eventListeners[event]) {
+      this.eventListeners[event].forEach(callback => callback(data))
     }
   }
 
@@ -127,9 +156,17 @@ class WebSocketService {
     this.sendMessage('CHAT_MESSAGE', content, { roomId, content })
   }
 
+  sendWorldMessage(content: string) {
+    this.sendMessage('WORLD_MESSAGE', content, { content })
+  }
+
+  joinWorld() {
+    this.sendMessage('JOIN_WORLD', 'Joining world channel')
+  }
+
   sendTypingIndicator(roomId: string, isTyping: boolean) {
     this.sendMessage('TYPING', isTyping ? 'User is typing' : 'User stopped typing', {
-      roomId,
+      roomCode: roomId === 'world' ? 'WORLD' : roomId,
       isTyping
     })
   }

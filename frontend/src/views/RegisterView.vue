@@ -25,16 +25,16 @@
         <!-- ASCII艺术标题 -->
         <div class="ascii-art">
           <pre class="retro-title" v-if="isZh">
-╔══════════════════════════════════════════════════════════════╗
-║                  创建矩阵账户                                  ║
-║                [ 加入去中心化聊天世界 ]                        ║
-╚══════════════════════════════════════════════════════════════╝
+
+                           加入去中心化聊天世界                            
+                             
+
           </pre>
           <pre class="retro-title" v-else>
-╔══════════════════════════════════════════════════════════════╗
-║                CREATE MATRIX ACCOUNT                         ║
-║              [ Join Decentralized Chat World ]              ║
-╚══════════════════════════════════════════════════════════════╝
+
+               CREATE MATRIX ACCOUNT                        
+             Join Decentralized Chat World               
+
           </pre>
         </div>
 
