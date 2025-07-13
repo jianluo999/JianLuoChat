@@ -390,7 +390,7 @@ const handleRegister = async () => {
 .retro-input {
   width: 100%;
   padding: 12px 15px;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 20, 0, 0.9);
   border: 2px solid #003300;
   border-radius: 4px;
   color: #00ff00;
@@ -398,13 +398,15 @@ const handleRegister = async () => {
   font-size: 14px;
   transition: all 0.3s ease;
   box-sizing: border-box;
+  text-shadow: 0 0 3px #00ff00;
 }
 
 .retro-input:focus {
   outline: none;
   border-color: #00ff00;
-  box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.5), inset 0 0 10px rgba(0, 255, 0, 0.1);
   text-shadow: 0 0 5px #00ff00;
+  background: rgba(0, 30, 0, 0.95);
 }
 
 .retro-input.error {

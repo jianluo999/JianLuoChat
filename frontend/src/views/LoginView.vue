@@ -414,19 +414,23 @@ onMounted(() => {
 .retro-input {
   width: 100%;
   padding: 12px 16px;
-  background: transparent;
-  border: 1px solid #00ff00;
+  background: rgba(0, 20, 0, 0.9);
+  border: 2px solid #003300;
+  border-radius: 4px;
   color: #00ff00;
   font-family: 'Share Tech Mono', monospace;
   font-size: 14px;
   outline: none;
   transition: all 0.3s ease;
+  text-shadow: 0 0 3px #00ff00;
+  box-sizing: border-box;
 }
 
 .retro-input:focus {
   border-color: #00ff00;
-  box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.5), inset 0 0 10px rgba(0, 255, 0, 0.1);
   text-shadow: 0 0 5px #00ff00;
+  background: rgba(0, 30, 0, 0.95);
 }
 
 .retro-input.error {
