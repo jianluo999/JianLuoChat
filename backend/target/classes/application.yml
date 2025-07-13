@@ -1,0 +1,89 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: jianluochat-backend
+  
+  # Database Configuration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/jianluochat
+    username: jianluochat
+    password: jianluochat123
+    driver-class-name: org.postgresql.Driver
+    
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        
+  # Redis Configuration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 
+      database: 0
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
+
+# JWT Configuration
+jwt:
+  secret: jianluochat-secret-key-2024-matrix-protocol-integration
+  expiration: 86400000 # 24 hours in milliseconds
+
+# Matrix Configuration
+matrix:
+  homeserver:
+    url: https://matrix.jianluochat.com
+    domain: jianluochat.com
+  world:
+    room:
+      alias: "#world:jianluochat.com"
+  federation:
+    enabled: true
+    port: 8448
+  encryption:
+    enabled: true
+
+
+
+# WebSocket Configuration
+websocket:
+  allowed-origins: "http://localhost:3000,http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177,http://localhost:5178"
+  endpoint: "/ws"
+
+# Logging Configuration
+logging:
+  level:
+    com.jianluochat: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.web.socket: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/jianluochat.log
+
+# File Upload Configuration
+file:
+  upload:
+    path: ./uploads/
+    max-size: 10MB
+    allowed-types: 
+      - image/jpeg
+      - image/png
+      - image/gif
+      - application/pdf
+      - text/plain
