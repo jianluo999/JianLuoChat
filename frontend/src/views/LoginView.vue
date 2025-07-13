@@ -3,6 +3,11 @@
     <!-- 背景矩阵效果 -->
     <div class="matrix-bg"></div>
 
+    <!-- 语言切换 -->
+    <div class="language-switch-container">
+      <LanguageSwitch />
+    </div>
+
     <!-- 主要内容 -->
     <div class="terminal-window">
       <!-- 终端标题栏 -->
@@ -19,10 +24,16 @@
       <div class="terminal-content">
         <!-- ASCII艺术标题 -->
         <div class="ascii-art">
-          <pre class="retro-title">
+          <pre class="retro-title" v-if="isZh">
 ╔══════════════════════════════════════════════════════════════╗
 ║                    JIANLUOCHAT MATRIX                        ║
 ║                  [ 去中心化即时通讯系统 ]                      ║
+╚══════════════════════════════════════════════════════════════╝
+          </pre>
+          <pre class="retro-title" v-else>
+╔══════════════════════════════════════════════════════════════╗
+║                    JIANLUOCHAT MATRIX                        ║
+║              [ Decentralized Chat System ]                  ║
 ╚══════════════════════════════════════════════════════════════╝
           </pre>
         </div>
@@ -30,15 +41,15 @@
         <!-- 系统信息 -->
         <div class="system-info">
           <div class="info-line">
-            <span class="prompt">SYSTEM:</span>
-            <span class="typing-text">Matrix Protocol Integration Active...</span>
+            <span class="prompt">{{ isZh ? '系统' : 'SYSTEM' }}:</span>
+            <span class="typing-text">{{ isZh ? 'Matrix协议集成已激活...' : 'Matrix Protocol Integration Active...' }}</span>
           </div>
           <div class="info-line">
-            <span class="prompt">STATUS:</span>
-            <span class="status-ok">FEDERATION ENABLED</span>
+            <span class="prompt">{{ isZh ? '状态' : 'STATUS' }}:</span>
+            <span class="status-ok">{{ isZh ? '联邦已启用' : 'FEDERATION ENABLED' }}</span>
           </div>
           <div class="info-line">
-            <span class="prompt">WORLD:</span>
+            <span class="prompt">{{ isZh ? '世界' : 'WORLD' }}:</span>
             <span class="world-channel">#world:jianluochat.com</span>
           </div>
         </div>
@@ -47,17 +58,17 @@
         <div class="login-form">
           <div class="form-header">
             <span class="prompt">root@jianluochat:~$</span>
-            <span class="command">login --secure</span>
+            <span class="command">{{ isZh ? 'login --secure' : 'login --secure' }}</span>
           </div>
 
           <form @submit.prevent="handleLogin">
             <div class="input-group">
-              <label class="input-label">USERNAME:</label>
+              <label class="input-label">{{ t('common.username').toUpperCase() }}:</label>
               <input
                 v-model="loginForm.username"
                 type="text"
                 class="retro-input"
-                placeholder="Enter your matrix ID..."
+                :placeholder="t('login.usernamePlaceholder')"
                 :class="{ 'error': usernameError }"
                 @input="clearErrors"
               />
@@ -65,12 +76,12 @@
             </div>
 
             <div class="input-group">
-              <label class="input-label">PASSWORD:</label>
+              <label class="input-label">{{ t('common.password').toUpperCase() }}:</label>
               <input
                 v-model="loginForm.password"
                 type="password"
                 class="retro-input"
-                placeholder="Enter access token..."
+                :placeholder="t('login.passwordPlaceholder')"
                 :class="{ 'error': passwordError }"
                 @input="clearErrors"
                 @keyup.enter="handleLogin"
@@ -84,26 +95,26 @@
                 class="retro-button login-btn"
                 :disabled="authStore.loading"
               >
-                <span v-if="authStore.loading">AUTHENTICATING...</span>
-                <span v-else>[ CONNECT TO MATRIX ]</span>
+                <span v-if="authStore.loading">{{ isZh ? '认证中...' : 'AUTHENTICATING...' }}</span>
+                <span v-else>[ {{ t('login.loginButton') }} ]</span>
               </button>
             </div>
           </form>
 
           <!-- 注册链接 -->
           <div class="register-link">
-            <span class="prompt">NEW USER?</span>
+            <span class="prompt">{{ isZh ? '新用户？' : 'NEW USER?' }}</span>
             <button
               class="link-button"
               @click="$router.push('/register')"
             >
-              CREATE MATRIX ACCOUNT
+              {{ t('login.registerLink') }}
             </button>
           </div>
 
           <!-- 错误信息 -->
           <div v-if="authStore.error" class="error-display">
-            <span class="error-prefix">ERROR:</span>
+            <span class="error-prefix">{{ isZh ? '错误' : 'ERROR' }}:</span>
             <span class="error-text">{{ authStore.error }}</span>
           </div>
         </div>
@@ -111,12 +122,12 @@
         <!-- 底部信息 -->
         <div class="footer-info">
           <div class="info-line">
-            <span class="prompt">INFO:</span>
-            <span>Powered by Matrix Protocol | End-to-End Encryption</span>
+            <span class="prompt">{{ isZh ? '信息' : 'INFO' }}:</span>
+            <span>{{ isZh ? '基于Matrix协议 | 端到端加密' : 'Powered by Matrix Protocol | End-to-End Encryption' }}</span>
           </div>
           <div class="info-line">
-            <span class="prompt">HELP:</span>
-            <span>Type 'help' for available commands</span>
+            <span class="prompt">{{ isZh ? '帮助' : 'HELP' }}:</span>
+            <span>{{ isZh ? '输入 help 查看可用命令' : 'Type help for available commands' }}</span>
           </div>
         </div>
       </div>
@@ -128,9 +139,12 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useLanguage } from '@/composables/useLanguage'
+import LanguageSwitch from '@/components/LanguageSwitch.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const { isZh, t } = useLanguage()
 
 const loginForm = reactive({
   username: '',
@@ -508,6 +522,14 @@ onMounted(() => {
   50% { border-color: #00ff00; }
 }
 
+/* 语言切换 */
+.language-switch-container {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .terminal-window {
@@ -521,6 +543,11 @@ onMounted(() => {
 
   .terminal-content {
     padding: 15px;
+  }
+
+  .language-switch-container {
+    top: 10px;
+    right: 10px;
   }
 }
 </style>
