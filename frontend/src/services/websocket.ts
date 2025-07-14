@@ -85,6 +85,7 @@ class WebSocketService {
         }
         break
       case 'WORLD_MESSAGE':
+        console.log('WebSocket received WORLD_MESSAGE:', data)
         this.emit('worldMessage', data.data)
         break
       case 'WORLD_JOINED':

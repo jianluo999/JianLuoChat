@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import axios from 'axios'
+import { useAuthStore } from './auth'
 
 export interface Message {
   id: string
@@ -39,6 +40,17 @@ export const useChatStore = defineStore('chat', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  // Helper function to get auth headers
+  const getAuthHeaders = () => {
+    const authStore = useAuthStore()
+    return authStore.token ? {
+      'Authorization': `Bearer ${authStore.token}`,
+      'Content-Type': 'application/json'
+    } : {
+      'Content-Type': 'application/json'
+    }
+  }
+
   // Getters
   const currentRoom = computed(() => 
     rooms.value.find(room => room.id === currentRoomId.value)
@@ -64,9 +76,12 @@ export const useChatStore = defineStore('chat', () => {
   const fetchRooms = async () => {
     loading.value = true
     error.value = null
-    
+
     try {
-      const response = await axios.get('/api/rooms')
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+      const response = await axios.get(`${apiUrl}/rooms`, {
+        headers: getAuthHeaders()
+      })
       rooms.value = response.data
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to fetch rooms'
@@ -77,9 +92,13 @@ export const useChatStore = defineStore('chat', () => {
 
   const fetchMessages = async (roomId: string, limit = 50, before?: string) => {
     try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
       const params = { limit, before }
-      const response = await axios.get(`/api/rooms/${roomId}/messages`, { params })
-      
+      const response = await axios.get(`${apiUrl}/rooms/${roomId}/messages`, {
+        params,
+        headers: getAuthHeaders()
+      })
+
       const roomMessages = messages.value.get(roomId) || []
       if (before) {
         // Prepend older messages
@@ -110,9 +129,12 @@ export const useChatStore = defineStore('chat', () => {
     messages.value.set(roomId, [...roomMessages, tempMessage])
 
     try {
-      const response = await axios.post(`/api/rooms/${roomId}/messages`, {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+      const response = await axios.post(`${apiUrl}/rooms/${roomId}/messages`, {
         content,
         messageType
+      }, {
+        headers: getAuthHeaders()
       })
 
       // Replace temporary message with actual message
@@ -143,10 +165,13 @@ export const useChatStore = defineStore('chat', () => {
     error.value = null
     
     try {
-      const response = await axios.post('/api/rooms', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+      const response = await axios.post(`${apiUrl}/rooms`, {
         name,
         type,
         members
+      }, {
+        headers: getAuthHeaders()
       })
       
       rooms.value.unshift(response.data)
@@ -161,7 +186,10 @@ export const useChatStore = defineStore('chat', () => {
 
   const joinRoom = async (roomId: string) => {
     try {
-      await axios.post(`/api/rooms/${roomId}/join`)
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+      await axios.post(`${apiUrl}/rooms/${roomId}/join`, {}, {
+        headers: getAuthHeaders()
+      })
       await fetchRooms() // Refresh rooms list
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to join room'
@@ -170,10 +198,13 @@ export const useChatStore = defineStore('chat', () => {
 
   const leaveRoom = async (roomId: string) => {
     try {
-      await axios.post(`/api/rooms/${roomId}/leave`)
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+      await axios.post(`${apiUrl}/rooms/${roomId}/leave`, {}, {
+        headers: getAuthHeaders()
+      })
       rooms.value = rooms.value.filter(room => room.id !== roomId)
       messages.value.delete(roomId)
-      
+
       if (currentRoomId.value === roomId) {
         currentRoomId.value = null
       }

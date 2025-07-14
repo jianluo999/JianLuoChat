@@ -252,6 +252,40 @@ public class MatrixHomeserver {
     }
 
     /**
+     * 离开Matrix房间
+     * 体现Matrix协议的房间成员管理
+     */
+    public CompletableFuture<Boolean> leaveRoom(String userId, String roomId) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                MatrixUserSession session = userSessions.get(userId);
+                if (session == null || !session.isActive()) {
+                    throw new RuntimeException("User not logged in to Matrix");
+                }
+
+                MatrixRoomState roomState = roomStates.get(roomId);
+                if (roomState == null) {
+                    throw new RuntimeException("Room not found: " + roomId);
+                }
+
+                if (!roomState.isMember(userId)) {
+                    logger.warn("User {} is not a member of room {}", userId, roomId);
+                    return false;
+                }
+
+                // 从房间中移除用户
+                roomState.removeMember(userId);
+
+                logger.info("User {} left room {}", userId, roomId);
+                return true;
+            } catch (Exception e) {
+                logger.error("Failed to leave room {} for user {}: {}", roomId, userId, e.getMessage());
+                throw new RuntimeException("Failed to leave room", e);
+            }
+        });
+    }
+
+    /**
      * 发送Matrix消息
      * 体现Matrix协议的消息事件系统
      */

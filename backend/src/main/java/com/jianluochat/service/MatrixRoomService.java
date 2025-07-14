@@ -156,6 +156,30 @@ public class MatrixRoomService {
     }
 
     /**
+     * 离开房间
+     */
+    public CompletableFuture<Boolean> leaveRoom(User user, String roomId) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String matrixUserId = matrixHomeserver.buildMatrixUserId(user.getUsername());
+
+                boolean success = matrixHomeserver.leaveRoom(matrixUserId, roomId).join();
+
+                if (success) {
+                    logger.info("User {} left room {}", user.getUsername(), roomId);
+                } else {
+                    logger.warn("Failed to leave room {} for user {}", roomId, user.getUsername());
+                }
+
+                return success;
+            } catch (Exception e) {
+                logger.error("Error leaving room {} for user {}: {}", roomId, user.getUsername(), e.getMessage());
+                return false;
+            }
+        });
+    }
+
+    /**
      * 发送消息到房间
      */
     public CompletableFuture<Map<String, Object>> sendMessage(User sender, String roomId, String message) {
