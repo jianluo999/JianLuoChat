@@ -552,11 +552,9 @@ const sendMessage = async () => {
 }
 
 const sendWorldMessage = async (content: string) => {
-  console.log('Sending world message:', content)
   try {
     // 通过WebSocket发送世界频道消息
     websocketService.sendWorldMessage(content)
-    console.log('WebSocket message sent')
 
     // 也通过HTTP API发送（作为备份）
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
@@ -571,8 +569,6 @@ const sendWorldMessage = async (content: string) => {
 
     if (!response.ok) {
       console.error('Failed to send world message via HTTP')
-    } else {
-      console.log('HTTP message sent successfully')
     }
   } catch (error) {
     console.error('Error sending world message:', error)
@@ -583,7 +579,6 @@ const sendWorldMessage = async (content: string) => {
       content,
       timestamp: new Date().toISOString()
     }
-    console.log('Adding fallback message:', newMessage)
     worldMessages.value.push(newMessage)
   }
 }
@@ -714,12 +709,14 @@ const handleClickOutside = (event: Event) => {
 
 // WebSocket事件处理
 const handleWorldMessage = (messageData: any) => {
+  console.log('Received world message:', messageData)
   const newMessage = {
     id: messageData.id,
     sender: messageData.sender?.username || messageData.sender?.displayName || 'unknown',
     content: messageData.content,
     timestamp: new Date(messageData.timestamp).toISOString()
   }
+  console.log('Adding message to worldMessages:', newMessage)
   worldMessages.value.push(newMessage)
 
   // 如果当前在世界频道，滚动到底部
