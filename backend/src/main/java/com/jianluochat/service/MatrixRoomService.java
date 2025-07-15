@@ -4,13 +4,16 @@ import com.jianluochat.entity.User;
 import com.jianluochat.matrix.MatrixHomeserver;
 import com.jianluochat.matrix.MatrixEvent;
 import com.jianluochat.matrix.MatrixUserSession;
+import com.jianluochat.matrix.MatrixRoomState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -294,11 +297,18 @@ public class MatrixRoomService {
      * 构建房间信息对象
      */
     private Map<String, Object> buildRoomInfo(String roomId, String roomName, String roomType) {
+        // 获取房间成员信息
+        MatrixRoomState roomState = matrixHomeserver.getRoomState(roomId);
+        Set<String> members = roomState != null ? roomState.getMembers() : Set.of();
+
         return Map.of(
             "id", roomId,
             "name", roomName,
             "type", roomType,
-            "memberCount", 1, // 简化实现
+            "members", new ArrayList<>(members), // 转换为List以便JSON序列化
+            "memberCount", members.size(),
+            "unreadCount", 0, // 简化实现
+            "isTyping", new ArrayList<>(), // 空的正在输入列表
             "lastActivity", System.currentTimeMillis()
         );
     }

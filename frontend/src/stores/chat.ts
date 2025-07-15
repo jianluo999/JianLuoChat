@@ -16,12 +16,14 @@ export interface Message {
 export interface Room {
   id: string
   name: string
-  type: 'direct' | 'group'
+  type: 'direct' | 'group' | 'private' | 'public'
   avatarUrl?: string
   lastMessage?: Message
   unreadCount: number
   members: string[]
   isTyping: string[]
+  memberCount?: number
+  lastActivity?: number
 }
 
 export interface TypingIndicator {

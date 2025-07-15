@@ -159,7 +159,7 @@
                 </div>
                 <div class="channel-desc">
                   <span v-if="currentChannel === 'world'">{{ t('globalChannel') }} - {{ worldChannelUsers }} {{ t('online') }}</span>
-                  <span v-else>{{ chatStore.currentRoom?.members.length }} {{ t('members') }}</span>
+                  <span v-else>{{ chatStore.currentRoom?.members?.length || 0 }} {{ t('members') }}</span>
                 </div>
               </div>
             </div>
