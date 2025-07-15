@@ -307,35 +307,22 @@ const handleLogin = async () => {
   loading.value = true
 
   try {
-    // 构建完整的Matrix ID
-    const matrixId = `@${loginForm.value.username.trim()}:${props.selectedServer}`
+    // 保存登录信息
+    if (loginForm.value.rememberMe) {
+      localStorage.setItem('matrix-credentials', JSON.stringify({
+        username: loginForm.value.username,
+        server: props.selectedServer
+      }))
+    }
 
-    // 调用Matrix登录API
-    const response = await matrixAPI.login({
-      username: matrixId,
-      password: loginForm.value.password,
-      homeserver: props.selectedServer
-    })
+    // 直接调用Matrix登录（不需要JWT认证）
+    const matrixResult = await matrixStore.matrixLogin(loginForm.value.username, loginForm.value.password)
 
-    if (response.data.success) {
-      // 保存登录信息
-      if (loginForm.value.rememberMe) {
-        localStorage.setItem('matrix-credentials', JSON.stringify({
-          username: loginForm.value.username,
-          server: props.selectedServer
-        }))
-      }
-
-      // 调用Matrix登录
-      const matrixResult = await matrixStore.matrixLogin(loginForm.value.username, loginForm.value.password)
-
-      if (matrixResult.success) {
-        emit('login-success')
-      } else {
-        loginError.value = matrixResult.error || 'Matrix login failed'
-      }
+    if (matrixResult.success) {
+      console.log('Matrix login successful:', matrixResult.user)
+      emit('login-success')
     } else {
-      loginError.value = response.data.message || 'Login failed'
+      loginError.value = matrixResult.error || 'Matrix login failed'
     }
   } catch (error: any) {
     console.error('Matrix login failed:', error)

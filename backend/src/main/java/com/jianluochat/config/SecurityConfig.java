@@ -54,7 +54,7 @@ public class SecurityConfig {
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/public/**").permitAll()
                 .requestMatchers("/health").permitAll()
-                .requestMatchers("/matrix/test/**").permitAll()
+                .requestMatchers("/matrix/**").permitAll()  // 允许所有Matrix接口无需JWT认证
                 .anyRequest().authenticated()
             );
 

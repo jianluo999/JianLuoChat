@@ -16,6 +16,7 @@ D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\repositor
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\service\MessageService.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\service\RoomInvitationService.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\security\UserPrincipal.java
+D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\controller\MatrixController.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\config\WebSocketConfig.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\entity\RoomInvitation.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\repository\RoomRepository.java
@@ -36,3 +37,4 @@ D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\controlle
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\repository\RoomInvitationRepository.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\security\JwtUtils.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\config\DataInitializer.java
+D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\controller\MatrixServerController.java
