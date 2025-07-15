@@ -71,39 +71,102 @@ JianLuoChat is a modern Matrix protocol client that combines the power of decent
 
 ### 🚀 Quick Start
 
-#### Prerequisites
+#### Option 1: Docker (Recommended)
+
+**Prerequisites**
+- Docker & Docker Compose
+
+**Installation**
+1. **Clone the repository**
+```bash
+git clone https://github.com/jianluo999/JianLuoChat.git
+cd JianLuoChat
+```
+
+2. **Start with Docker**
+```bash
+# Start PostgreSQL and Redis
+docker-compose up -d postgres redis
+
+# Wait for databases to be ready (about 10 seconds)
+# Then start the application manually for development
+```
+
+3. **Start the application**
+```bash
+# Windows users
+start-project.bat
+
+# Or manually:
+# Backend
+cd backend && mvn spring-boot:run
+
+# Frontend (in another terminal)
+cd frontend && npm install && npm run dev
+```
+
+4. **Access the application**
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8080
+- Test Page: http://localhost:5173/test
+
+#### Option 2: Manual Setup
+
+**Prerequisites**
 - Node.js 18+
 - Java 17+
 - PostgreSQL 13+
 - Redis 6+
 
-#### Installation
-
+**Installation**
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/jianluochat.git
-cd jianluochat
+git clone https://github.com/jianluo999/JianLuoChat.git
+cd JianLuoChat
 ```
 
-2. **Setup Backend**
+2. **Setup Database**
+```bash
+# Install and start PostgreSQL and Redis
+# Create database 'jianluochat'
+```
+
+3. **Setup Backend**
 ```bash
 cd backend
 # Configure database in src/main/resources/application.yml
 ./mvnw spring-boot:run
 ```
 
-3. **Setup Frontend**
+4. **Setup Frontend**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-4. **Access the application**
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8080
-
 ### 🔧 Configuration
+
+#### Docker Configuration (Recommended)
+The project includes a `docker-compose.yml` file with pre-configured services:
+
+```yaml
+# docker-compose.yml
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: jianluochat
+      POSTGRES_USER: jianluochat
+      POSTGRES_PASSWORD: jianluochat123
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+```
 
 #### Database Configuration
 ```yaml
@@ -111,8 +174,8 @@ npm run dev
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/jianluochat
-    username: your_username
-    password: your_password
+    username: jianluochat
+    password: jianluochat123
 ```
 
 #### Matrix Configuration
@@ -242,37 +305,79 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### 🚀 快速开始
 
-#### 环境要求
+#### 方式一：Docker（推荐）
+
+**环境要求**
+- Docker & Docker Compose
+
+**安装步骤**
+1. **克隆仓库**
+```bash
+git clone https://github.com/jianluo999/JianLuoChat.git
+cd JianLuoChat
+```
+
+2. **使用Docker启动**
+```bash
+# 启动PostgreSQL和Redis
+docker-compose up -d postgres redis
+
+# 等待数据库就绪（约10秒）
+# 然后手动启动应用进行开发
+```
+
+3. **启动应用**
+```bash
+# Windows用户
+start-project.bat
+
+# 或手动启动：
+# 后端
+cd backend && mvn spring-boot:run
+
+# 前端（另开终端）
+cd frontend && npm install && npm run dev
+```
+
+4. **访问应用**
+- 前端：http://localhost:5173
+- 后端API：http://localhost:8080
+- 测试页面：http://localhost:5173/test
+
+#### 方式二：手动安装
+
+**环境要求**
 - Node.js 18+
 - Java 17+
 - PostgreSQL 13+
 - Redis 6+
 
-#### 安装步骤
-
+**安装步骤**
 1. **克隆仓库**
 ```bash
-git clone https://github.com/yourusername/jianluochat.git
-cd jianluochat
+git clone https://github.com/jianluo999/JianLuoChat.git
+cd JianLuoChat
 ```
 
-2. **设置后端**
+2. **设置数据库**
+```bash
+# 安装并启动PostgreSQL和Redis
+# 创建数据库'jianluochat'
+```
+
+3. **设置后端**
 ```bash
 cd backend
 # 在 src/main/resources/application.yml 中配置数据库
 ./mvnw spring-boot:run
 ```
 
-3. **设置前端**
+4. **设置前端**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-
-4. **访问应用**
-- 前端：http://localhost:5173
-- 后端API：http://localhost:8080
 
 ### 🛠️ 开发指南
 
