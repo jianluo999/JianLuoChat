@@ -19,6 +19,11 @@ const router = createRouter({
       component: () => import('@/test/MatrixIntegrationTest.vue')
     },
     {
+      path: '/interop-test',
+      name: 'interop-test',
+      component: () => import('@/components/MatrixInteroperabilityTest.vue')
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       redirect: '/matrix'

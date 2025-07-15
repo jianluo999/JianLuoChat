@@ -221,6 +221,35 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
+  // Matrix客户端实例
+  const matrixClient = ref<any>(null)
+  const loginInfo = ref<any>(null)
+
+  // 设置Matrix客户端
+  const setClient = async (client: any) => {
+    matrixClient.value = client
+    console.log('Matrix client set:', client)
+  }
+
+  // 设置登录信息
+  const setLoginInfo = async (info: any) => {
+    loginInfo.value = info
+    connection.value.userId = info.userId
+    connection.value.accessToken = info.accessToken
+    connection.value.deviceId = info.deviceId
+    connection.value.homeserver = info.homeserver
+    connection.value.connected = true
+
+    currentUser.value = {
+      id: info.userId,
+      username: info.userId.split(':')[0].substring(1), // 从 @username:server 提取 username
+      displayName: info.userId.split(':')[0].substring(1),
+      presence: 'online'
+    }
+
+    console.log('Matrix login info set:', info)
+  }
+
   // Matrix用户认证
   const matrixLogin = async (username: string, password: string) => {
     try {
@@ -647,6 +676,8 @@ export const useMatrixStore = defineStore('matrix', () => {
     // Matrix方法
     initializeMatrix,
     loadWorldChannel,
+    setClient,
+    setLoginInfo,
     matrixLogin,
     fetchMatrixRooms,
     fetchRooms,

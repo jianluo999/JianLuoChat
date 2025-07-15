@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix 互通性测试</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a2e;
+            color: #00ff88;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-result {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid #00ff88;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .success { color: #00ff88; }
+        .error { color: #ff4444; }
+        .info { color: #4488ff; }
+        button {
+            background: linear-gradient(45deg, #00ff88, #00cc6a);
+            border: none;
+            color: #000;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 10px 5px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 255, 136, 0.4);
+        }
+        #log {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 15px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 JianLuoChat Matrix 互通性测试</h1>
+        
+        <div class="test-result">
+            <h3>测试账户信息</h3>
+            <p><strong>Matrix ID:</strong> @mybatis:matrix.org</p>
+            <p><strong>服务器:</strong> matrix.org</p>
+            <p><strong>状态:</strong> <span id="status">未连接</span></p>
+        </div>
+
+        <div>
+            <button onclick="testLogin()">🔐 测试登录</button>
+            <button onclick="testRooms()">🏠 获取房间</button>
+            <button onclick="testSendMessage()">📝 发送测试消息</button>
+            <button onclick="testCreateRoom()">🏗️ 创建房间</button>
+            <button onclick="clearLog()">🧹 清空日志</button>
+        </div>
+
+        <div class="test-result">
+            <h3>测试日志</h3>
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as sdk from 'https://unpkg.com/matrix-js-sdk@37.10.0/lib/browser-matrix.js';
+
+        let matrixClient = null;
+        const username = 'mybatis';
+        const homeserver = 'matrix.org';
+        const password = 'Twqk3HhqwPjVQqC';
+
+        // 将 SDK 暴露到全局作用域以便其他函数使用
+        window.matrixSDK = sdk;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateStatus(status) {
+            document.getElementById('status').textContent = status;
+        }
+
+        async function testLogin() {
+            log('🚀 开始测试 Matrix 登录...');
+
+            try {
+                if (!window.matrixSDK) {
+                    log('❌ Matrix SDK 未加载', 'error');
+                    return;
+                }
+
+                const baseUrl = `https://${homeserver}`;
+
+                // 创建 Matrix 客户端
+                log('📡 创建 Matrix 客户端...');
+                matrixClient = window.matrixSDK.createClient({
+                    baseUrl: baseUrl,
+                    userId: `@${username}:${homeserver}`
+                });
+                
+                // 尝试登录
+                log('🔐 尝试登录到 Matrix...');
+                const loginResponse = await matrixClient.login('m.login.password', {
+                    user: username,
+                    password: password,
+                    initial_device_display_name: 'JianLuoChat Test Client'
+                });
+                
+                log('✅ 登录成功！', 'success');
+                log(`用户ID: ${loginResponse.user_id}`, 'success');
+                log(`设备ID: ${loginResponse.device_id}`, 'success');
+                updateStatus('已登录');
+                
+                // 启动客户端同步
+                log('🔄 启动客户端同步...');
+                await matrixClient.startClient();
+                
+                // 监听同步状态
+                matrixClient.on('sync', (state) => {
+                    if (state === 'PREPARED') {
+                        log('✅ 初始同步完成！', 'success');
+                        updateStatus('已同步');
+                    }
+                });
+                
+            } catch (error) {
+                log(`❌ 登录失败: ${error.message}`, 'error');
+                if (error.errcode) {
+                    log(`错误代码: ${error.errcode}`, 'error');
+                }
+                updateStatus('登录失败');
+            }
+        }
+
+        async function testRooms() {
+            if (!matrixClient) {
+                log('❌ 请先登录', 'error');
+                return;
+            }
+
+            try {
+                log('🏠 获取房间列表...');
+                const rooms = matrixClient.getRooms();
+                log(`✅ 找到 ${rooms.length} 个房间:`, 'success');
+                
+                rooms.slice(0, 10).forEach((room, index) => {
+                    const name = room.name || room.roomId;
+                    const memberCount = room.getJoinedMemberCount();
+                    const unreadCount = room.getUnreadNotificationCount();
+                    log(`  ${index + 1}. ${name} (成员: ${memberCount}, 未读: ${unreadCount})`);
+                });
+                
+            } catch (error) {
+                log(`❌ 获取房间失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testSendMessage() {
+            if (!matrixClient) {
+                log('❌ 请先登录', 'error');
+                return;
+            }
+
+            try {
+                const rooms = matrixClient.getRooms();
+                if (rooms.length === 0) {
+                    log('❌ 没有可用的房间', 'error');
+                    return;
+                }
+
+                const testRoom = rooms[0];
+                const message = `🧪 JianLuoChat 互通性测试消息 - ${new Date().toLocaleString()}`;
+                
+                log(`📝 向房间 "${testRoom.name || testRoom.roomId}" 发送测试消息...`);
+                await matrixClient.sendTextMessage(testRoom.roomId, message);
+                log('✅ 消息发送成功！', 'success');
+                log('💡 现在可以在 Element 客户端中查看这条消息！', 'success');
+                
+            } catch (error) {
+                log(`❌ 消息发送失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testCreateRoom() {
+            if (!matrixClient) {
+                log('❌ 请先登录', 'error');
+                return;
+            }
+
+            try {
+                log('🏗️ 测试创建房间...');
+                const roomOptions = {
+                    name: 'JianLuoChat 测试房间',
+                    topic: '这是一个由 JianLuoChat 客户端创建的测试房间',
+                    visibility: 'private'
+                };
+                
+                const newRoom = await matrixClient.createRoom(roomOptions);
+                log(`✅ 房间创建成功: ${newRoom.room_id}`, 'success');
+                
+                // 发送欢迎消息
+                const welcomeMessage = '🎉 欢迎来到 JianLuoChat 测试房间！这条消息证明了与标准 Matrix 客户端的完全互通性。';
+                await matrixClient.sendTextMessage(newRoom.room_id, welcomeMessage);
+                log('✅ 欢迎消息发送成功！', 'success');
+                log('💡 现在可以在 Element 客户端中找到这个新房间！', 'success');
+                
+            } catch (error) {
+                log(`❌ 房间创建失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载完成后的初始化
+        window.onload = function() {
+            log('🌟 Matrix 互通性测试工具已准备就绪');
+            log('📋 测试步骤:');
+            log('  1. 点击 "测试登录" 按钮');
+            log('  2. 等待登录和同步完成');
+            log('  3. 测试各项功能');
+            log('  4. 在 Element 客户端中验证结果');
+        };
+    </script>
+</body>
+</html>
