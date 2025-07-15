@@ -30,7 +30,7 @@ const router = createRouter({
     {
       path: '/test',
       name: 'test',
-      component: () => import('@/test/MatrixIntegrationTest.vue'),
+      component: () => import('@/views/MatrixTestView.vue'),
       meta: { requiresAuth: false }
     },
 
