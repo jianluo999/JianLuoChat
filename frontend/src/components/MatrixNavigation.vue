@@ -90,7 +90,7 @@
         </div>
       </div>
 
-      <!-- Matrix协议信息 -->
+      <!-- Matrix协议信1息 -->
       <div class="protocol-info" v-if="$route.path === '/matrix'">
         <div class="info-header">MATRIX PROTOCOL</div>
         <div class="info-content">
