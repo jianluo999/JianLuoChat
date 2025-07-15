@@ -250,24 +250,102 @@ export const useMatrixStore = defineStore('matrix', () => {
     console.log('Matrix login info set:', info)
   }
 
+  // 创建Matrix客户端实例
+  const createMatrixClient = async (userId: string, accessToken: string, homeserver: string) => {
+    try {
+      // 动态导入matrix-js-sdk
+      const { createClient } = await import('matrix-js-sdk')
+
+      const client = createClient({
+        baseUrl: `https://${homeserver}`,
+        accessToken: accessToken,
+        userId: userId,
+        deviceId: 'jianluochat_web_client',
+        timelineSupport: true,
+        unstableClientRelationAggregation: true
+      })
+
+      // 设置客户端
+      matrixClient.value = client
+      console.log('Matrix client created successfully:', client)
+
+      // 启动客户端
+      await client.startClient({ initialSyncLimit: 10 })
+
+      return client
+    } catch (error) {
+      console.error('Failed to create Matrix client:', error)
+      throw error
+    }
+  }
+
   // Matrix用户认证
   const matrixLogin = async (username: string, password: string) => {
     try {
       loading.value = true
       error.value = null
 
-      // 如果是测试用户，直接模拟登录成功
+      // 如果是测试用户，创建真实的Matrix客户端连接
       if (username === 'testuser' && password === 'testpass') {
-        connection.value.userId = `@testuser:matrix.org`
-        connection.value.accessToken = 'test_matrix_token'
+        const userId = `@testuser:matrix.org`
+        const accessToken = 'test_matrix_token'
+        const homeserver = 'matrix.org'
+
+        connection.value.userId = userId
+        connection.value.accessToken = accessToken
         connection.value.connected = true
-        connection.value.homeserver = 'matrix.org'
+        connection.value.homeserver = homeserver
 
         currentUser.value = {
-          id: connection.value.userId,
+          id: userId,
           username: 'testuser',
           displayName: 'Test User',
           presence: 'online'
+        }
+
+        // 创建Matrix客户端（用于公共房间探索等功能）
+        try {
+          await createMatrixClient(userId, accessToken, homeserver)
+          console.log('Matrix client created for test user')
+        } catch (clientError) {
+          console.warn('Failed to create Matrix client for test user:', clientError)
+          // 对于测试用户，即使客户端创建失败也继续，但设置一个模拟客户端
+          matrixClient.value = {
+            publicRooms: async (options: any) => {
+              // 返回模拟的公共房间数据
+              return {
+                chunk: [
+                  {
+                    room_id: '!example:matrix.org',
+                    name: 'Matrix HQ',
+                    topic: 'Welcome to Matrix HQ',
+                    canonical_alias: '#matrix:matrix.org',
+                    num_joined_members: 1000,
+                    world_readable: true,
+                    guest_can_join: true,
+                    avatar_url: null
+                  },
+                  {
+                    room_id: '!test:matrix.org',
+                    name: 'Test Room',
+                    topic: 'A test room for demonstration',
+                    canonical_alias: '#test:matrix.org',
+                    num_joined_members: 50,
+                    world_readable: true,
+                    guest_can_join: true,
+                    avatar_url: null
+                  }
+                ]
+              }
+            },
+            joinRoom: async (roomId: string) => {
+              console.log('Mock joining room:', roomId)
+              return { room_id: roomId }
+            },
+            mxcUrlToHttp: (mxcUrl: string, width?: number, height?: number) => {
+              return mxcUrl // 简单返回原URL
+            }
+          }
         }
 
         // 模拟加载世界频道
@@ -672,7 +750,10 @@ export const useMatrixStore = defineStore('matrix', () => {
     isLoggedIn,
     homeserver,
     syncStatus,
-    
+
+    // Matrix客户端
+    matrixClient,
+
     // Matrix方法
     initializeMatrix,
     loadWorldChannel,
