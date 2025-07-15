@@ -87,9 +87,6 @@
           </div>
         </div>
       </div>
-          </div>
-        </div>
-      </div>
 
       <!-- Matrix登录表单 -->
       <div class="login-form">
@@ -163,6 +160,8 @@
             <span>{{ loginError }}</span>
           </div>
 
+          <!-- 登录按钮 -->
+          <div class="form-actions">
             <button
               type="submit"
               class="login-button"
@@ -215,10 +214,6 @@
           </div>
         </div>
       </div>
-    </div>
-  </div>
-</template>
-
     </div>
   </div>
 </template>

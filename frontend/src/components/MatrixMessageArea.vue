@@ -197,23 +197,6 @@
         </div>
       </div>
     </div>
-            </div>
-            <div class="message-meta">
-              <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
-              <span v-if="message.encrypted" class="encryption-indicator" title="Encrypted">🔐</span>
-              <span class="message-type" :title="message.type">{{ getMessageTypeIcon(message.type) }}</span>
-            </div>
-          </div>
-          
-          <div class="message-content">
-            <div class="message-text">{{ message.content }}</div>
-            <div class="message-details" v-if="message.eventId">
-              <span class="event-id">{{ message.eventId.substring(0, 8) }}...</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <!-- Matrix消息输入 -->
     <div class="matrix-message-input" v-if="currentRoom">
@@ -258,6 +241,7 @@
           <div class="typing-indicator" v-if="isTyping">
             <span class="typing-text">Typing...</span>
             <span class="typing-animation">⟳</span>
+          </div>
         </div>
       </div>
     </div>
@@ -296,6 +280,7 @@ const showInviteUsers = ref(false)
 
 // 加密相关
 const encryptionWarnings = ref<string[]>([])
+const encryptionEnabled = ref(false)
 
 // 计算属性
 const currentRoom = computed(() => {
@@ -305,7 +290,8 @@ const currentRoom = computed(() => {
 
 const messages = computed(() => {
   if (!props.roomId) return []
-  return matrixStore.getMessagesForRoom(props.roomId)
+  // 从 matrixStore.messages Map 中获取对应房间的消息
+  return matrixStore.messages.get(props.roomId) || []
 })
 
 // 方法
@@ -327,7 +313,7 @@ const getEncryptionStatus = () => {
 }
 
 const isOwnMessage = (message: any) => {
-  return message.sender === matrixStore.currentUser?.userId
+  return message.sender === matrixStore.currentUser?.id
 }
 
 const isSystemMessage = (message: any) => {
@@ -377,10 +363,9 @@ const formatSystemMessage = (message: any) => {
       return `System message: ${message.type}`
   }
 }
-  })
-}
 
-const getMessageTypeIcon = (type: string) => {
+// 消息类型图标
+const getMessageTypeIcon = (type: string): string => {
   switch (type) {
     case 'm.text': return '💬'
     case 'm.image': return '🖼️'
@@ -449,6 +434,37 @@ watch(() => matrixStore.currentRoomId, () => {
     }
   })
 })
+
+// 用户交互方法
+const startDirectMessage = (userId: string) => {
+  // 开始私聊
+  console.log('Starting direct message with:', userId)
+}
+
+const inviteUser = (userId: string) => {
+  // 邀请用户
+  console.log('Inviting user:', userId)
+}
+
+const showUserProfile = (userId: string) => {
+  // 显示用户资料
+  console.log('Showing profile for:', userId)
+}
+
+const handleVerifyDevices = () => {
+  // 处理设备验证
+  console.log('Verifying devices')
+}
+
+const acceptVerification = (message: any) => {
+  // 接受验证
+  console.log('Accepting verification:', message)
+}
+
+const declineVerification = (message: any) => {
+  // 拒绝验证
+  console.log('Declining verification:', message)
+}
 </script>
 
 <style scoped>

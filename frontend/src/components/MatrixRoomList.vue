@@ -457,7 +457,7 @@ onMounted(async () => {
 })
 </script>
 
-</script>
+
 
 <style scoped>
 .matrix-room-list {
