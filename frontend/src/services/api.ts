@@ -68,58 +68,110 @@ export const userAPI = {
 }
 
 export const roomAPI = {
+  // 获取用户的Matrix房间列表（包含世界频道）
   getRooms: () => api.get('/rooms'),
-  
-  createRoom: (data: { name: string; type: string; members?: string[] }) =>
+
+  // 获取世界频道
+  getWorldChannel: () => api.get('/rooms/world'),
+
+  // 获取用户的私密房间
+  getPrivateRoom: () => api.get('/rooms/private'),
+
+  // 获取用户可访问的房间列表
+  getAccessibleRooms: () => api.get('/rooms/accessible'),
+
+  // 创建Matrix房间
+  createRoom: (data: { name: string; type?: string }) =>
     api.post('/rooms', data),
-  
+
+  // 创建群聊房间
+  createGroupRoom: (data: { name: string; description?: string }) =>
+    api.post('/rooms/group', data),
+
+  // 加入Matrix房间
   joinRoom: (roomId: string) => api.post(`/rooms/${roomId}/join`),
-  
+
+  // 离开Matrix房间
   leaveRoom: (roomId: string) => api.post(`/rooms/${roomId}/leave`),
-  
+
+  // 获取房间信息
   getRoomInfo: (roomId: string) => api.get(`/rooms/${roomId}`),
-  
-  updateRoom: (roomId: string, data: any) => api.put(`/rooms/${roomId}`, data),
-  
-  deleteRoom: (roomId: string) => api.delete(`/rooms/${roomId}`)
+
+  // 发送消息到指定房间
+  sendMessage: (roomId: string, data: { message: string }) =>
+    api.post(`/rooms/${roomId}/messages`, data)
 }
 
 export const messageAPI = {
-  getMessages: (roomId: string, params?: { limit?: number; before?: string }) =>
+  // 获取房间消息
+  getRoomMessages: (roomId: string, params?: { limit?: number; before?: string }) =>
     api.get(`/rooms/${roomId}/messages`, { params }),
-  
-  sendMessage: (roomId: string, data: { content: string; messageType?: string }) =>
-    api.post(`/rooms/${roomId}/messages`, data),
-  
-  deleteMessage: (roomId: string, messageId: string) =>
-    api.delete(`/rooms/${roomId}/messages/${messageId}`),
-  
-  markAsRead: (roomId: string, messageId: string) =>
-    api.put(`/rooms/${roomId}/messages/${messageId}/read`)
+
+  // 获取世界频道消息
+  getWorldMessages: (params?: { limit?: number }) =>
+    api.get('/rooms/world/messages', { params }),
+
+  // 发送消息（通过房间API）
+  sendMessage: (roomId: string, data: { message: string }) =>
+    api.post(`/rooms/${roomId}/messages`, data)
 }
 
 export const matrixAPI = {
-  login: (credentials: { username: string; password: string }) =>
+  // Matrix登录
+  login: (credentials: { username: string; password: string; homeserver?: string }) =>
     api.post('/matrix/login', credentials),
-  
-  register: (userData: { username: string; password: string }) =>
+
+  // Matrix注册
+  register: (userData: { username: string; password: string; homeserver?: string }) =>
     api.post('/matrix/register', userData),
-  
-  createRoom: (data: { name: string; public?: boolean }) =>
-    api.post('/matrix/rooms', data),
-  
-  joinRoom: (roomId: string) => api.post(`/matrix/rooms/${roomId}/join`),
-  
-  sendMessage: (roomId: string, data: { message: string }) =>
-    api.post(`/matrix/rooms/${roomId}/messages`, data),
-  
+
+  // 获取Matrix状态
+  getStatus: () => api.get('/matrix/status'),
+
+  // 测试Matrix连接
+  testConnection: () => api.get('/matrix/test'),
+
+  // Matrix同步相关
   getSyncStatus: () => api.get('/matrix/sync/status'),
-  
   startSync: () => api.post('/matrix/sync/start'),
-  
   stopSync: () => api.post('/matrix/sync/stop'),
-  
-  getStatus: () => api.get('/matrix/status')
+
+  // Matrix房间操作（通过统一的rooms API）
+  createRoom: (data: { name: string; public?: boolean; topic?: string }) =>
+    api.post('/rooms', { ...data, type: 'matrix' }),
+
+  // Matrix联邦相关
+  discoverServers: () => api.get('/matrix/servers'),
+  getServerInfo: (serverName: string) => api.get(`/matrix/servers/${serverName}`),
+
+  // Matrix设备和加密
+  getDevices: () => api.get('/matrix/devices'),
+  verifyDevice: (deviceId: string) => api.post(`/matrix/devices/${deviceId}/verify`),
+
+  // Matrix用户搜索
+  searchUsers: (query: string) => api.get(`/matrix/users/search?q=${query}`)
+}
+
+// 邀请系统API
+export const invitationAPI = {
+  // 发送房间邀请
+  sendInvitation: (data: { targetUserId: string; roomId: string; message?: string }) =>
+    api.post('/invitations', data),
+
+  // 获取收到的邀请
+  getReceivedInvitations: () => api.get('/invitations/received'),
+
+  // 获取发送的邀请
+  getSentInvitations: () => api.get('/invitations/sent'),
+
+  // 接受邀请
+  acceptInvitation: (invitationId: string) => api.post(`/invitations/${invitationId}/accept`),
+
+  // 拒绝邀请
+  rejectInvitation: (invitationId: string) => api.post(`/invitations/${invitationId}/reject`),
+
+  // 撤销邀请
+  revokeInvitation: (invitationId: string) => api.delete(`/invitations/${invitationId}`)
 }
 
 export const fileAPI = {

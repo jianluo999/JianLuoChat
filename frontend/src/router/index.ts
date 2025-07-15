@@ -7,7 +7,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      redirect: '/login'
+      redirect: '/matrix'
     },
     {
       path: '/login',
@@ -22,17 +22,18 @@ const router = createRouter({
       meta: { requiresGuest: true }
     },
     {
-      path: '/chat',
-      name: 'chat',
-      component: () => import('@/views/ChatView.vue'),
-      meta: { requiresAuth: true }
+      path: '/matrix',
+      name: 'matrix',
+      component: () => import('@/views/MatrixChatView.vue'),
+      meta: { requiresAuth: false } // Matrix有自己的登录系统
     },
     {
-      path: '/rooms',
-      name: 'rooms',
-      component: () => import('@/views/RoomsView.vue'),
-      meta: { requiresAuth: true }
+      path: '/test',
+      name: 'test',
+      component: () => import('@/test/MatrixIntegrationTest.vue'),
+      meta: { requiresAuth: false }
     },
+
     {
       path: '/profile',
       name: 'profile',
@@ -42,7 +43,7 @@ const router = createRouter({
     {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
-      redirect: '/chat'
+      redirect: '/matrix'
     }
   ]
 })
@@ -78,8 +79,8 @@ router.beforeEach(async (to, from, next) => {
     console.log('Redirecting to login - not authenticated')
     next('/login')
   } else if (to.meta.requiresGuest && authStore.isAuthenticated) {
-    console.log('Redirecting to chat - already authenticated')
-    next('/chat')
+    console.log('Redirecting to matrix - already authenticated')
+    next('/matrix')
   } else {
     console.log('Allowing navigation')
     next()

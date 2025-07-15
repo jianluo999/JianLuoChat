@@ -40,7 +40,8 @@ public class RoomController {
 
             return ResponseEntity.ok(rooms);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "Unknown error occurred";
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage));
         }
     }
 
@@ -53,7 +54,8 @@ public class RoomController {
             Map<String, Object> worldChannel = matrixRoomService.getWorldChannel().join();
             return ResponseEntity.ok(worldChannel);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "Unknown error occurred";
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage));
         }
     }
 
@@ -73,7 +75,8 @@ public class RoomController {
             Map<String, Object> result = matrixRoomService.sendMessage(user, matrixRoomService.getWorldChannel().join().get("id").toString(), content).join();
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "Unknown error occurred";
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage));
         }
     }
 
@@ -88,7 +91,8 @@ public class RoomController {
             List<Map<String, Object>> messages = matrixRoomService.getRoomMessages(user, worldRoomId, limit).join();
             return ResponseEntity.ok(messages);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "Unknown error occurred";
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage));
         }
     }
 
@@ -109,7 +113,8 @@ public class RoomController {
 
             return ResponseEntity.ok(privateRoom);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "Unknown error occurred";
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage));
         }
     }
 
@@ -124,7 +129,8 @@ public class RoomController {
 
             return ResponseEntity.ok(Map.of("rooms", rooms));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "Unknown error occurred";
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage));
         }
     }
 
@@ -144,7 +150,8 @@ public class RoomController {
 
             return ResponseEntity.ok(roomInfo);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "Unknown error occurred";
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage));
         }
     }
 
@@ -178,7 +185,8 @@ public class RoomController {
 
             return ResponseEntity.ok(room);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "Unknown error occurred";
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage));
         }
     }
 
@@ -252,13 +260,8 @@ public class RoomController {
                                     @AuthenticationPrincipal UserPrincipal userPrincipal) {
         try {
             User user = userPrincipal.getUser();
-            boolean success = matrixRoomService.joinRoom(user, roomId).join();
-
-            if (success) {
-                return ResponseEntity.ok(Map.of("message", "成功加入房间"));
-            } else {
-                return ResponseEntity.badRequest().body(Map.of("error", "无法加入房间"));
-            }
+            matrixRoomService.joinRoom(user, roomId).join();
+            return ResponseEntity.ok(Map.of("message", "成功加入房间"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -272,13 +275,8 @@ public class RoomController {
                                      @AuthenticationPrincipal UserPrincipal userPrincipal) {
         try {
             User user = userPrincipal.getUser();
-            boolean success = matrixRoomService.leaveRoom(user, roomId).join();
-
-            if (success) {
-                return ResponseEntity.ok(Map.of("message", "成功离开房间"));
-            } else {
-                return ResponseEntity.badRequest().body(Map.of("error", "离开房间失败"));
-            }
+            matrixRoomService.leaveRoom(user, roomId).join();
+            return ResponseEntity.ok(Map.of("message", "成功离开房间"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

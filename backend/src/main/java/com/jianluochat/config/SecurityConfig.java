@@ -54,6 +54,7 @@ public class SecurityConfig {
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/public/**").permitAll()
                 .requestMatchers("/health").permitAll()
+                .requestMatchers("/matrix/test/**").permitAll()
                 .anyRequest().authenticated()
             );
 

@@ -172,16 +172,26 @@ public class WebSocketHandler implements org.springframework.web.socket.WebSocke
             @SuppressWarnings("unchecked")
             Map<String, Object> data = (Map<String, Object>) message.getData();
             String roomCode = (String) data.get("roomCode");
+            String roomId = (String) data.get("roomId");
             String content = (String) data.get("content");
             String messageType = (String) data.get("messageType");
 
-            if (roomCode == null || content == null || content.trim().isEmpty()) {
-                sendErrorMessage(session, "房间码和消息内容不能为空");
+            // 支持roomCode（传统房间）或roomId（Matrix房间）
+            String targetRoomIdentifier = roomCode != null ? roomCode : roomId;
+
+            if (targetRoomIdentifier == null || content == null || content.trim().isEmpty()) {
+                sendErrorMessage(session, "房间标识和消息内容不能为空");
                 return;
             }
 
-            // 查找房间
-            Room room = roomService.findByRoomCode(roomCode).orElse(null);
+            // 如果是Matrix房间ID（以!开头），直接通过Matrix发送
+            if (targetRoomIdentifier.startsWith("!")) {
+                handleMatrixRoomMessage(session, userId, targetRoomIdentifier, content);
+                return;
+            }
+
+            // 查找传统房间
+            Room room = roomService.findByRoomCode(targetRoomIdentifier).orElse(null);
             if (room == null) {
                 sendErrorMessage(session, "房间不存在");
                 return;
@@ -210,10 +220,34 @@ public class WebSocketHandler implements org.springframework.web.socket.WebSocke
             Map<String, Object> messageData = formatMessageForBroadcast(savedMessage);
             broadcastToRoom(roomCode, new WebSocketMessage<>("NEW_MESSAGE", "新消息", messageData));
 
-            logger.info("Message sent in room {} by user {}", roomCode, userId);
+            logger.info("Message sent in room {} by user {}", targetRoomIdentifier, userId);
         } catch (Exception e) {
             logger.error("Error handling chat message: {}", e.getMessage());
             sendErrorMessage(session, "发送消息失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 处理Matrix房间消息
+     */
+    private void handleMatrixRoomMessage(WebSocketSession session, String userId, String roomId, String content) {
+        try {
+            User user = userRepository.findById(Long.parseLong(userId)).orElse(null);
+            if (user == null) {
+                sendErrorMessage(session, "用户不存在");
+                return;
+            }
+
+            // 通过MatrixRoomService发送消息
+            Map<String, Object> messageResult = matrixRoomService.sendMessage(user, roomId, content).join();
+
+            // 广播消息给房间内的所有用户（这里简化处理，广播给所有用户）
+            broadcastToAllUsers(new WebSocketMessage<>("NEW_MESSAGE", "新消息", messageResult));
+
+            logger.info("Matrix message sent in room {} by user {}", roomId, userId);
+        } catch (Exception e) {
+            logger.error("Error handling Matrix room message: {}", e.getMessage());
+            sendErrorMessage(session, "发送Matrix房间消息失败: " + e.getMessage());
         }
     }
 

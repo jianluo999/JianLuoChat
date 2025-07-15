@@ -1,22 +1,63 @@
 <template>
   <div id="app">
-    <router-view />
+    <!-- Matrix导航 -->
+    <MatrixNavigation
+      v-if="showMatrixNav"
+      @create-room="handleCreateRoom"
+      @test-connection="handleTestConnection"
+    />
+
+    <!-- 主内容区域 -->
+    <div class="main-content" :class="{ 'with-nav': showMatrixNav }">
+      <router-view />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useMatrixStore } from '@/stores/matrix'
+import MatrixNavigation from '@/components/MatrixNavigation.vue'
 import axios from 'axios'
 
+const route = useRoute()
 const authStore = useAuthStore()
+const matrixStore = useMatrixStore()
+
+// 显示Matrix导航的条件
+const showMatrixNav = computed(() => {
+  return route.path === '/matrix' || route.path === '/chat'
+})
+
+const handleCreateRoom = () => {
+  // 这里可以触发创建房间的事件
+  console.log('Create room triggered from navigation')
+}
+
+const handleTestConnection = async () => {
+  try {
+    await matrixStore.initializeMatrix()
+    console.log('Matrix connection test completed')
+  } catch (error) {
+    console.error('Matrix connection test failed:', error)
+  }
+}
 
 onMounted(() => {
   // 设置 axios 基础配置
-  axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+  axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
   // 初始化认证状态
   authStore.initializeAuth()
+
+  // 如果在Matrix路由，初始化Matrix连接
+  if (route.path === '/matrix') {
+    matrixStore.initializeMatrix().catch(error => {
+      console.error('Failed to initialize Matrix:', error)
+    })
+  }
 })
 </script>
 
@@ -43,6 +84,16 @@ body {
     radial-gradient(circle at 80% 20%, rgba(0, 255, 0, 0.1) 0%, transparent 50%),
     linear-gradient(135deg, #001100 0%, #000800 50%, #000000 100%);
   position: relative;
+}
+
+.main-content {
+  height: 100vh;
+  width: 100vw;
+  transition: margin-left 0.3s ease;
+}
+
+.main-content.with-nav {
+  margin-left: 60px;
 }
 
 /* 扫描线效果 */
