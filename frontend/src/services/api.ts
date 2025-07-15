@@ -129,10 +129,10 @@ export const matrixAPI = {
   getStatus: () => api.get('/matrix/status'),
 
   // 测试Matrix连接
-  testConnection: () => api.get('/matrix/test'),
+  testConnection: () => api.get('/matrix/test/connection'),
 
   // 获取连接状态
-  getConnection: () => api.get('/matrix/connection'),
+  getConnection: () => api.get('/matrix/test/connection'),
 
   // 获取世界频道
   getWorldChannel: () => api.get('/matrix/world-channel'),
@@ -146,17 +146,21 @@ export const matrixAPI = {
     api.post(`/matrix/rooms/${data.roomId}/messages`, data),
 
   // Matrix同步
-  sync: (params: { since?: string; timeout?: number }) =>
-    api.get('/matrix/sync', { params }),
+  sync: (params: { username: string; since?: string; timeout?: number }) =>
+    api.post('/matrix/test/sync', params),
 
   // Matrix同步相关
-  getSyncStatus: () => api.get('/matrix/sync/status'),
-  startSync: () => api.post('/matrix/sync/start'),
-  stopSync: () => api.post('/matrix/sync/stop'),
+  getSyncStatus: () => api.get('/matrix/test/sync/status'),
+  startSync: (username: string) => api.post('/matrix/test/sync/start', { username }),
+  stopSync: () => api.post('/matrix/test/sync/stop'),
 
   // Matrix房间操作（通过统一的rooms API）
   createRoom: (data: { name: string; public?: boolean; topic?: string }) =>
     api.post('/rooms', { ...data, type: 'matrix' }),
+
+  // 加入Matrix房间
+  joinRoom: (roomIdOrAlias: string) =>
+    api.post(`/matrix/rooms/join`, { roomIdOrAlias }),
 
   // Matrix联邦相关
   discoverServers: () => api.get('/matrix/servers'),

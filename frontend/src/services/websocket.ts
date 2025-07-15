@@ -1,5 +1,5 @@
 import { useAuthStore } from '@/stores/auth'
-import { useChatStore } from '@/stores/chat'
+import { useMatrixStore } from '@/stores/matrix'
 
 export interface WebSocketMessage {
   type: string
@@ -37,7 +37,7 @@ class WebSocketService {
   private setupEventListeners() {
     if (!this.socket) return
 
-    const chatStore = useChatStore()
+    const matrixStore = useMatrixStore()
 
     this.socket.onopen = () => {
       console.log('WebSocket connected')
@@ -59,28 +59,30 @@ class WebSocketService {
     this.socket.onmessage = (event) => {
       try {
         const data: WebSocketMessage = JSON.parse(event.data)
-        this.handleMessage(data, chatStore)
+        this.handleMessage(data, matrixStore)
       } catch (error) {
         console.error('Error parsing WebSocket message:', error)
       }
     }
   }
 
-  private handleMessage(data: WebSocketMessage, chatStore: any) {
+  private handleMessage(data: WebSocketMessage, matrixStore: any) {
     switch (data.type) {
       case 'CONNECTED':
         console.log('WebSocket connection confirmed:', data.message)
         break
       case 'NEW_MESSAGE':
         if (data.data) {
-          chatStore.addMessage({
+          // 添加Matrix消息
+          matrixStore.addMatrixMessage(data.data.roomId, {
             id: data.data.eventId,
             roomId: data.data.roomId,
-            sender: data.data.sender,
             content: data.data.message,
-            messageType: 'text',
+            sender: data.data.sender,
             timestamp: data.data.timestamp,
-            status: 'delivered'
+            type: 'm.room.message',
+            eventId: data.data.eventId,
+            encrypted: false
           })
         }
         break

@@ -46,11 +46,11 @@ jwt:
 # Matrix Configuration
 matrix:
   homeserver:
-    url: https://matrix.jianluochat.com
-    domain: jianluochat.com
+    url: https://matrix.org
+    domain: matrix.org
   world:
     room:
-      alias: "#world:jianluochat.com"
+      alias: "#jianluochat-world:matrix.org"
   federation:
     enabled: true
     port: 8448

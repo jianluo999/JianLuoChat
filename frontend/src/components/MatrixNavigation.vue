@@ -11,34 +11,27 @@
     </div>
 
     <div class="nav-content" :class="{ expanded: navExpanded }">
-      <!-- 模式切换 -->
-      <div class="mode-selector">
-        <div class="selector-header">CLIENT MODE</div>
-        <div class="mode-options">
-          <router-link 
-            to="/matrix" 
-            class="mode-option"
-            :class="{ active: $route.path === '/matrix' }"
-          >
-            <span class="mode-icon">🌐</span>
-            <span class="mode-text">MATRIX PROTOCOL</span>
-            <span class="mode-badge">FEDERATION</span>
-          </router-link>
-          
-          <router-link 
-            to="/chat" 
-            class="mode-option"
-            :class="{ active: $route.path === '/chat' }"
-          >
-            <span class="mode-icon">💬</span>
-            <span class="mode-text">TRADITIONAL CHAT</span>
-            <span class="mode-badge">LOCAL</span>
-          </router-link>
+      <!-- Matrix协议信息 -->
+      <div class="protocol-info">
+        <div class="protocol-header">MATRIX PROTOCOL</div>
+        <div class="protocol-description">
+          <div class="protocol-feature">
+            <span class="feature-icon">🌐</span>
+            <span class="feature-text">去中心化通信</span>
+          </div>
+          <div class="protocol-feature">
+            <span class="feature-icon">🔐</span>
+            <span class="feature-text">端到端加密</span>
+          </div>
+          <div class="protocol-feature">
+            <span class="feature-icon">🔗</span>
+            <span class="feature-text">联邦化支持</span>
+          </div>
         </div>
       </div>
 
       <!-- Matrix状态 -->
-      <div class="matrix-status" v-if="$route.path === '/matrix'">
+      <div class="matrix-status">
         <div class="status-header">MATRIX STATUS</div>
         <div class="status-info">
           <div class="status-line">
@@ -61,25 +54,24 @@
       <div class="quick-actions">
         <div class="actions-header">QUICK ACTIONS</div>
         <div class="action-buttons">
-          <button 
-            v-if="$route.path === '/matrix' && matrixStore.currentUser"
+          <button
+            v-if="matrixStore.currentUser"
             @click="createRoom"
             class="action-btn"
           >
             <span class="btn-icon">🏠</span>
             <span class="btn-text">CREATE ROOM</span>
           </button>
-          
-          <button 
-            v-if="$route.path === '/matrix'"
+
+          <button
             @click="testConnection"
             class="action-btn"
           >
             <span class="btn-icon">🔧</span>
             <span class="btn-text">TEST CONNECTION</span>
           </button>
-          
-          <button 
+
+          <button
             v-if="matrixStore.currentUser"
             @click="logout"
             class="action-btn logout"
@@ -90,7 +82,7 @@
         </div>
       </div>
 
-      <!-- Matrix协议信息 -->
+      <!-- Matrix协议信1息 -->
       <div class="protocol-info" v-if="$route.path === '/matrix'">
         <div class="info-header">MATRIX PROTOCOL</div>
         <div class="info-content">
@@ -246,7 +238,7 @@ const logout = () => {
   opacity: 1;
 }
 
-.mode-selector, .matrix-status, .quick-actions, .protocol-info {
+.matrix-status, .quick-actions, .protocol-info {
   margin-bottom: 25px;
   padding: 15px;
   border: 1px solid #003300;
@@ -254,7 +246,7 @@ const logout = () => {
   background: rgba(0, 255, 0, 0.02);
 }
 
-.selector-header, .status-header, .actions-header, .info-header {
+.protocol-header, .status-header, .actions-header, .info-header {
   color: #00ff00;
   font-weight: bold;
   font-size: 11px;
@@ -264,57 +256,39 @@ const logout = () => {
   padding-bottom: 5px;
 }
 
-.mode-options {
+.protocol-description {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.mode-option {
+.protocol-feature {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px;
+  padding: 8px;
   border: 1px solid #003300;
   border-radius: 3px;
-  text-decoration: none;
-  color: #666;
+  background: rgba(0, 255, 0, 0.05);
   transition: all 0.3s ease;
 }
 
-.mode-option:hover {
+.protocol-feature:hover {
   border-color: #00ff00;
   background: rgba(0, 255, 0, 0.1);
 }
 
-.mode-option.active {
-  border-color: #00ff00;
-  background: rgba(0, 255, 0, 0.2);
-  color: #00ff00;
+.feature-icon {
+  font-size: 14px;
 }
 
-.mode-icon {
-  font-size: 16px;
-}
-
-.mode-text {
-  flex: 1;
+.feature-text {
   font-size: 11px;
   font-weight: bold;
+  color: #e0e6ed;
 }
 
-.mode-badge {
-  font-size: 9px;
-  padding: 2px 6px;
-  border: 1px solid #003300;
-  border-radius: 2px;
-  background: rgba(0, 255, 0, 0.1);
-}
 
-.mode-option.active .mode-badge {
-  border-color: #00ff00;
-  color: #00ff00;
-}
 
 .status-line {
   display: flex;

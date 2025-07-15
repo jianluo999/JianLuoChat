@@ -1,22 +1,15 @@
 <template>
   <div class="matrix-client">
-    <!-- Matrix服务器选择 -->
-    <MatrixServerSelector 
-      v-if="showServerSelector"
-      @server-selected="handleServerSelected"
-      @cancel="showServerSelector = false"
+    <!-- 真正的Matrix登录 -->
+    <MatrixRealLogin
+      v-if="!matrixStore.isLoggedIn"
+      @login-success="handleRealLoginSuccess"
     />
-    
-    <!-- Matrix登录界面 -->
-    <MatrixLogin 
-      v-else-if="!matrixStore.isLoggedIn" 
-      :selected-server="selectedServer"
-      @login-success="handleLoginSuccess"
-      @change-server="showServerSelector = true"
-    />
-    
+
+
+
     <!-- Matrix主界面 -->
-    <div v-else class="matrix-main-interface">
+    <div v-else-if="matrixStore.isLoggedIn" class="matrix-main-interface">
       <!-- 顶部导航栏 -->
       <div class="matrix-header">
         <div class="server-info">
@@ -71,13 +64,23 @@
             <span v-if="pendingInvitations > 0" class="notification-badge">{{ pendingInvitations }}</span>
           </button>
           
-          <button 
+          <button
             @click="showSettings = true"
             class="header-button"
             :title="$t('matrix.settings')"
           >
             <svg viewBox="0 0 24 24">
               <path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.22,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.22,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/>
+            </svg>
+          </button>
+
+          <button
+            @click="handleLogout"
+            class="header-button logout-button"
+            :title="$t('matrix.logout')"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M16,17V14H9V10H16V7L21,12L16,17M14,2A2,2 0 0,1 16,4V6H14V4H5V20H14V18H16V20A2,2 0 0,1 14,22H5A2,2 0 0,1 3,20V4A2,2 0 0,1 5,2H14Z"/>
             </svg>
           </button>
         </div>
@@ -114,12 +117,21 @@
             <div class="welcome-message">
               <h2>{{ $t('matrix.welcome') }}</h2>
               <p>{{ $t('matrix.selectRoomToStart') }}</p>
+
+              <!-- Matrix聊天演示 -->
+              <div class="matrix-demo-container">
+                <MatrixChatDemo />
+              </div>
+
               <div class="quick-actions">
                 <button @click="showCreateRoom = true" class="quick-action-btn">
                   {{ $t('matrix.createRoom') }}
                 </button>
                 <button @click="showRoomBrowser = true" class="quick-action-btn">
                   {{ $t('matrix.browseRooms') }}
+                </button>
+                <button @click="showPublicRoomsExplorer = true" class="quick-action-btn primary">
+                  🌍 探索公共房间
                 </button>
               </div>
             </div>
@@ -160,29 +172,48 @@
         </form>
       </div>
     </div>
+
+    <!-- 房间浏览器 -->
+    <MatrixRoomBrowser
+      v-if="showRoomBrowser"
+      @close="showRoomBrowser = false"
+      @room-selected="handleRoomSelected"
+    />
+
+    <!-- 公共房间探索器 -->
+    <div v-if="showPublicRoomsExplorer" class="modal-overlay" @click="showPublicRoomsExplorer = false">
+      <div class="public-rooms-modal" @click.stop>
+        <div class="modal-header">
+          <h3>🌍 探索公共房间</h3>
+          <button @click="showPublicRoomsExplorer = false" class="close-btn">×</button>
+        </div>
+        <div class="modal-body">
+          <PublicRoomsExplorer @room-joined="handleRoomJoined" />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useMatrixStore } from '@/stores/matrix'
-import { useAuthStore } from '@/stores/auth'
 import { invitationAPI, roomAPI } from '@/services/api'
 
 // 组件导入
-import MatrixServerSelector from '@/components/MatrixServerSelector.vue'
-import MatrixLogin from '@/components/MatrixLogin.vue'
+import MatrixRealLogin from '@/components/MatrixRealLogin.vue'
 import MatrixNavigation from '@/components/MatrixNavigation.vue'
 import MatrixRoomList from '@/components/MatrixRoomList.vue'
 import MatrixMessageArea from '@/components/MatrixMessageArea.vue'
 import MatrixUserID from '@/components/MatrixUserID.vue'
+import MatrixChatDemo from '@/components/MatrixChatDemo.vue'
+import MatrixRoomBrowser from '@/components/MatrixRoomBrowser.vue'
+import PublicRoomsExplorer from '@/components/PublicRoomsExplorer.vue'
 
 // Store
 const matrixStore = useMatrixStore()
-const authStore = useAuthStore()
 
 // 界面状态
-const showServerSelector = ref(false)
 const selectedServer = ref(localStorage.getItem('matrix-selected-server') || 'matrix.org')
 const selectedSpace = ref('')
 const selectedRoom = ref('')
@@ -192,6 +223,7 @@ const userStatus = ref<'online' | 'offline' | 'away' | 'busy'>('online')
 const showCreateRoom = ref(false)
 const showCreateSpace = ref(false)
 const showRoomBrowser = ref(false)
+const showPublicRoomsExplorer = ref(false)
 const showInvitations = ref(false)
 const showSettings = ref(false)
 const showUserProfile = ref(false)
@@ -207,29 +239,28 @@ const newRoom = ref({
 const pendingInvitations = ref(0)
 
 // 事件处理
-const handleServerSelected = (server: string) => {
-  selectedServer.value = server
-  showServerSelector.value = false
-  localStorage.setItem('matrix-selected-server', server)
-}
 
-const handleLoginSuccess = async () => {
-  console.log('Matrix login successful')
-  
+// 真正的Matrix登录成功处理
+const handleRealLoginSuccess = async (loginInfo: { userId: string; homeserver: string }) => {
+  console.log('Matrix login successful:', loginInfo)
+
+  // 更新选择的服务器
+  selectedServer.value = loginInfo.homeserver
+  localStorage.setItem('matrix-selected-server', loginInfo.homeserver)
+
   try {
-    // 开始Matrix同步
+    // Matrix客户端已经在MatrixRealLogin组件中启动
+    // 这里只需要等待同步完成并获取房间列表
     await matrixStore.startSync()
-    
-    // 获取房间列表
-    await matrixStore.fetchRooms()
-    
+
     // 获取邀请数量
     await loadPendingInvitations()
-    
-    // 默认选择世界频道
-    const worldChannel = matrixStore.rooms.find(room => room.type === 'world')
-    if (worldChannel) {
-      selectedRoom.value = worldChannel.id
+
+    // 默认选择世界频道或第一个可用房间
+    const rooms = matrixStore.rooms
+    if (rooms.length > 0) {
+      const worldChannel = rooms.find(room => room.name?.includes('world') || room.name?.includes('世界'))
+      selectedRoom.value = worldChannel?.id || rooms[0].id
     }
   } catch (error) {
     console.error('Failed to initialize Matrix client:', error)
@@ -242,8 +273,30 @@ const handleRoomSelected = (roomId: string) => {
   matrixStore.markRoomAsRead(roomId)
 }
 
+const handleRoomJoined = (roomId: string) => {
+  // 关闭公共房间探索器
+  showPublicRoomsExplorer.value = false
+  // 自动选择刚加入的房间
+  selectedRoom.value = roomId
+  // 标记房间为已读
+  matrixStore.markRoomAsRead(roomId)
+  console.log(`🎉 已自动切换到新加入的房间: ${roomId}`)
+}
+
 const handleUserClicked = (userId: string) => {
   console.log('User clicked:', userId)
+}
+
+const handleLogout = () => {
+  // 确认登出
+  if (confirm('确定要退出登录吗？')) {
+    matrixStore.logout()
+    // 清除本地状态
+    selectedRoom.value = ''
+    selectedSpace.value = ''
+    pendingInvitations.value = 0
+    console.log('User logged out')
+  }
 }
 
 const createRoom = async () => {
@@ -274,11 +327,47 @@ const loadPendingInvitations = async () => {
   }
 }
 
+// 监听Matrix房间变化，自动选择世界频道
+watch(() => matrixStore.rooms, (rooms) => {
+  if (rooms.length > 0 && !selectedRoom.value) {
+    const worldChannel = rooms.find(room => room.type === 'world')
+    if (worldChannel) {
+      selectedRoom.value = worldChannel.id
+    }
+  }
+}, { immediate: true })
+
 // 初始化
-onMounted(() => {
-  // 检查是否已经登录
+onMounted(async () => {
+  try {
+    // 尝试从localStorage恢复登录状态
+    const restored = await matrixStore.initializeMatrix()
+
+    if (restored) {
+      console.log('Matrix login restored from localStorage')
+      // 恢复服务器选择
+      const savedServer = localStorage.getItem('matrix-selected-server')
+      if (savedServer) {
+        selectedServer.value = savedServer
+      }
+
+      // 加载邀请和房间信息
+      await loadPendingInvitations()
+
+      // 选择默认房间
+      const rooms = matrixStore.rooms
+      if (rooms.length > 0) {
+        const worldChannel = rooms.find(room => room.name?.includes('world') || room.name?.includes('世界'))
+        selectedRoom.value = worldChannel?.id || rooms[0].id
+      }
+    }
+  } catch (error) {
+    console.error('Failed to restore Matrix login:', error)
+  }
+
+  // 如果已经登录（可能是刚刚恢复的），直接初始化
   if (matrixStore.isLoggedIn) {
-    handleLoginSuccess()
+    loadPendingInvitations()
   }
 })
 </script>
@@ -364,6 +453,20 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.header-button.logout-button {
+  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+}
+
+.header-button.logout-button:hover {
+  background: rgba(255, 107, 107, 0.2);
+  border-color: rgba(255, 107, 107, 0.5);
+}
+
+.header-button.logout-button svg {
+  fill: #ff6b6b;
+}
+
 .header-button svg {
   width: 20px;
   height: 20px;
@@ -427,6 +530,12 @@ onMounted(() => {
 .welcome-message p {
   color: #b0bec5;
   margin-bottom: 24px;
+}
+
+.matrix-demo-container {
+  margin: 30px 0;
+  text-align: left;
+  max-width: 900px;
 }
 
 .quick-actions {
@@ -519,6 +628,173 @@ onMounted(() => {
   font-weight: 500;
 }
 
+/* 快速登录样式 */
+.quick-login-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.quick-login-modal {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 1px solid #3a4a5c;
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 500px;
+  width: 90%;
+  color: #e0e6ed;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.login-header h3 {
+  color: #64b5f6;
+  font-size: 1.8rem;
+  margin-bottom: 8px;
+}
+
+.login-header p {
+  color: #b0bec5;
+  font-size: 1rem;
+}
+
+.demo-credentials {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.credential-option {
+  display: flex;
+  align-items: center;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.credential-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #64b5f6;
+  transform: translateY(-2px);
+}
+
+.option-icon {
+  font-size: 2rem;
+  margin-right: 16px;
+}
+
+.option-content {
+  flex: 1;
+}
+
+.option-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #e0e6ed;
+  margin-bottom: 4px;
+}
+
+.option-desc {
+  font-size: 0.9rem;
+  color: #b0bec5;
+}
+
+.custom-login-form {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.matrix-id-input {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.id-prefix,
+.id-suffix {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #b0bec5;
+  font-size: 0.9rem;
+}
+
+.form-input {
+  flex: 1;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  color: #e0e6ed;
+  font-size: 1rem;
+}
+
+.form-input:focus {
+  outline: none;
+}
+
+.form-input::placeholder {
+  color: #666;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.btn-secondary,
+.btn-primary {
+  flex: 1;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e0e6ed;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-primary {
+  background: #64b5f6;
+  color: #1a1a2e;
+}
+
+.btn-primary:hover {
+  background: #42a5f5;
+}
+
+.btn-primary:disabled {
+  background: #555;
+  color: #999;
+  cursor: not-allowed;
+}
+
 .form-group input,
 .form-group select {
   padding: 10px;
@@ -569,11 +845,66 @@ onMounted(() => {
 }
 
 .form-actions button:disabled {
-  opacity: 0.6;
+  background: #555;
+  color: #999;
   cursor: not-allowed;
 }
 
 .form-actions button:not(:disabled):hover {
   transform: translateY(-1px);
+}
+
+/* 公共房间探索器样式 */
+.public-rooms-modal {
+  background: #0f0f23;
+  border: 2px solid #00ff88;
+  border-radius: 12px;
+  width: 90vw;
+  max-width: 1200px;
+  height: 80vh;
+  max-height: 800px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.public-rooms-modal .modal-header {
+  background: rgba(0, 255, 136, 0.1);
+  border-bottom: 1px solid #00ff88;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.public-rooms-modal .modal-header h3 {
+  margin: 0;
+  color: #00ff88;
+  font-size: 1.5rem;
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+.public-rooms-modal .modal-body {
+  flex: 1;
+  overflow: hidden;
+}
+
+.quick-action-btn.primary {
+  background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+  color: white;
+  border: 2px solid #ff6b6b;
+  animation: pulse 2s infinite;
+}
+
+.quick-action-btn.primary:hover {
+  background: linear-gradient(45deg, #ff5252, #d32f2f);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(255, 107, 107, 0.4);
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }
 }
 </style>

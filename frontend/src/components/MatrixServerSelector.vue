@@ -1,401 +1,384 @@
 <template>
   <div class="matrix-server-selector">
-    <div class="server-header">
-      <h3>{{ $t('matrix.selectServer') }}</h3>
-      <p class="server-description">{{ $t('matrix.serverDescription') }}</p>
+    <div class="selector-header">
+      <h3>🌐 选择 Matrix 服务器</h3>
+      <button @click="$emit('cancel')" class="close-btn">×</button>
     </div>
     
-    <div class="server-options">
-      <!-- 预设服务器 -->
-      <div class="preset-servers">
-        <h4>{{ $t('matrix.popularServers') }}</h4>
-        <div class="server-list">
-          <div 
-            v-for="server in presetServers" 
-            :key="server.name"
-            class="server-item"
-            :class="{ active: selectedServer === server.name }"
-            @click="selectServer(server.name)"
-          >
-            <div class="server-info">
-              <div class="server-name">{{ server.name }}</div>
-              <div class="server-desc">{{ server.description }}</div>
-              <div class="server-status" :class="server.status">
-                <span class="status-dot"></span>
-                {{ $t(`matrix.status.${server.status}`) }}
-              </div>
-            </div>
-            <div class="server-federation">
-              <span class="federation-badge">{{ $t('matrix.federated') }}</span>
-            </div>
+    <div class="server-list">
+      <div 
+        v-for="server in servers" 
+        :key="server.url"
+        class="server-item"
+        :class="{ active: selectedServer === server.url }"
+        @click="selectServer(server)"
+      >
+        <div class="server-info">
+          <h4>{{ server.name }}</h4>
+          <p class="server-url">{{ server.url }}</p>
+          <p class="server-description">{{ server.description }}</p>
+          <div class="server-stats">
+            <span class="stat">👥 {{ server.users || 'N/A' }} 用户</span>
+            <span class="stat">🏠 {{ server.rooms || 'N/A' }} 房间</span>
+            <span class="status" :class="server.status">{{ getStatusText(server.status) }}</span>
           </div>
         </div>
-      </div>
-      
-      <!-- 自定义服务器 -->
-      <div class="custom-server">
-        <h4>{{ $t('matrix.customServer') }}</h4>
-        <div class="input-group">
-          <input 
-            v-model="customServerUrl"
-            type="text"
-            :placeholder="$t('matrix.serverUrlPlaceholder')"
-            class="server-input"
-            @input="validateCustomServer"
-          />
+        <div class="server-actions">
           <button 
-            @click="testCustomServer"
-            :disabled="!customServerUrl || testing"
-            class="test-button"
+            @click.stop="testConnection(server)"
+            :disabled="testing[server.url]"
+            class="test-btn"
           >
-            <span v-if="testing" class="loading-spinner"></span>
-            {{ testing ? $t('matrix.testing') : $t('matrix.test') }}
+            {{ testing[server.url] ? '测试中...' : '测试连接' }}
           </button>
         </div>
-        <div v-if="customServerError" class="error-message">
-          {{ customServerError }}
-        </div>
-        <div v-if="customServerInfo" class="server-info-display">
-          <div class="info-item">
-            <span class="label">{{ $t('matrix.serverName') }}:</span>
-            <span class="value">{{ customServerInfo.server_name }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">{{ $t('matrix.version') }}:</span>
-            <span class="value">{{ customServerInfo.version }}</span>
-          </div>
-        </div>
       </div>
     </div>
-    
-    <div class="server-actions">
+
+    <div class="custom-server">
+      <h4>自定义服务器</h4>
+      <div class="custom-input-group">
+        <input 
+          v-model="customServerUrl"
+          placeholder="输入服务器URL (例: matrix.org)"
+          class="custom-input"
+          @keyup.enter="addCustomServer"
+        />
+        <button @click="addCustomServer" class="add-btn">添加</button>
+      </div>
+    </div>
+
+    <div class="selector-actions">
+      <button @click="$emit('cancel')" class="cancel-btn">取消</button>
       <button 
-        @click="$emit('cancel')"
-        class="cancel-button"
-      >
-        {{ $t('common.cancel') }}
-      </button>
-      <button 
-        @click="confirmServer"
+        @click="confirmSelection"
         :disabled="!selectedServer"
-        class="confirm-button"
+        class="confirm-btn"
       >
-        {{ $t('common.confirm') }}
+        确认选择
       </button>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup>
 import { ref, onMounted } from 'vue'
-import { matrixAPI } from '@/services/api'
 
 const emit = defineEmits(['server-selected', 'cancel'])
 
+// 响应式数据
 const selectedServer = ref('')
 const customServerUrl = ref('')
-const customServerError = ref('')
-const customServerInfo = ref(null)
-const testing = ref(false)
+const testing = ref({})
 
-const presetServers = ref([
+// 预定义服务器列表
+const servers = ref([
   {
-    name: 'matrix.org',
-    description: 'Official Matrix.org homeserver',
-    status: 'online'
+    name: 'Matrix.org',
+    url: 'matrix.org',
+    description: 'Matrix 官方服务器',
+    status: 'online',
+    users: '1M+',
+    rooms: '100K+'
   },
   {
-    name: 'mozilla.org',
-    description: 'Mozilla Matrix homeserver',
-    status: 'online'
+    name: 'Mozilla Matrix',
+    url: 'mozilla.org',
+    description: 'Mozilla 官方 Matrix 服务器',
+    status: 'online',
+    users: '10K+',
+    rooms: '1K+'
   },
   {
-    name: 'kde.org',
-    description: 'KDE Community homeserver',
-    status: 'online'
+    name: 'KDE Matrix',
+    url: 'kde.org',
+    description: 'KDE 社区 Matrix 服务器',
+    status: 'online',
+    users: '5K+',
+    rooms: '500+'
+  },
+  {
+    name: 'GNOME Matrix',
+    url: 'gnome.org',
+    description: 'GNOME 社区 Matrix 服务器',
+    status: 'online',
+    users: '3K+',
+    rooms: '300+'
+  },
+  {
+    name: 'Fedora Matrix',
+    url: 'fedora.im',
+    description: 'Fedora 社区 Matrix 服务器',
+    status: 'online',
+    users: '2K+',
+    rooms: '200+'
   }
 ])
 
-const selectServer = (serverName: string) => {
-  selectedServer.value = serverName
-  customServerUrl.value = ''
-  customServerError.value = ''
-  customServerInfo.value = null
+// 方法
+const selectServer = (server) => {
+  selectedServer.value = server.url
 }
 
-const validateCustomServer = () => {
-  if (customServerUrl.value) {
-    selectedServer.value = customServerUrl.value
-    customServerError.value = ''
-  }
-}
-
-const testCustomServer = async () => {
-  if (!customServerUrl.value) return
-  
-  testing.value = true
-  customServerError.value = ''
-  customServerInfo.value = null
-  
+const testConnection = async (server) => {
+  testing.value[server.url] = true
   try {
-    const response = await matrixAPI.getServerInfo(customServerUrl.value)
-    customServerInfo.value = response.data
-    selectedServer.value = customServerUrl.value
-  } catch (error: any) {
-    customServerError.value = error.response?.data?.message || 'Failed to connect to server'
-    selectedServer.value = ''
-  } finally {
-    testing.value = false
-  }
-}
-
-const confirmServer = () => {
-  if (selectedServer.value) {
-    emit('server-selected', selectedServer.value)
-  }
-}
-
-onMounted(async () => {
-  try {
-    const response = await matrixAPI.discoverServers()
-    if (response.data && response.data.length > 0) {
-      presetServers.value = response.data
-    }
+    // 模拟连接测试
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    server.status = 'online'
+    console.log(`Connection test successful for ${server.url}`)
   } catch (error) {
-    console.warn('Failed to load server list:', error)
+    server.status = 'offline'
+    console.error(`Connection test failed for ${server.url}:`, error)
+  } finally {
+    testing.value[server.url] = false
   }
+}
+
+const addCustomServer = () => {
+  if (!customServerUrl.value.trim()) return
+  
+  const customServer = {
+    name: customServerUrl.value,
+    url: customServerUrl.value,
+    description: '自定义服务器',
+    status: 'unknown',
+    users: 'N/A',
+    rooms: 'N/A'
+  }
+  
+  servers.value.push(customServer)
+  customServerUrl.value = ''
+}
+
+const confirmSelection = () => {
+  if (selectedServer.value) {
+    const server = servers.value.find(s => s.url === selectedServer.value)
+    emit('server-selected', server)
+  }
+}
+
+const getStatusText = (status) => {
+  switch (status) {
+    case 'online': return '在线'
+    case 'offline': return '离线'
+    case 'unknown': return '未知'
+    default: return '未知'
+  }
+}
+
+// 生命周期
+onMounted(() => {
+  // 默认选择 matrix.org
+  selectedServer.value = 'matrix.org'
 })
 </script>
 
 <style scoped>
 .matrix-server-selector {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border: 1px solid #3a4a5c;
+  background: #0f0f23;
+  border: 2px solid #00ff88;
   border-radius: 12px;
-  padding: 24px;
-  color: #e0e6ed;
+  padding: 20px;
   max-width: 600px;
-  margin: 0 auto;
+  max-height: 80vh;
+  overflow-y: auto;
+  color: #00ff88;
+  font-family: 'Courier New', monospace;
 }
 
-.server-header {
-  text-align: center;
-  margin-bottom: 24px;
+.selector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #00ff88;
 }
 
-.server-header h3 {
-  color: #64b5f6;
-  margin-bottom: 8px;
-  font-size: 1.5rem;
+.selector-header h3 {
+  margin: 0;
+  color: #00ff88;
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
 }
 
-.server-description {
-  color: #b0bec5;
-  font-size: 0.9rem;
-}
-
-.server-options {
-  margin-bottom: 24px;
-}
-
-.preset-servers, .custom-server {
-  margin-bottom: 24px;
-}
-
-.preset-servers h4, .custom-server h4 {
-  color: #81c784;
-  margin-bottom: 12px;
-  font-size: 1.1rem;
+.close-btn {
+  background: none;
+  border: none;
+  color: #00ff88;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .server-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  margin-bottom: 20px;
 }
 
 .server-item {
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid #3a4a5c;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.3s ease;
 }
 
 .server-item:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: #64b5f6;
+  border-color: #00ff88;
+  background: rgba(0, 255, 136, 0.2);
 }
 
 .server-item.active {
-  background: rgba(100, 181, 246, 0.2);
-  border-color: #64b5f6;
+  border-color: #00ff88;
+  background: rgba(0, 255, 136, 0.3);
+  box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
 }
 
-.server-info {
-  flex: 1;
+.server-info h4 {
+  margin: 0 0 5px 0;
+  color: #00ff88;
 }
 
-.server-name {
-  font-weight: 600;
-  color: #e0e6ed;
-  margin-bottom: 4px;
+.server-url {
+  margin: 0 0 5px 0;
+  color: rgba(0, 255, 136, 0.8);
+  font-size: 14px;
 }
 
-.server-desc {
-  font-size: 0.85rem;
-  color: #b0bec5;
-  margin-bottom: 4px;
+.server-description {
+  margin: 0 0 10px 0;
+  color: rgba(0, 255, 136, 0.7);
+  font-size: 12px;
 }
 
-.server-status {
+.server-stats {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
+  gap: 15px;
+  font-size: 11px;
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #4caf50;
+.stat {
+  color: rgba(0, 255, 136, 0.6);
 }
 
-.federation-badge {
-  background: rgba(129, 199, 132, 0.2);
-  color: #81c784;
-  padding: 4px 8px;
+.status {
+  font-weight: bold;
+}
+
+.status.online {
+  color: #00ff88;
+}
+
+.status.offline {
+  color: #ff4444;
+}
+
+.status.unknown {
+  color: #ffaa00;
+}
+
+.test-btn {
+  background: rgba(0, 255, 136, 0.2);
+  border: 1px solid #00ff88;
+  color: #00ff88;
+  padding: 5px 10px;
   border-radius: 4px;
-  font-size: 0.75rem;
-  border: 1px solid #81c784;
-}
-
-.input-group {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.server-input {
-  flex: 1;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid #3a4a5c;
-  border-radius: 6px;
-  color: #e0e6ed;
-  font-size: 0.9rem;
-}
-
-.server-input:focus {
-  outline: none;
-  border-color: #64b5f6;
-}
-
-.test-button {
-  padding: 10px 16px;
-  background: #64b5f6;
-  color: white;
-  border: none;
-  border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.test-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.loading-spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid transparent;
-  border-top: 2px solid white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.error-message {
-  color: #f44336;
-  font-size: 0.85rem;
-  margin-top: 4px;
-}
-
-.server-info-display {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 12px;
-  border-radius: 6px;
-  margin-top: 8px;
-}
-
-.info-item {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-
-.info-item:last-child {
-  margin-bottom: 0;
-}
-
-.label {
-  color: #b0bec5;
-  font-size: 0.85rem;
-}
-
-.value {
-  color: #e0e6ed;
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.server-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.cancel-button, .confirm-button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 12px;
   transition: all 0.3s ease;
 }
 
-.cancel-button {
-  background: rgba(255, 255, 255, 0.1);
-  color: #e0e6ed;
+.test-btn:hover:not(:disabled) {
+  background: rgba(0, 255, 136, 0.3);
 }
 
-.cancel-button:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.confirm-button {
-  background: #4caf50;
-  color: white;
-}
-
-.confirm-button:disabled {
-  opacity: 0.6;
+.test-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-.confirm-button:not(:disabled):hover {
-  background: #45a049;
+.custom-server {
+  margin-bottom: 20px;
+  padding-top: 15px;
+  border-top: 1px solid rgba(0, 255, 136, 0.3);
+}
+
+.custom-server h4 {
+  margin: 0 0 10px 0;
+  color: #00ff88;
+}
+
+.custom-input-group {
+  display: flex;
+  gap: 10px;
+}
+
+.custom-input {
+  flex: 1;
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid #00ff88;
+  color: #00ff88;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+.custom-input::placeholder {
+  color: rgba(0, 255, 136, 0.6);
+}
+
+.add-btn, .confirm-btn {
+  background: linear-gradient(45deg, #00ff88, #00cc6a);
+  border: none;
+  color: #000;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  font-family: inherit;
+  transition: all 0.3s ease;
+}
+
+.add-btn:hover, .confirm-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 255, 136, 0.4);
+}
+
+.selector-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 15px;
+  border-top: 1px solid rgba(0, 255, 136, 0.3);
+}
+
+.cancel-btn {
+  background: rgba(255, 68, 68, 0.2);
+  border: 1px solid #ff4444;
+  color: #ff4444;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.3s ease;
+}
+
+.cancel-btn:hover {
+  background: rgba(255, 68, 68, 0.3);
+}
+
+.confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

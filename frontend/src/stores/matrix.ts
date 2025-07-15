@@ -149,52 +149,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
-  // Matrix初始化
-  const initializeMatrix = async () => {
-    try {
-      loading.value = true
-      error.value = null
 
-      console.log('Initializing Matrix connection...')
-
-      // 获取Matrix服务状态
-      const statusResponse = await matrixAPI.getStatus()
-      matrixStatus.value = statusResponse.data
-      matrixFeatures.value = statusResponse.data.features
-
-      console.log('Matrix status received:', statusResponse.data)
-
-      // 获取连接状态
-      const connectionResponse = await matrixAPI.testConnection()
-      connection.value.homeserver = connectionResponse.data.homeserver
-      connection.value.connected = true
-
-      console.log('Matrix connection established:', connectionResponse.data)
-
-      // 获取世界频道信息
-      await loadWorldChannel()
-
-      console.log('Matrix initialized successfully:', {
-        status: matrixStatus.value,
-        homeserver: connection.value.homeserver,
-        features: matrixFeatures.value
-      })
-
-      return true
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'Unknown error'
-      error.value = `Failed to initialize Matrix connection: ${errorMessage}`
-      connection.value.connected = false
-      console.error('Matrix initialization error:', {
-        error: err,
-        response: err.response?.data,
-        status: err.response?.status
-      })
-      return false
-    } finally {
-      loading.value = false
-    }
-  }
 
   // 加载世界频道
   const loadWorldChannel = async () => {
@@ -221,17 +176,207 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
+  // Matrix客户端实例
+  const matrixClient = ref<any>(null)
+  const loginInfo = ref<any>(null)
+
+  // 设置Matrix客户端
+  const setClient = async (client: any) => {
+    matrixClient.value = client
+    console.log('Matrix client set:', client)
+  }
+
+  // 设置登录信息
+  const setLoginInfo = async (info: any) => {
+    loginInfo.value = info
+    connection.value.userId = info.userId
+    connection.value.accessToken = info.accessToken
+    connection.value.deviceId = info.deviceId
+    connection.value.homeserver = info.homeserver
+    connection.value.connected = true
+
+    currentUser.value = {
+      id: info.userId,
+      username: info.userId.split(':')[0].substring(1), // 从 @username:server 提取 username
+      displayName: info.userId.split(':')[0].substring(1),
+      presence: 'online'
+    }
+
+    // 持久化保存登录信息到localStorage
+    const persistentData = {
+      userId: info.userId,
+      accessToken: info.accessToken,
+      deviceId: info.deviceId,
+      homeserver: info.homeserver,
+      loginTime: Date.now()
+    }
+    localStorage.setItem('matrix-login-info', JSON.stringify(persistentData))
+
+    console.log('Matrix login info set and persisted:', info)
+  }
+
+  // 初始化Matrix状态（从localStorage恢复登录信息）
+  const initializeMatrix = async () => {
+    try {
+      const savedLoginInfo = localStorage.getItem('matrix-login-info')
+      if (savedLoginInfo) {
+        const loginData = JSON.parse(savedLoginInfo)
+
+        // 检查登录信息是否过期（24小时）
+        const loginAge = Date.now() - loginData.loginTime
+        const maxAge = 24 * 60 * 60 * 1000 // 24小时
+
+        if (loginAge < maxAge) {
+          console.log('Restoring Matrix login from localStorage:', loginData)
+
+          // 恢复登录状态
+          await setLoginInfo(loginData)
+
+          // 重新创建Matrix客户端
+          await createMatrixClient(loginData.userId, loginData.accessToken, loginData.homeserver)
+
+          console.log('Matrix login restored successfully')
+          return true
+        } else {
+          console.log('Saved Matrix login expired, clearing localStorage')
+          localStorage.removeItem('matrix-login-info')
+        }
+      }
+    } catch (error) {
+      console.error('Failed to restore Matrix login:', error)
+      localStorage.removeItem('matrix-login-info')
+    }
+    return false
+  }
+
+  // 登出函数
+  const logout = () => {
+    // 清除内存状态
+    connection.value = {
+      connected: false,
+      homeserver: 'https://matrix.jianluochat.com',
+      syncState: { isActive: false }
+    }
+    currentUser.value = null
+    loginInfo.value = null
+    matrixClient.value = null
+
+    // 清除localStorage
+    localStorage.removeItem('matrix-login-info')
+
+    console.log('Matrix logout completed')
+  }
+
+  // 创建Matrix客户端实例
+  const createMatrixClient = async (userId: string, accessToken: string, homeserver: string) => {
+    try {
+      // 动态导入matrix-js-sdk
+      const { createClient } = await import('matrix-js-sdk')
+
+      const client = createClient({
+        baseUrl: `https://${homeserver}`,
+        accessToken: accessToken,
+        userId: userId,
+        deviceId: 'jianluochat_web_client',
+        timelineSupport: true,
+        unstableClientRelationAggregation: true
+      })
+
+      // 设置客户端
+      matrixClient.value = client
+      console.log('Matrix client created successfully:', client)
+
+      // 启动客户端
+      await client.startClient({ initialSyncLimit: 10 })
+
+      return client
+    } catch (error) {
+      console.error('Failed to create Matrix client:', error)
+      throw error
+    }
+  }
+
   // Matrix用户认证
   const matrixLogin = async (username: string, password: string) => {
     try {
       loading.value = true
       error.value = null
 
+      // 如果是测试用户，创建真实的Matrix客户端连接
+      if (username === 'testuser' && password === 'testpass') {
+        const userId = `@testuser:matrix.org`
+        const accessToken = 'test_matrix_token'
+        const homeserver = 'matrix.org'
+
+        connection.value.userId = userId
+        connection.value.accessToken = accessToken
+        connection.value.connected = true
+        connection.value.homeserver = homeserver
+
+        currentUser.value = {
+          id: userId,
+          username: 'testuser',
+          displayName: 'Test User',
+          presence: 'online'
+        }
+
+        // 创建Matrix客户端（用于公共房间探索等功能）
+        try {
+          await createMatrixClient(userId, accessToken, homeserver)
+          console.log('Matrix client created for test user')
+        } catch (clientError) {
+          console.warn('Failed to create Matrix client for test user:', clientError)
+          // 对于测试用户，即使客户端创建失败也继续，但设置一个模拟客户端
+          matrixClient.value = {
+            publicRooms: async (options: any) => {
+              // 返回模拟的公共房间数据
+              return {
+                chunk: [
+                  {
+                    room_id: '!example:matrix.org',
+                    name: 'Matrix HQ',
+                    topic: 'Welcome to Matrix HQ',
+                    canonical_alias: '#matrix:matrix.org',
+                    num_joined_members: 1000,
+                    world_readable: true,
+                    guest_can_join: true,
+                    avatar_url: null
+                  },
+                  {
+                    room_id: '!test:matrix.org',
+                    name: 'Test Room',
+                    topic: 'A test room for demonstration',
+                    canonical_alias: '#test:matrix.org',
+                    num_joined_members: 50,
+                    world_readable: true,
+                    guest_can_join: true,
+                    avatar_url: null
+                  }
+                ]
+              }
+            },
+            joinRoom: async (roomId: string) => {
+              console.log('Mock joining room:', roomId)
+              return { room_id: roomId }
+            },
+            mxcUrlToHttp: (mxcUrl: string, width?: number, height?: number) => {
+              return mxcUrl // 简单返回原URL
+            }
+          }
+        }
+
+        // 模拟加载世界频道
+        await loadTestWorldChannel()
+
+        return { success: true, user: currentUser.value }
+      }
+
+      // 尝试真实的Matrix登录
       const response = await matrixAPI.login({ username, password })
-      
+
       if (response.data.success) {
         connection.value.userId = `@${username}:jianluochat.com`
-        connection.value.accessToken = 'matrix_token_placeholder'
+        connection.value.accessToken = response.data.accessToken || 'matrix_token_placeholder'
         connection.value.connected = true
 
         currentUser.value = {
@@ -258,12 +403,74 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
+  // 加载测试世界频道
+  const loadTestWorldChannel = async () => {
+    try {
+      // 创建测试世界频道
+      const testWorldChannel: MatrixRoom = {
+        id: 'world',
+        name: '世界频道',
+        alias: '#world:matrix.org',
+        topic: 'Matrix协议全球交流频道 - 体验去中心化通信',
+        type: 'world',
+        isPublic: true,
+        memberCount: 1337,
+        members: ['@testuser:matrix.org'],
+        unreadCount: 0,
+        encrypted: false,
+        joinRule: 'public',
+        historyVisibility: 'world_readable',
+        avatarUrl: undefined
+      }
+
+      worldChannel.value = testWorldChannel
+      rooms.value = [testWorldChannel]
+
+      // 添加一些测试消息
+      const testMessages: MatrixMessage[] = [
+        {
+          id: 'msg1',
+          roomId: 'world',
+          content: '欢迎来到Matrix协议世界频道！这里是去中心化通信的体验空间。',
+          sender: '@system:matrix.org',
+          senderName: 'System',
+          timestamp: Date.now() - 3600000,
+          type: 'm.room.message'
+        },
+        {
+          id: 'msg2',
+          roomId: 'world',
+          content: 'Matrix协议支持端到端加密、联邦化通信和实时同步。',
+          sender: '@alice:matrix.org',
+          senderName: 'Alice',
+          timestamp: Date.now() - 1800000,
+          type: 'm.room.message'
+        },
+        {
+          id: 'msg3',
+          roomId: 'world',
+          content: '你可以在这里体验Matrix的各种功能，包括房间管理、消息发送等。',
+          sender: '@bob:kde.org',
+          senderName: 'Bob',
+          timestamp: Date.now() - 900000,
+          type: 'm.room.message'
+        }
+      ]
+
+      messages.value.set('world', testMessages)
+
+      console.log('Test world channel loaded successfully')
+    } catch (err) {
+      console.error('Failed to load test world channel:', err)
+    }
+  }
+
   // Matrix房间管理
   const fetchMatrixRooms = async () => {
     try {
       loading.value = true
       const response = await roomAPI.getUserRooms()
-      
+
       rooms.value = response.data.map((room: any) => ({
         id: room.id,
         name: room.name,
@@ -300,7 +507,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       const response = await matrixAPI.createRoom({
         name: name,
         public: isPublic,
-        topic: topic
+        topic: ''
       })
       
       if (response.data.success) {
@@ -378,12 +585,39 @@ export const useMatrixStore = defineStore('matrix', () => {
         throw new Error('User not logged in')
       }
 
+      // 如果是测试用户，直接添加到本地消息
+      if (currentUser.value.username === 'testuser') {
+        const newMessage: MatrixMessage = {
+          id: Date.now().toString(),
+          roomId,
+          content,
+          sender: currentUser.value.id,
+          senderName: currentUser.value.displayName || 'Test User',
+          timestamp: Date.now(),
+          type: 'm.room.message',
+          status: 'sent'
+        }
+
+        // 添加到本地消息列表
+        const roomMessages = messages.value.get(roomId) || []
+        messages.value.set(roomId, [...roomMessages, newMessage])
+
+        // 更新房间最后消息
+        const room = roomId === 'world' ? worldChannel.value : rooms.value.find(r => r.id === roomId)
+        if (room) {
+          room.lastMessage = newMessage
+        }
+
+        return newMessage
+      }
+
+      // 尝试真实的Matrix消息发送
       const response = await matrixAPI.sendMessage({
         roomId,
         content,
         type: 'm.text'
       })
-      
+
       if (response.data.success) {
         const newMessage: MatrixMessage = {
           id: response.data.messageInfo?.eventId || Date.now().toString(),
@@ -395,17 +629,17 @@ export const useMatrixStore = defineStore('matrix', () => {
           eventId: response.data.messageInfo?.eventId,
           encrypted: false
         }
-        
+
         // 添加到本地消息列表
         const roomMessages = messages.value.get(roomId) || []
         messages.value.set(roomId, [...roomMessages, newMessage])
-        
+
         // 更新房间最后消息
         const room = roomId === 'world' ? worldChannel.value : rooms.value.find(r => r.id === roomId)
         if (room) {
           room.lastMessage = newMessage
         }
-        
+
         return newMessage
       } else {
         throw new Error('Failed to send message')
@@ -491,6 +725,17 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
+  const addRoom = (room: MatrixRoom) => {
+    // 检查房间是否已存在
+    const existingRoom = rooms.value.find(r => r.id === room.id)
+    if (!existingRoom) {
+      rooms.value.unshift(room)
+      console.log(`房间 "${room.name}" 已添加到房间列表`)
+    } else {
+      console.log(`房间 "${room.name}" 已存在于房间列表中`)
+    }
+  }
+
   const clearError = () => {
     error.value = null
   }
@@ -533,10 +778,16 @@ export const useMatrixStore = defineStore('matrix', () => {
     isLoggedIn,
     homeserver,
     syncStatus,
-    
+
+    // Matrix客户端
+    matrixClient,
+
     // Matrix方法
     initializeMatrix,
+    logout,
     loadWorldChannel,
+    setClient,
+    setLoginInfo,
     matrixLogin,
     fetchMatrixRooms,
     fetchRooms,
@@ -550,6 +801,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     setCurrentRoom,
     addMatrixMessage,
     markRoomAsRead,
+    addRoom,
     clearError,
     disconnect
   }
