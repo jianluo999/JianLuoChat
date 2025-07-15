@@ -37,6 +37,13 @@ public class RealMatrixService {
     @Value("${matrix.world.room.alias:#jianluochat-world:matrix.org}")
     private String worldRoomAlias;
 
+    // 支持的Matrix服务器列表
+    private final Map<String, String> supportedServers = Map.of(
+        "matrix.org", "https://matrix.org",
+        "kde.org", "https://matrix.kde.org",
+        "mozilla.org", "https://chat.mozilla.org"
+    );
+
     // HTTP客户端
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
         .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
@@ -87,8 +94,18 @@ public class RealMatrixService {
      * 用户登录到Matrix
      */
     public CompletableFuture<String> loginUser(User user, String password) {
+        return loginUser(user, password, "matrix.org");
+    }
+
+    /**
+     * 用户登录到指定Matrix服务器
+     */
+    public CompletableFuture<String> loginUser(User user, String password, String homeserver) {
         return CompletableFuture.supplyAsync(() -> {
             try {
+                // 获取服务器URL
+                String serverUrl = supportedServers.getOrDefault(homeserver, "https://" + homeserver);
+
                 // 构建登录请求
                 Map<String, Object> loginData = new HashMap<>();
                 loginData.put("type", "m.login.password");
@@ -103,7 +120,7 @@ public class RealMatrixService {
                 );
 
                 Request request = new Request.Builder()
-                    .url(homeserverUrl + "/_matrix/client/r0/login")
+                    .url(serverUrl + "/_matrix/client/r0/login")
                     .post(body)
                     .build();
 

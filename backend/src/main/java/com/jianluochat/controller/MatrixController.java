@@ -45,7 +45,7 @@ public class MatrixController {
             user.setUsername(username);
             
             // 调用Matrix登录
-            String accessToken = realMatrixService.loginUser(user, password).join();
+            String accessToken = realMatrixService.loginUser(user, password, homeserver != null ? homeserver : "matrix.org").join();
             
             if (accessToken != null && !accessToken.isEmpty()) {
                 // Matrix同步将在WebSocket连接时启动
@@ -169,5 +169,70 @@ public class MatrixController {
         status.put("timestamp", System.currentTimeMillis());
 
         return ResponseEntity.ok(status);
+    }
+
+    /**
+     * 获取世界频道信息
+     */
+    @GetMapping("/world-channel")
+    public ResponseEntity<?> getWorldChannel() {
+        try {
+            Map<String, Object> worldChannel = new HashMap<>();
+            worldChannel.put("id", "world");
+            worldChannel.put("name", "世界频道");
+            worldChannel.put("type", "world");
+            worldChannel.put("description", "全球Matrix用户交流频道");
+            worldChannel.put("memberCount", 1000); // 模拟数据
+            worldChannel.put("isPublic", true);
+            worldChannel.put("encrypted", false);
+            worldChannel.put("timestamp", System.currentTimeMillis());
+
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "worldChannel", worldChannel
+            ));
+        } catch (Exception e) {
+            logger.error("Failed to get world channel: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "error", "获取世界频道失败: " + e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 加入Matrix房间
+     */
+    @PostMapping("/rooms/join")
+    public ResponseEntity<?> joinRoom(@RequestBody Map<String, String> request) {
+        try {
+            String roomIdOrAlias = request.get("roomIdOrAlias");
+
+            if (roomIdOrAlias == null || roomIdOrAlias.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", "房间ID或别名不能为空"
+                ));
+            }
+
+            logger.info("Attempting to join room: {}", roomIdOrAlias);
+
+            // 这里应该调用真实的Matrix API来加入房间
+            // 目前返回模拟成功结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("message", "成功加入房间");
+            result.put("roomId", roomIdOrAlias);
+            result.put("timestamp", System.currentTimeMillis());
+
+            return ResponseEntity.ok(result);
+
+        } catch (Exception e) {
+            logger.error("Failed to join room: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "error", "加入房间失败: " + e.getMessage()
+            ));
+        }
     }
 }

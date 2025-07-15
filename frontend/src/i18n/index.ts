@@ -66,6 +66,31 @@ const zh = {
     offline: '离线',
     worldChannelWelcome: '欢迎来到世界频道！这是一个全球公共聊天空间。',
     globalChannel: '全球公共频道'
+  },
+  matrix: {
+    realLogin: {
+      title: 'Matrix 协议登录',
+      subtitle: '使用真正的 Matrix 账户登录去中心化网络',
+      matrixId: 'Matrix ID',
+      usernamePlaceholder: '用户名',
+      homeserverPlaceholder: 'matrix.org',
+      password: '密码',
+      passwordPlaceholder: '输入密码',
+      popularServers: '热门服务器：',
+      login: '登录',
+      connecting: '连接中...',
+      noAccount: '没有 Matrix 账户？',
+      registerElement: '在 Element 上注册',
+      learnMore: '了解更多关于 Matrix',
+      errors: {
+        invalidCredentials: '用户名或密码错误',
+        userDeactivated: '账户已被停用',
+        connectionFailed: '无法连接到服务器 {server}',
+        loginFailed: '登录失败：{message}'
+      }
+    },
+    federated: '联邦',
+    protocol: 'Matrix 协议'
   }
 }
 
@@ -135,6 +160,31 @@ const en = {
     offline: 'Offline',
     worldChannelWelcome: 'Welcome to the World Channel! This is a global public chat space.',
     globalChannel: 'Global Public Channel'
+  },
+  matrix: {
+    realLogin: {
+      title: 'Matrix Protocol Login',
+      subtitle: 'Login with real Matrix account to decentralized network',
+      matrixId: 'Matrix ID',
+      usernamePlaceholder: 'username',
+      homeserverPlaceholder: 'matrix.org',
+      password: 'Password',
+      passwordPlaceholder: 'Enter password',
+      popularServers: 'Popular servers:',
+      login: 'Login',
+      connecting: 'Connecting...',
+      noAccount: 'Don\'t have a Matrix account?',
+      registerElement: 'Register on Element',
+      learnMore: 'Learn more about Matrix',
+      errors: {
+        invalidCredentials: 'Invalid username or password',
+        userDeactivated: 'Account has been deactivated',
+        connectionFailed: 'Failed to connect to server {server}',
+        loginFailed: 'Login failed: {message}'
+      }
+    },
+    federated: 'Federated',
+    protocol: 'Matrix Protocol'
   }
 }
 

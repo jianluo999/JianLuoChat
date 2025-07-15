@@ -1,22 +1,15 @@
 <template>
   <div class="matrix-client">
-    <!-- Matrix服务器选择 -->
-    <MatrixServerSelector 
-      v-if="showServerSelector"
-      @server-selected="handleServerSelected"
-      @cancel="showServerSelector = false"
+    <!-- 真正的Matrix登录 -->
+    <MatrixRealLogin
+      v-if="!matrixStore.isLoggedIn"
+      @login-success="handleRealLoginSuccess"
     />
-    
-    <!-- Matrix登录界面 -->
-    <MatrixLogin 
-      v-else-if="!matrixStore.isLoggedIn" 
-      :selected-server="selectedServer"
-      @login-success="handleLoginSuccess"
-      @change-server="showServerSelector = true"
-    />
-    
+
+
+
     <!-- Matrix主界面 -->
-    <div v-else class="matrix-main-interface">
+    <div v-else-if="matrixStore.isLoggedIn" class="matrix-main-interface">
       <!-- 顶部导航栏 -->
       <div class="matrix-header">
         <div class="server-info">
@@ -114,6 +107,12 @@
             <div class="welcome-message">
               <h2>{{ $t('matrix.welcome') }}</h2>
               <p>{{ $t('matrix.selectRoomToStart') }}</p>
+
+              <!-- Matrix聊天演示 -->
+              <div class="matrix-demo-container">
+                <MatrixChatDemo />
+              </div>
+
               <div class="quick-actions">
                 <button @click="showCreateRoom = true" class="quick-action-btn">
                   {{ $t('matrix.createRoom') }}
@@ -160,29 +159,34 @@
         </form>
       </div>
     </div>
+
+    <!-- 房间浏览器 -->
+    <MatrixRoomBrowser
+      v-if="showRoomBrowser"
+      @close="showRoomBrowser = false"
+      @room-selected="handleRoomSelected"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useMatrixStore } from '@/stores/matrix'
-import { useAuthStore } from '@/stores/auth'
 import { invitationAPI, roomAPI } from '@/services/api'
 
 // 组件导入
-import MatrixServerSelector from '@/components/MatrixServerSelector.vue'
-import MatrixLogin from '@/components/MatrixLogin.vue'
+import MatrixRealLogin from '@/components/MatrixRealLogin.vue'
 import MatrixNavigation from '@/components/MatrixNavigation.vue'
 import MatrixRoomList from '@/components/MatrixRoomList.vue'
 import MatrixMessageArea from '@/components/MatrixMessageArea.vue'
 import MatrixUserID from '@/components/MatrixUserID.vue'
+import MatrixChatDemo from '@/components/MatrixChatDemo.vue'
+import MatrixRoomBrowser from '@/components/MatrixRoomBrowser.vue'
 
 // Store
 const matrixStore = useMatrixStore()
-const authStore = useAuthStore()
 
 // 界面状态
-const showServerSelector = ref(false)
 const selectedServer = ref(localStorage.getItem('matrix-selected-server') || 'matrix.org')
 const selectedSpace = ref('')
 const selectedRoom = ref('')
@@ -207,29 +211,28 @@ const newRoom = ref({
 const pendingInvitations = ref(0)
 
 // 事件处理
-const handleServerSelected = (server: string) => {
-  selectedServer.value = server
-  showServerSelector.value = false
-  localStorage.setItem('matrix-selected-server', server)
-}
 
-const handleLoginSuccess = async () => {
-  console.log('Matrix login successful')
-  
+// 真正的Matrix登录成功处理
+const handleRealLoginSuccess = async (loginInfo: { userId: string; homeserver: string }) => {
+  console.log('Matrix login successful:', loginInfo)
+
+  // 更新选择的服务器
+  selectedServer.value = loginInfo.homeserver
+  localStorage.setItem('matrix-selected-server', loginInfo.homeserver)
+
   try {
-    // 开始Matrix同步
+    // Matrix客户端已经在MatrixRealLogin组件中启动
+    // 这里只需要等待同步完成并获取房间列表
     await matrixStore.startSync()
-    
-    // 获取房间列表
-    await matrixStore.fetchRooms()
-    
+
     // 获取邀请数量
     await loadPendingInvitations()
-    
-    // 默认选择世界频道
-    const worldChannel = matrixStore.rooms.find(room => room.type === 'world')
-    if (worldChannel) {
-      selectedRoom.value = worldChannel.id
+
+    // 默认选择世界频道或第一个可用房间
+    const rooms = matrixStore.rooms
+    if (rooms.length > 0) {
+      const worldChannel = rooms.find(room => room.name?.includes('world') || room.name?.includes('世界'))
+      selectedRoom.value = worldChannel?.id || rooms[0].id
     }
   } catch (error) {
     console.error('Failed to initialize Matrix client:', error)
@@ -274,11 +277,21 @@ const loadPendingInvitations = async () => {
   }
 }
 
+// 监听Matrix房间变化，自动选择世界频道
+watch(() => matrixStore.rooms, (rooms) => {
+  if (rooms.length > 0 && !selectedRoom.value) {
+    const worldChannel = rooms.find(room => room.type === 'world')
+    if (worldChannel) {
+      selectedRoom.value = worldChannel.id
+    }
+  }
+}, { immediate: true })
+
 // 初始化
 onMounted(() => {
-  // 检查是否已经登录
+  // 如果已经登录，直接初始化
   if (matrixStore.isLoggedIn) {
-    handleLoginSuccess()
+    loadPendingInvitations()
   }
 })
 </script>
@@ -429,6 +442,12 @@ onMounted(() => {
   margin-bottom: 24px;
 }
 
+.matrix-demo-container {
+  margin: 30px 0;
+  text-align: left;
+  max-width: 900px;
+}
+
 .quick-actions {
   display: flex;
   gap: 12px;
@@ -517,6 +536,173 @@ onMounted(() => {
   color: #b0bec5;
   font-size: 0.9rem;
   font-weight: 500;
+}
+
+/* 快速登录样式 */
+.quick-login-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.quick-login-modal {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 1px solid #3a4a5c;
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 500px;
+  width: 90%;
+  color: #e0e6ed;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.login-header h3 {
+  color: #64b5f6;
+  font-size: 1.8rem;
+  margin-bottom: 8px;
+}
+
+.login-header p {
+  color: #b0bec5;
+  font-size: 1rem;
+}
+
+.demo-credentials {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.credential-option {
+  display: flex;
+  align-items: center;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.credential-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #64b5f6;
+  transform: translateY(-2px);
+}
+
+.option-icon {
+  font-size: 2rem;
+  margin-right: 16px;
+}
+
+.option-content {
+  flex: 1;
+}
+
+.option-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #e0e6ed;
+  margin-bottom: 4px;
+}
+
+.option-desc {
+  font-size: 0.9rem;
+  color: #b0bec5;
+}
+
+.custom-login-form {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.matrix-id-input {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.id-prefix,
+.id-suffix {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #b0bec5;
+  font-size: 0.9rem;
+}
+
+.form-input {
+  flex: 1;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  color: #e0e6ed;
+  font-size: 1rem;
+}
+
+.form-input:focus {
+  outline: none;
+}
+
+.form-input::placeholder {
+  color: #666;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.btn-secondary,
+.btn-primary {
+  flex: 1;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e0e6ed;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-primary {
+  background: #64b5f6;
+  color: #1a1a2e;
+}
+
+.btn-primary:hover {
+  background: #42a5f5;
+}
+
+.btn-primary:disabled {
+  background: #555;
+  color: #999;
+  cursor: not-allowed;
 }
 
 .form-group input,

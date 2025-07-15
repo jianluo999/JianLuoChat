@@ -28,7 +28,7 @@ const matrixStore = useMatrixStore()
 
 // 显示Matrix导航的条件
 const showMatrixNav = computed(() => {
-  return route.path === '/matrix' || route.path === '/chat'
+  return route.path === '/matrix'
 })
 
 const handleCreateRoom = () => {

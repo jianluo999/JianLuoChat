@@ -199,52 +199,17 @@
     </div>
 
     <!-- Matrix消息输入 -->
-    <div class="matrix-message-input" v-if="currentRoom">
-      <div class="input-header">
-        <div class="input-info">
-          <span class="input-label">MESSAGE TO:</span>
-          <span class="target-room">{{ currentRoom.name }}</span>
-        </div>
-        <div class="input-features">
-          <button 
-            class="feature-btn"
-            :class="{ active: encryptionEnabled }"
-            @click="toggleEncryption"
-            title="Toggle Encryption"
-          >
-            {{ encryptionEnabled ? '🔐' : '🔓' }}
-          </button>
-          <button class="feature-btn" title="Matrix Protocol">🌐</button>
-        </div>
-      </div>
-      
-      <div class="input-container">
-        <div class="input-wrapper">
-          <textarea
-            v-model="messageText"
-            @keydown="handleKeyDown"
-            placeholder="Type your Matrix message..."
-            class="message-textarea"
-            rows="1"
-            ref="messageInput"
-          ></textarea>
-          <button 
-            @click="sendMessage"
-            :disabled="!messageText.trim() || matrixStore.loading"
-            class="send-button"
-          >
-            SEND
-          </button>
-        </div>
-        
-        <div class="input-status">
-          <div class="typing-indicator" v-if="isTyping">
-            <span class="typing-text">Typing...</span>
-            <span class="typing-animation">⟳</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <MatrixMessageInput
+      v-if="currentRoom"
+      :room-id="currentRoom.id"
+      :placeholder="`发送消息到 ${currentRoom.name}...`"
+      :supports-encryption="currentRoom.encrypted"
+      :replying-to="replyingTo"
+      @send-message="handleSendMessage"
+      @cancel-reply="replyingTo = null"
+      @typing-start="handleTypingStart"
+      @typing-stop="handleTypingStop"
+    />
   </div>
 </template>
 
@@ -254,6 +219,7 @@ import { useMatrixStore } from '@/stores/matrix'
 import { messageAPI, matrixAPI } from '@/services/api'
 import MatrixUserID from './MatrixUserID.vue'
 import MatrixEncryptionStatus from './MatrixEncryptionStatus.vue'
+import MatrixMessageInput from './MatrixMessageInput.vue'
 
 interface Props {
   roomId?: string
@@ -273,6 +239,7 @@ const messagesContainer = ref<HTMLElement>()
 const messageInput = ref<HTMLTextAreaElement>()
 const loading = ref(false)
 const isTyping = ref(false)
+const replyingTo = ref<any>(null)
 
 // 界面状态
 const showRoomInfo = ref(false)
@@ -391,14 +358,43 @@ const handleKeyDown = (event: KeyboardEvent) => {
   }
 }
 
+const handleSendMessage = async (content: string, options?: any) => {
+  if (!content.trim() || !currentRoom.value) return
+
+  try {
+    await matrixStore.sendMatrixMessage(currentRoom.value.id, content, options)
+
+    // 滚动到底部
+    nextTick(() => {
+      scrollToBottom()
+    })
+  } catch (error) {
+    console.error('Failed to send message:', error)
+  }
+}
+
+const handleTypingStart = () => {
+  if (!isTyping.value) {
+    isTyping.value = true
+    // 这里可以发送输入状态到Matrix服务器
+    setTimeout(() => {
+      isTyping.value = false
+    }, 3000)
+  }
+}
+
+const handleTypingStop = () => {
+  isTyping.value = false
+}
+
 const sendMessage = async () => {
   if (!messageText.value.trim() || !currentRoom.value) return
-  
+
   try {
     await matrixStore.sendMatrixMessage(currentRoom.value.id, messageText.value.trim())
     messageText.value = ''
     isTyping.value = false
-    
+
     // 滚动到底部
     nextTick(() => {
       scrollToBottom()
