@@ -2,7 +2,6 @@ package com.jianluochat.controller;
 
 import com.jianluochat.entity.User;
 import com.jianluochat.service.RealMatrixService;
-import com.jianluochat.service.MatrixSyncService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,9 +20,6 @@ public class MatrixController {
 
     @Autowired
     private RealMatrixService realMatrixService;
-    
-    @Autowired
-    private MatrixSyncService matrixSyncService;
 
     /**
      * Matrix用户登录
@@ -52,9 +48,8 @@ public class MatrixController {
             String accessToken = realMatrixService.loginUser(user, password).join();
             
             if (accessToken != null && !accessToken.isEmpty()) {
-                // 启动Matrix同步
-                matrixSyncService.startSync(user);
-                
+                // Matrix同步将在WebSocket连接时启动
+
                 Map<String, Object> result = new HashMap<>();
                 result.put("success", true);
                 result.put("message", "Matrix登录成功");
