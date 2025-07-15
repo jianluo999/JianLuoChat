@@ -120,6 +120,9 @@
                 <button @click="showRoomBrowser = true" class="quick-action-btn">
                   {{ $t('matrix.browseRooms') }}
                 </button>
+                <button @click="showPublicRoomsExplorer = true" class="quick-action-btn primary">
+                  🌍 探索公共房间
+                </button>
               </div>
             </div>
           </div>
@@ -166,6 +169,19 @@
       @close="showRoomBrowser = false"
       @room-selected="handleRoomSelected"
     />
+
+    <!-- 公共房间探索器 -->
+    <div v-if="showPublicRoomsExplorer" class="modal-overlay" @click="showPublicRoomsExplorer = false">
+      <div class="public-rooms-modal" @click.stop>
+        <div class="modal-header">
+          <h3>🌍 探索公共房间</h3>
+          <button @click="showPublicRoomsExplorer = false" class="close-btn">×</button>
+        </div>
+        <div class="modal-body">
+          <PublicRoomsExplorer />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -182,6 +198,7 @@ import MatrixMessageArea from '@/components/MatrixMessageArea.vue'
 import MatrixUserID from '@/components/MatrixUserID.vue'
 import MatrixChatDemo from '@/components/MatrixChatDemo.vue'
 import MatrixRoomBrowser from '@/components/MatrixRoomBrowser.vue'
+import PublicRoomsExplorer from '@/components/PublicRoomsExplorer.vue'
 
 // Store
 const matrixStore = useMatrixStore()
@@ -196,6 +213,7 @@ const userStatus = ref<'online' | 'offline' | 'away' | 'busy'>('online')
 const showCreateRoom = ref(false)
 const showCreateSpace = ref(false)
 const showRoomBrowser = ref(false)
+const showPublicRoomsExplorer = ref(false)
 const showInvitations = ref(false)
 const showSettings = ref(false)
 const showUserProfile = ref(false)
@@ -755,11 +773,66 @@ onMounted(() => {
 }
 
 .form-actions button:disabled {
-  opacity: 0.6;
+  background: #555;
+  color: #999;
   cursor: not-allowed;
 }
 
 .form-actions button:not(:disabled):hover {
   transform: translateY(-1px);
+}
+
+/* 公共房间探索器样式 */
+.public-rooms-modal {
+  background: #0f0f23;
+  border: 2px solid #00ff88;
+  border-radius: 12px;
+  width: 90vw;
+  max-width: 1200px;
+  height: 80vh;
+  max-height: 800px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.public-rooms-modal .modal-header {
+  background: rgba(0, 255, 136, 0.1);
+  border-bottom: 1px solid #00ff88;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.public-rooms-modal .modal-header h3 {
+  margin: 0;
+  color: #00ff88;
+  font-size: 1.5rem;
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+.public-rooms-modal .modal-body {
+  flex: 1;
+  overflow: hidden;
+}
+
+.quick-action-btn.primary {
+  background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+  color: white;
+  border: 2px solid #ff6b6b;
+  animation: pulse 2s infinite;
+}
+
+.quick-action-btn.primary:hover {
+  background: linear-gradient(45deg, #ff5252, #d32f2f);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(255, 107, 107, 0.4);
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }
 }
 </style>
