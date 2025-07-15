@@ -458,7 +458,6 @@ onMounted(async () => {
 </script>
 
 
-
 <style scoped>
 .matrix-room-list {
   height: 100%;

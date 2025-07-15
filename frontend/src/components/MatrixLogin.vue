@@ -326,10 +326,14 @@ const handleLogin = async () => {
         }))
       }
 
-      // 更新store状态
-      await matrixStore.setLoginData(response.data)
+      // 调用Matrix登录
+      const matrixResult = await matrixStore.matrixLogin(loginForm.value.username, loginForm.value.password)
 
-      emit('login-success')
+      if (matrixResult.success) {
+        emit('login-success')
+      } else {
+        loginError.value = matrixResult.error || 'Matrix login failed'
+      }
     } else {
       loginError.value = response.data.message || 'Login failed'
     }

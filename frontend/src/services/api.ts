@@ -131,6 +131,24 @@ export const matrixAPI = {
   // 测试Matrix连接
   testConnection: () => api.get('/matrix/test'),
 
+  // 获取连接状态
+  getConnection: () => api.get('/matrix/connection'),
+
+  // 获取世界频道
+  getWorldChannel: () => api.get('/matrix/world-channel'),
+
+  // 获取房间消息
+  getRoomMessages: (params: { roomId: string; limit?: number; from?: string }) =>
+    api.get(`/matrix/rooms/${params.roomId}/messages`, { params }),
+
+  // 发送消息
+  sendMessage: (data: { roomId: string; content: string; type?: string }) =>
+    api.post(`/matrix/rooms/${data.roomId}/messages`, data),
+
+  // Matrix同步
+  sync: (params: { since?: string; timeout?: number }) =>
+    api.get('/matrix/sync', { params }),
+
   // Matrix同步相关
   getSyncStatus: () => api.get('/matrix/sync/status'),
   startSync: () => api.post('/matrix/sync/start'),

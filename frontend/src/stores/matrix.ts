@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { matrixAPI } from '@/services/api'
+import { matrixAPI, roomAPI } from '@/services/api'
 
 // Matrix消息接口
 export interface MatrixMessage {
@@ -12,6 +12,11 @@ export interface MatrixMessage {
   type: string
   eventId?: string
   encrypted?: boolean
+  // 添加缺少的属性
+  senderName?: string
+  senderAvatar?: string
+  edited?: boolean
+  status?: 'sending' | 'sent' | 'delivered' | 'failed'
 }
 
 // Matrix房间接口
@@ -32,6 +37,11 @@ export interface MatrixRoom {
   historyVisibility?: string
   createdAt?: string
   updatedAt?: string
+  // 添加缺少的属性
+  avatarUrl?: string
+  childRooms?: MatrixRoom[]
+  encryptionInfo?: any
+  deviceInfo?: any
 }
 
 // Matrix用户接口
@@ -43,6 +53,8 @@ export interface MatrixUser {
   presence?: 'online' | 'offline' | 'unavailable'
   lastSeen?: number
   statusMessage?: string
+  // 添加缺少的属性
+  userId?: string
 }
 
 // Matrix同步状态
@@ -116,6 +128,27 @@ export const useMatrixStore = defineStore('matrix', () => {
 
   const isConnected = computed(() => connection.value.connected)
 
+  // 添加缺少的计算属性
+  const isLoggedIn = computed(() => connection.value.connected && connection.value.userId)
+  const homeserver = computed(() => connection.value.homeserver)
+  const syncStatus = computed(() => {
+    if (connection.value.syncState.isActive) return 'syncing'
+    if (connection.value.connected) return 'synced'
+    return 'disconnected'
+  })
+
+  // 添加fetchRooms方法作为fetchMatrixRooms的别名
+  const fetchRooms = async () => {
+    return await fetchMatrixRooms()
+  }
+
+  // 添加startSync方法作为startMatrixSync的别名
+  const startSync = async () => {
+    if (currentUser.value?.username) {
+      return await startMatrixSync(currentUser.value.username)
+    }
+  }
+
   // Matrix初始化
   const initializeMatrix = async () => {
     try {
@@ -132,7 +165,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       console.log('Matrix status received:', statusResponse.data)
 
       // 获取连接状态
-      const connectionResponse = await matrixAPI.getConnection()
+      const connectionResponse = await matrixAPI.testConnection()
       connection.value.homeserver = connectionResponse.data.homeserver
       connection.value.connected = true
 
@@ -229,7 +262,7 @@ export const useMatrixStore = defineStore('matrix', () => {
   const fetchMatrixRooms = async () => {
     try {
       loading.value = true
-      const response = await matrixRoomAPI.getUserRooms()
+      const response = await roomAPI.getUserRooms()
       
       rooms.value = response.data.map((room: any) => ({
         id: room.id,
@@ -265,8 +298,9 @@ export const useMatrixStore = defineStore('matrix', () => {
       }
 
       const response = await matrixAPI.createRoom({
-        username: currentUser.value.username,
-        roomName: name
+        name: name,
+        public: isPublic,
+        topic: topic
       })
       
       if (response.data.success) {
@@ -311,7 +345,6 @@ export const useMatrixStore = defineStore('matrix', () => {
         roomMessages = []
       } else {
         const response = await matrixAPI.getRoomMessages({
-          username: currentUser.value.username,
           roomId,
           limit
         })
@@ -346,9 +379,9 @@ export const useMatrixStore = defineStore('matrix', () => {
       }
 
       const response = await matrixAPI.sendMessage({
-        username: currentUser.value.username,
         roomId,
-        message: content
+        content,
+        type: 'm.text'
       })
       
       if (response.data.success) {
@@ -497,16 +530,21 @@ export const useMatrixStore = defineStore('matrix', () => {
     sortedRooms,
     totalUnreadCount,
     isConnected,
+    isLoggedIn,
+    homeserver,
+    syncStatus,
     
     // Matrix方法
     initializeMatrix,
     loadWorldChannel,
     matrixLogin,
     fetchMatrixRooms,
+    fetchRooms,
     createMatrixRoom,
     fetchMatrixMessages,
     sendMatrixMessage,
     startMatrixSync,
+    startSync,
     
     // 辅助方法
     setCurrentRoom,
