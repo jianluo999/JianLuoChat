@@ -149,52 +149,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
-  // Matrix初始化
-  const initializeMatrix = async () => {
-    try {
-      loading.value = true
-      error.value = null
 
-      console.log('Initializing Matrix connection...')
-
-      // 获取Matrix服务状态
-      const statusResponse = await matrixAPI.getStatus()
-      matrixStatus.value = statusResponse.data
-      matrixFeatures.value = statusResponse.data.features
-
-      console.log('Matrix status received:', statusResponse.data)
-
-      // 获取连接状态
-      const connectionResponse = await matrixAPI.testConnection()
-      connection.value.homeserver = connectionResponse.data.homeserver
-      connection.value.connected = true
-
-      console.log('Matrix connection established:', connectionResponse.data)
-
-      // 获取世界频道信息
-      await loadWorldChannel()
-
-      console.log('Matrix initialized successfully:', {
-        status: matrixStatus.value,
-        homeserver: connection.value.homeserver,
-        features: matrixFeatures.value
-      })
-
-      return true
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'Unknown error'
-      error.value = `Failed to initialize Matrix connection: ${errorMessage}`
-      connection.value.connected = false
-      console.error('Matrix initialization error:', {
-        error: err,
-        response: err.response?.data,
-        status: err.response?.status
-      })
-      return false
-    } finally {
-      loading.value = false
-    }
-  }
 
   // 加载世界频道
   const loadWorldChannel = async () => {
@@ -247,7 +202,69 @@ export const useMatrixStore = defineStore('matrix', () => {
       presence: 'online'
     }
 
-    console.log('Matrix login info set:', info)
+    // 持久化保存登录信息到localStorage
+    const persistentData = {
+      userId: info.userId,
+      accessToken: info.accessToken,
+      deviceId: info.deviceId,
+      homeserver: info.homeserver,
+      loginTime: Date.now()
+    }
+    localStorage.setItem('matrix-login-info', JSON.stringify(persistentData))
+
+    console.log('Matrix login info set and persisted:', info)
+  }
+
+  // 初始化Matrix状态（从localStorage恢复登录信息）
+  const initializeMatrix = async () => {
+    try {
+      const savedLoginInfo = localStorage.getItem('matrix-login-info')
+      if (savedLoginInfo) {
+        const loginData = JSON.parse(savedLoginInfo)
+
+        // 检查登录信息是否过期（24小时）
+        const loginAge = Date.now() - loginData.loginTime
+        const maxAge = 24 * 60 * 60 * 1000 // 24小时
+
+        if (loginAge < maxAge) {
+          console.log('Restoring Matrix login from localStorage:', loginData)
+
+          // 恢复登录状态
+          await setLoginInfo(loginData)
+
+          // 重新创建Matrix客户端
+          await createMatrixClient(loginData.userId, loginData.accessToken, loginData.homeserver)
+
+          console.log('Matrix login restored successfully')
+          return true
+        } else {
+          console.log('Saved Matrix login expired, clearing localStorage')
+          localStorage.removeItem('matrix-login-info')
+        }
+      }
+    } catch (error) {
+      console.error('Failed to restore Matrix login:', error)
+      localStorage.removeItem('matrix-login-info')
+    }
+    return false
+  }
+
+  // 登出函数
+  const logout = () => {
+    // 清除内存状态
+    connection.value = {
+      connected: false,
+      homeserver: 'https://matrix.jianluochat.com',
+      syncState: { isActive: false }
+    }
+    currentUser.value = null
+    loginInfo.value = null
+    matrixClient.value = null
+
+    // 清除localStorage
+    localStorage.removeItem('matrix-login-info')
+
+    console.log('Matrix logout completed')
   }
 
   // 创建Matrix客户端实例
@@ -708,6 +725,17 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
+  const addRoom = (room: MatrixRoom) => {
+    // 检查房间是否已存在
+    const existingRoom = rooms.value.find(r => r.id === room.id)
+    if (!existingRoom) {
+      rooms.value.unshift(room)
+      console.log(`房间 "${room.name}" 已添加到房间列表`)
+    } else {
+      console.log(`房间 "${room.name}" 已存在于房间列表中`)
+    }
+  }
+
   const clearError = () => {
     error.value = null
   }
@@ -756,6 +784,7 @@ export const useMatrixStore = defineStore('matrix', () => {
 
     // Matrix方法
     initializeMatrix,
+    logout,
     loadWorldChannel,
     setClient,
     setLoginInfo,
@@ -772,6 +801,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     setCurrentRoom,
     addMatrixMessage,
     markRoomAsRead,
+    addRoom,
     clearError,
     disconnect
   }

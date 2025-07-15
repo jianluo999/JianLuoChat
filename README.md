@@ -1,229 +1,326 @@
-# JianluoChat - 基于 Spring Boot 3 + Vue 3 + Matrix 协议的即时通讯系统
+# JianLuoChat / 简络聊
 
-## 项目简介
+<div align="center">
 
-JianluoChat 是一个现代化的即时通讯应用，采用 Spring Boot 3 + Vue 3 技术栈，集成 Matrix 协议实现去中心化通信。项目支持实时消息、文件传输、群聊、表情包等功能。
+![JianLuoChat Logo](docs/images/logo.png) <!-- 📸 需要截图：应用logo -->
 
-## 技术栈
+**A Modern Matrix Protocol Client with Retro-Futuristic Design**
+**基于Matrix协议的现代化即时通讯客户端，采用复古未来主义设计**
 
-### 后端技术
-- **Spring Boot 3.2+** - 现代化 Java 框架
-- **Spring Security 6** - 安全认证与授权
-- **Spring WebSocket** - 实时通信支持
-- **Spring Data JPA** - 数据持久化
-- **PostgreSQL** - 主数据库
-- **Redis** - 缓存和会话存储
-- **Matrix Java SDK** - Matrix 协议支持
-- **JWT** - 无状态认证
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
+[![Vue 3](https://img.shields.io/badge/Vue-3.x-4FC08D.svg)](https://vuejs.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-6DB33F.svg)](https://spring.io/projects/spring-boot)
+[![Matrix Protocol](https://img.shields.io/badge/Matrix-Protocol-000000.svg)](https://matrix.org/)
 
-### 前端技术
-- **Vue 3** - 渐进式前端框架
-- **TypeScript** - 类型安全
-- **Vite** - 快速构建工具
-- **Pinia** - 状态管理
-- **Vue Router 4** - 路由管理
-- **Element Plus** - UI 组件库
-- **Socket.io** - WebSocket 客户端
+[English](#english) | [中文](#中文)
 
-### 通信协议
-- **Matrix Protocol** - 去中心化即时通讯协议
-- **WebSocket** - 实时双向通信
-- **RESTful API** - HTTP 接口
+</div>
 
-## 项目结构
+---
+
+## English
+
+### 🌟 Overview
+
+JianLuoChat is a modern Matrix protocol client that combines the power of decentralized communication with a unique retro-futuristic design aesthetic. Built with Vue 3 and Spring Boot, it offers a seamless chat experience while maintaining full compatibility with the Matrix ecosystem.
+
+### ✨ Key Features
+
+- **🔐 True Matrix Protocol Integration**: Full Matrix client implementation with E2EE support
+- **🌍 Federation Support**: Connect to any Matrix homeserver (matrix.org, kde.org, etc.)
+- **🤝 Element Interoperability**: Full compatibility with Element and other Matrix clients
+- **💬 Cross-Client Messaging**: Send and receive messages with Element users seamlessly
+- **🏠 Shared Room Access**: Join and participate in rooms created by Element users
+- **🎨 Retro-Futuristic UI**: Unique green terminal-style interface design
+- **🌐 Bilingual Support**: Chinese-English interface with localization
+- **🏠 Public Room Explorer**: Discover and join public rooms across the Matrix network
+- **📱 Cross-Platform**: Web-based client accessible from any device
+- **🔄 Real-time Sync**: Live message synchronization across devices
+- **💾 Persistent Login**: Login state persists across browser sessions
+- **🚀 Modern Tech Stack**: Vue 3 + Spring Boot 3 + PostgreSQL + Redis
+
+### 📸 Screenshots
+
+#### Login Interface
+![Login Screen](docs/images/login-screen.png) <!-- 📸 需要截图：Matrix登录界面，显示绿色终端风格 -->
+
+#### Main Chat Interface
+![Main Interface](docs/images/main-interface.png) <!-- 📸 需要截图：主聊天界面，显示房间列表、消息区域、复古绿色主题 -->
+
+#### Public Rooms Explorer
+![Public Rooms](docs/images/public-rooms.png) <!-- 📸 需要截图：公共房间探索器，显示分页功能和房间卡片 -->
+
+#### Element Interoperability Demo
+![Element Interop](docs/images/element-interop.png) <!-- 📸 需要截图：JianLuoChat与Element客户端互通演示，显示同一房间中两个客户端的消息交互 -->
+
+#### Room List and Navigation
+![Room List](docs/images/room-list.png) <!-- 📸 需要截图：左侧房间列表和导航栏 -->
+
+### 🏗️ Architecture
 
 ```
-jianluochat/
-├── backend/                    # Spring Boot 后端
-│   ├── src/main/java/
-│   │   └── com/jianluochat/
-│   │       ├── config/         # 配置类
-│   │       ├── controller/     # 控制器
-│   │       ├── entity/         # 实体类
-│   │       ├── repository/     # 数据访问层
-│   │       ├── service/        # 业务逻辑层
-│   │       ├── security/       # 安全相关
-│   │       ├── websocket/      # WebSocket 处理
-│   │       └── matrix/         # Matrix 协议集成
-│   └── src/main/resources/
-│       ├── application.yml     # 应用配置
-│       └── data.sql           # 初始化数据
-├── frontend/                   # Vue 3 前端
-│   ├── src/
-│   │   ├── components/        # 组件
-│   │   ├── views/            # 页面视图
-│   │   ├── stores/           # Pinia 状态管理
-│   │   ├── services/         # API 服务
-│   │   └── router/           # 路由配置
-│   ├── .env                  # 环境变量
-│   └── package.json          # 依赖配置
-└── docker-compose.yml        # Docker 编排
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Frontend      │    │    Backend      │    │  Matrix Network │
+│   (Vue 3)       │◄──►│  (Spring Boot)  │◄──►│   (Federation)  │
+│                 │    │                 │    │                 │
+│ • Matrix Client │    │ • Matrix SDK    │    │ • Homeservers   │
+│ • Retro UI      │    │ • REST API      │    │ • Public Rooms  │
+│ • Real-time     │    │ • WebSocket     │    │ • E2E Encryption│
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
-## 核心功能
+### 🚀 Quick Start
 
-### 已实现功能
-- ✅ 用户注册/登录系统
-- ✅ JWT 认证与授权
-- ✅ 实时消息收发
-- ✅ 群聊和私聊
-- ✅ 消息状态跟踪（已发送/已送达/已读）
-- ✅ 在线状态管理
-- ✅ 输入状态指示器
-- ✅ 表情包支持
-- ✅ 文件上传功能
-- ✅ Matrix 协议集成
-- ✅ WebSocket 实时通信
-- ✅ 响应式 UI 设计
-
-### 待实现功能
-- ⏳ 消息加密
-- ⏳ 消息搜索
-- ⏳ 推送通知
-- ⏳ 语音/视频通话
-- ⏳ 消息撤回
-- ⏳ 群组管理
-- ⏳ 主题切换
-
-## 快速开始
-
-### 环境要求
-- Java 17+
+#### Prerequisites
 - Node.js 18+
-- PostgreSQL 12+
+- Java 17+
+- PostgreSQL 13+
 - Redis 6+
 
-### 1. 启动数据库服务
+#### Installation
 
+1. **Clone the repository**
 ```bash
-# 使用 Docker Compose 启动数据库
-docker-compose up postgres redis -d
+git clone https://github.com/yourusername/jianluochat.git
+cd jianluochat
 ```
 
-### 2. 启动后端服务
-
+2. **Setup Backend**
 ```bash
 cd backend
+# Configure database in src/main/resources/application.yml
 ./mvnw spring-boot:run
 ```
 
-后端服务将在 http://localhost:8080 启动
-
-### 3. 启动前端服务
-
+3. **Setup Frontend**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-前端服务将在 http://localhost:5173 启动
+4. **Access the application**
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8080
 
-### 4. 访问应用
+### 🔧 Configuration
 
-打开浏览器访问 http://localhost:5173，注册新用户或使用测试账号登录。
-
-## API 文档
-
-### 认证接口
-- `POST /api/auth/login` - 用户登录
-- `POST /api/auth/register` - 用户注册
-- `GET /api/users/me` - 获取当前用户信息
-
-### 聊天接口
-- `GET /api/rooms` - 获取房间列表
-- `POST /api/rooms` - 创建房间
-- `GET /api/rooms/{id}/messages` - 获取消息历史
-- `POST /api/rooms/{id}/messages` - 发送消息
-
-### Matrix 接口
-- `POST /api/matrix/login` - Matrix 登录
-- `POST /api/matrix/rooms` - 创建 Matrix 房间
-- `GET /api/matrix/sync/status` - 获取同步状态
-
-## WebSocket 事件
-
-### 客户端发送
-- `CHAT_MESSAGE` - 发送聊天消息
-- `TYPING` - 输入状态指示
-- `PING` - 心跳检测
-
-### 服务端推送
-- `NEW_MESSAGE` - 新消息通知
-- `TYPING_INDICATOR` - 输入状态更新
-- `PRESENCE_UPDATE` - 用户状态更新
-- `ROOM_INVITATION` - 房间邀请
-
-## 配置说明
-
-### 后端配置 (application.yml)
+#### Database Configuration
 ```yaml
-server:
-  port: 8080
-
+# backend/src/main/resources/application.yml
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/jianluochat
-    username: jianluochat
-    password: jianluochat123
-  
-  data:
-    redis:
-      host: localhost
-      port: 6379
+    username: your_username
+    password: your_password
+```
 
-jwt:
-  secret: your-secret-key
-  expiration: 86400000
-
+#### Matrix Configuration
+```yaml
+# Matrix homeserver settings
 matrix:
-  homeserver:
-    url: https://matrix.org
+  homeserver: https://matrix.org
+  client-name: JianLuoChat
 ```
 
-### 前端配置 (.env)
-```env
-VITE_API_URL=http://localhost:8080/api
-VITE_WS_URL=ws://localhost:8080/ws
+### 🎯 Design Philosophy
+
+JianLuoChat embraces a **retro-futuristic aesthetic** inspired by classic terminal interfaces and cyberpunk culture:
+
+- **Green Terminal Theme**: Monospace fonts, green-on-black color scheme
+- **Matrix Protocol First**: Built as a true Matrix client, not just another chat app
+- **Element Compatibility**: Full interoperability with Element and other Matrix clients
+- **Minimalist Functionality**: Focus on core communication features
+- **Cultural Bridge**: Bilingual design connecting Eastern and Western users
+
+### 🤝 Element Interoperability
+
+JianLuoChat is designed to work seamlessly with Element and other Matrix clients:
+
+- **✅ Shared Rooms**: Join rooms created by Element users
+- **✅ Real-time Messaging**: Send and receive messages with Element users instantly
+- **✅ User Discovery**: Find and communicate with users from any Matrix client
+- **✅ Federation Support**: Connect across different Matrix homeservers
+- **✅ Protocol Compliance**: Full Matrix Client-Server API implementation
+- **🚧 E2E Encryption**: End-to-end encryption compatibility (in development)
+- **🚧 File Sharing**: File transfer with Element users (in development)
+- **🚧 Voice/Video**: WebRTC calls with Element users (planned)
+
+### 🛠️ Development
+
+#### Tech Stack
+- **Frontend**: Vue 3, TypeScript, Vite, Pinia, matrix-js-sdk
+- **Backend**: Spring Boot 3, Java 17, PostgreSQL, Redis
+- **Matrix**: matrix-js-sdk, Matrix Client-Server API
+- **UI**: Custom CSS with retro terminal styling
+
+#### Project Structure
+```
+jianluochat/
+├── frontend/           # Vue 3 frontend application
+│   ├── src/
+│   │   ├── components/ # Vue components
+│   │   │   ├── MatrixRealLogin.vue      # Matrix login component
+│   │   │   ├── PublicRoomsExplorer.vue  # Room discovery
+│   │   │   ├── MatrixMessageArea.vue    # Chat interface
+│   │   │   └── MatrixRoomList.vue       # Room navigation
+│   │   ├── stores/     # Pinia stores
+│   │   │   ├── matrix.ts               # Matrix client state
+│   │   │   └── auth.ts                 # Authentication
+│   │   ├── views/      # Page views
+│   │   │   └── MatrixChatView.vue      # Main chat view
+│   │   └── services/   # API services
+├── backend/            # Spring Boot backend
+│   ├── src/main/java/
+│   │   └── com/jianluochat/
+│   │       ├── controller/
+│   │       ├── service/
+│   │       │   └── RealMatrixService.java # Matrix integration
+│   │       └── model/
+└── docs/              # Documentation and screenshots
 ```
 
-## 部署
+### 🤝 Contributing
 
-### Docker 部署
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+### 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 中文
+
+### 🌟 项目概述
+
+简络聊是一个现代化的Matrix协议客户端，将去中心化通讯的强大功能与独特的复古未来主义设计美学相结合。基于Vue 3和Spring Boot构建，在保持与Matrix生态系统完全兼容的同时，提供无缝的聊天体验。
+
+### ✨ 核心特性
+
+- **🔐 真正的Matrix协议集成**：完整的Matrix客户端实现，支持端到端加密
+- **🌍 联邦支持**：连接到任何Matrix家庭服务器（matrix.org, kde.org等）
+- **🤝 Element互通性**：与Element及其他Matrix客户端完全兼容
+- **💬 跨客户端消息**：与Element用户无缝收发消息
+- **🏠 共享房间访问**：加入并参与Element用户创建的房间
+- **🎨 复古未来主义界面**：独特的绿色终端风格界面设计
+- **🌐 双语支持**：中英文界面，支持本地化
+- **🏠 公共房间探索器**：发现并加入Matrix网络中的公共房间
+- **📱 跨平台**：基于Web的客户端，可从任何设备访问
+- **🔄 实时同步**：跨设备实时消息同步
+- **💾 持久登录**：登录状态在浏览器会话间保持
+- **🚀 现代技术栈**：Vue 3 + Spring Boot 3 + PostgreSQL + Redis
+
+### 🎯 设计理念
+
+简络聊采用受经典终端界面和赛博朋克文化启发的**复古未来主义美学**：
+
+- **绿色终端主题**：等宽字体，绿黑配色方案
+- **Matrix协议优先**：构建为真正的Matrix客户端，而非普通聊天应用
+- **Element兼容性**：与Element及其他Matrix客户端完全互通
+- **极简功能**：专注于核心通讯功能
+- **文化桥梁**：双语设计，连接东西方用户
+
+### 🤝 Element互通性
+
+简络聊设计为与Element和其他Matrix客户端无缝协作：
+
+- **✅ 共享房间**：加入Element用户创建的房间
+- **✅ 实时消息**：与Element用户即时收发消息
+- **✅ 用户发现**：查找并与任何Matrix客户端的用户通信
+- **✅ 联邦支持**：跨不同Matrix家庭服务器连接
+- **✅ 协议合规**：完整的Matrix Client-Server API实现
+- **🚧 端到端加密**：端到端加密兼容性（开发中）
+- **🚧 文件共享**：与Element用户文件传输（开发中）
+- **🚧 语音/视频**：与Element用户WebRTC通话（计划中）
+
+### 🚀 快速开始
+
+#### 环境要求
+- Node.js 18+
+- Java 17+
+- PostgreSQL 13+
+- Redis 6+
+
+#### 安装步骤
+
+1. **克隆仓库**
 ```bash
-# 构建并启动所有服务
-docker-compose up --build
-
-# 后台运行
-docker-compose up -d
+git clone https://github.com/yourusername/jianluochat.git
+cd jianluochat
 ```
 
-### 生产环境部署
-1. 修改配置文件中的数据库连接信息
-2. 设置安全的 JWT 密钥
-3. 配置 HTTPS 和 WSS
-4. 设置反向代理 (Nginx)
+2. **设置后端**
+```bash
+cd backend
+# 在 src/main/resources/application.yml 中配置数据库
+./mvnw spring-boot:run
+```
 
-## 开发指南
+3. **设置前端**
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-### 添加新功能
-1. 后端：在相应的 controller、service、entity 中添加代码
-2. 前端：在 stores、services、components 中实现
-3. 更新 API 文档和类型定义
+4. **访问应用**
+- 前端：http://localhost:5173
+- 后端API：http://localhost:8080
 
-### 代码规范
-- 后端：遵循 Spring Boot 最佳实践
-- 前端：使用 TypeScript 和 Vue 3 Composition API
-- 提交前运行测试和代码检查
+### 🛠️ 开发指南
 
-## 贡献
+#### 技术栈
+- **前端**：Vue 3, TypeScript, Vite, Pinia, matrix-js-sdk
+- **后端**：Spring Boot 3, Java 17, PostgreSQL, Redis
+- **Matrix**：matrix-js-sdk, Matrix Client-Server API
+- **界面**：自定义CSS，复古终端样式
 
-欢迎提交 Issue 和 Pull Request！
+#### 核心功能实现状态
 
-## 许可证
+**✅ 已完成功能**
+- Matrix协议真实登录集成
+- Element客户端互通性验证
+- 公共房间探索器（支持分页）
+- 跨客户端实时消息收发
+- 登录状态持久化
+- 复古终端UI设计
+- 中英双语界面
+- 房间列表和导航
+- 消息历史记录
 
-MIT License
+**🚧 开发中功能**
+- 端到端加密支持（Element兼容）
+- 文件传输功能（跨客户端）
+- 语音/视频通话（WebRTC）
+- 推送通知
 
-## 联系方式
+### 🤝 贡献指南
 
-如有问题，请提交 Issue 或联系开发团队。
+我们欢迎贡献！请查看我们的[贡献指南](CONTRIBUTING.md)了解详情。
+
+1. Fork 本仓库
+2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 创建 Pull Request
+
+### 📄 开源协议
+
+本项目采用MIT协议 - 查看[LICENSE](LICENSE)文件了解详情。
+
+---
+
+<div align="center">
+
+**Made with ❤️ for the Matrix community**
+
+[Report Bug](https://github.com/yourusername/jianluochat/issues) • [Request Feature](https://github.com/yourusername/jianluochat/issues) • [Documentation](https://github.com/yourusername/jianluochat/wiki)
+
+</div>
