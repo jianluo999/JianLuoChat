@@ -1,206 +1,75 @@
 <template>
   <div class="jianluo-layout">
-    <!-- 左侧导航栏 -->
-    <div class="sidebar">
-      <div class="sidebar-header">
-        <div class="app-logo">
-          <div class="logo-icon">J</div>
-          <span class="app-name">JianLuoChat</span>
-        </div>
+    <!-- 左侧聊天列表 -->
+    <div class="chat-list-panel">
+      <!-- 顶部工具栏 -->
+      <div class="chat-list-header">
         <div class="user-info" v-if="matrixStore.currentUser">
           <div class="user-avatar">
             {{ getUserInitials(matrixStore.currentUser.displayName || matrixStore.currentUser.username) }}
           </div>
           <span class="username">{{ matrixStore.currentUser.displayName || matrixStore.currentUser.username }}</span>
         </div>
-      </div>
-
-      <div class="sidebar-nav">
-        <div class="nav-item" :class="{ active: activeView === 'home' }" @click="activeView = 'home'">
-          <i class="icon-home"></i>
-          <span>主页</span>
-        </div>
-        <div class="nav-item" :class="{ active: activeView === 'rooms' }" @click="activeView = 'rooms'">
-          <i class="icon-rooms"></i>
-          <span>房间</span>
-          <span class="badge" v-if="totalUnreadCount > 0">{{ totalUnreadCount }}</span>
-        </div>
-        <div class="nav-item" :class="{ active: activeView === 'people' }" @click="activeView = 'people'">
-          <i class="icon-people"></i>
-          <span>联系人</span>
-        </div>
-        <div class="nav-item" :class="{ active: activeView === 'explore' }" @click="activeView = 'explore'">
-          <i class="icon-explore"></i>
-          <span>探索</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 中间面板 -->
-    <div class="middle-panel">
-      <!-- 主页视图 -->
-      <div v-if="activeView === 'home'" class="home-view">
-        <div class="welcome-section">
-          <h1>欢迎使用 JianLuoChat</h1>
-          <p>基于Matrix协议的现代化聊天应用</p>
-          
-          <div class="feature-cards">
-            <div class="feature-card" @click="startDirectMessage">
-              <i class="icon-message"></i>
-              <h3>发送私聊</h3>
-              <p>与其他用户开始一对一聊天</p>
-            </div>
-            
-            <div class="feature-card" @click="activeView = 'explore'">
-              <i class="icon-explore"></i>
-              <h3>探索公共房间</h3>
-              <p>发现和加入公共聊天房间</p>
-            </div>
-            
-            <div class="feature-card" @click="createGroupChat">
-              <i class="icon-group"></i>
-              <h3>创建群聊</h3>
-              <p>创建新的群聊房间</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 房间列表视图 -->
-      <div v-else-if="activeView === 'rooms'" class="rooms-view">
-        <div class="view-header">
-          <h2>房间</h2>
-          <button class="btn-primary" @click="createGroupChat">
-            <i class="icon-plus"></i>
-            创建房间
+        <div class="header-actions">
+          <button class="action-btn" @click="startDirectMessage" title="发起聊天">
+            <i class="icon-message"></i>
+          </button>
+          <button class="action-btn" @click="createGroupChat" title="创建群聊">
+            <i class="icon-group"></i>
+          </button>
+          <button class="action-btn" @click="activeView = 'explore'" title="探索">
+            <i class="icon-explore"></i>
           </button>
         </div>
-        
-        <div class="search-bar">
+      </div>
+
+      <!-- 搜索框 -->
+      <div class="search-container">
+        <div class="search-box">
+          <i class="search-icon">🔍</i>
           <input
             type="text"
             v-model="roomSearchQuery"
-            placeholder="搜索房间..."
+            placeholder="搜索"
             class="search-input"
           />
         </div>
-
-        <div class="room-list">
-          <div v-if="filteredRooms.length === 0" class="empty-state">
-            <i class="icon-chat-empty"></i>
-            <h3>还没有房间</h3>
-            <p>创建或加入一个房间开始聊天</p>
-          </div>
-
-          <div
-            v-for="room in filteredRooms"
-            :key="room.id"
-            class="room-item"
-            :class="{ active: currentRoomId === room.id }"
-            @click="selectRoom(room.id)"
-          >
-            <div class="room-avatar">
-              {{ getRoomInitials(room.name) }}
-            </div>
-            <div class="room-info">
-              <div class="room-name">{{ room.name }}</div>
-              <div class="room-last-message">{{ room.lastMessage || '开始对话...' }}</div>
-            </div>
-            <div class="room-meta">
-              <div class="room-time">{{ formatTime(room.lastActivity) }}</div>
-              <div v-if="room.unreadCount > 0" class="unread-badge">{{ room.unreadCount }}</div>
-            </div>
-          </div>
-        </div>
       </div>
 
-      <!-- 联系人视图 -->
-      <div v-else-if="activeView === 'people'" class="people-view">
-        <div class="view-header">
-          <h2>联系人</h2>
-          <button class="btn-primary" @click="startDirectMessage">
-            <i class="icon-plus"></i>
-            开始私聊
-          </button>
+      <!-- 聊天列表 -->
+      <div class="chat-list">
+        <div v-if="filteredRooms.length === 0" class="empty-chat-list">
+          <div class="empty-message">暂无聊天</div>
         </div>
 
-        <div class="dm-list">
-          <div v-if="directMessages.length === 0" class="empty-state">
-            <i class="icon-people-empty"></i>
-            <h3>还没有私聊</h3>
-            <p>点击"开始私聊"与其他用户开始对话</p>
+        <div
+          v-for="room in filteredRooms"
+          :key="room.id"
+          class="chat-item"
+          :class="{ active: currentRoomId === room.id }"
+          @click="selectRoom(room.id)"
+        >
+          <div class="chat-avatar">
+            {{ getRoomInitials(room.name) }}
           </div>
-
-          <div
-            v-for="dm in directMessages"
-            :key="dm.id"
-            class="dm-item"
-            :class="{ active: currentRoomId === dm.id }"
-            @click="selectRoom(dm.id)"
-          >
-            <div class="dm-avatar">
-              {{ getRoomInitials(dm.name) }}
+          <div class="chat-content">
+            <div class="chat-header">
+              <span class="chat-name">{{ room.name }}</span>
+              <span class="chat-time" v-if="room.lastEventTimestamp">
+                {{ formatTime(room.lastEventTimestamp) }}
+              </span>
             </div>
-            <div class="dm-info">
-              <div class="dm-name">{{ dm.name }}</div>
-              <div class="dm-last-message">{{ dm.lastMessage || '开始对话...' }}</div>
-            </div>
-            <div class="dm-meta">
-              <div class="dm-time">{{ formatTime(dm.lastActivity) }}</div>
-              <div v-if="dm.unreadCount > 0" class="unread-badge">{{ dm.unreadCount }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 探索视图 -->
-      <div v-else-if="activeView === 'explore'" class="explore-view">
-        <div class="view-header">
-          <h2>探索公共房间</h2>
-          <button class="btn-secondary" @click="refreshPublicRooms">
-            <i class="icon-refresh"></i>
-            刷新
-          </button>
-        </div>
-        
-        <div class="search-bar">
-          <input
-            type="text"
-            v-model="publicRoomSearchQuery"
-            placeholder="搜索公共房间..."
-            class="search-input"
-          />
-        </div>
-
-        <div class="public-rooms-list">
-          <div v-if="filteredPublicRooms.length === 0" class="empty-state">
-            <i class="icon-explore-empty"></i>
-            <h3>没有找到公共房间</h3>
-            <p>尝试搜索或刷新房间列表</p>
-          </div>
-
-          <div
-            v-for="room in filteredPublicRooms"
-            :key="room.room_id"
-            class="public-room-item"
-          >
-            <div class="room-avatar">
-              {{ getRoomInitials(room.name || room.canonical_alias || room.room_id) }}
-            </div>
-            <div class="room-info">
-              <div class="room-name">{{ room.name || room.canonical_alias || room.room_id }}</div>
-              <div class="room-topic">{{ room.topic || '没有描述' }}</div>
-              <div class="room-members">{{ room.num_joined_members }} 成员</div>
-            </div>
-            <div class="room-actions">
-              <button class="btn-primary" @click="joinPublicRoom(room.room_id)">
-                加入
-              </button>
+            <div class="chat-preview">
+              <span class="last-message">{{ room.lastMessage || '暂无消息' }}</span>
+              <div class="chat-badges">
+                <span class="unread-count" v-if="room.unreadCount > 0">{{ room.unreadCount }}</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
+
 
     <!-- 右侧聊天区域 -->
     <div class="chat-panel">
@@ -269,10 +138,17 @@ const directMessages = computed(() => {
 
 const filteredPublicRooms = computed(() => {
   if (!publicRoomSearchQuery.value) return publicRooms.value
-  return publicRooms.value.filter(room => 
+  return publicRooms.value.filter(room =>
     (room.name || '').toLowerCase().includes(publicRoomSearchQuery.value.toLowerCase()) ||
     (room.topic || '').toLowerCase().includes(publicRoomSearchQuery.value.toLowerCase())
   )
+})
+
+const recentRooms = computed(() => {
+  return matrixStore.rooms
+    .filter(room => room.lastMessage || room.lastEventTimestamp)
+    .sort((a, b) => (b.lastEventTimestamp || 0) - (a.lastEventTimestamp || 0))
+    .slice(0, 5)
 })
 
 // 方法
@@ -501,31 +377,53 @@ onMounted(() => {
 
 /* 主页视图 */
 .home-view {
-  padding: 20px;
-  overflow-y: auto;
-}
-
-.welcome-section h1 {
-  color: #00ff41;
-  text-shadow: 0 0 10px #00ff41;
-  margin-bottom: 8px;
-  font-size: 24px;
-}
-
-.welcome-section p {
-  color: #00cc33;
-  margin-bottom: 30px;
-  font-size: 14px;
-}
-
-.feature-cards {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  height: 100%;
+  overflow: hidden;
 }
 
-.feature-card {
+.home-header {
+  padding: 30px 20px 20px;
+  text-align: center;
+  border-bottom: 1px solid rgba(0, 255, 65, 0.2);
+}
+
+.app-title h1 {
+  color: #00ff41;
+  text-shadow: 0 0 10px #00ff41;
+  margin: 0 0 5px 0;
+  font-size: 20px;
+  font-weight: normal;
+}
+
+.app-title h2 {
+  color: #00ff41;
+  text-shadow: 0 0 5px #00ff41;
+  margin: 0 0 10px 0;
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+
+.app-title p {
+  color: #00cc33;
+  margin: 0;
+  font-size: 12px;
+}
+
+.home-actions {
+  flex: 1;
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  padding: 16px;
   background: rgba(0, 51, 0, 0.2);
   border: 1px solid rgba(0, 255, 65, 0.3);
   border-radius: 4px;
@@ -533,30 +431,118 @@ onMounted(() => {
   transition: all 0.3s;
 }
 
-.feature-card:hover {
+.action-button:hover {
   background: rgba(0, 51, 0, 0.4);
   border-color: #00ff41;
   box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
 }
 
-.feature-card i {
-  font-size: 24px;
-  color: #00ff41;
-  margin-bottom: 12px;
-  display: block;
+.action-icon {
+  width: 40px;
+  height: 40px;
+  background: rgba(0, 255, 65, 0.1);
+  border: 1px solid #00ff41;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin-right: 16px;
+  flex-shrink: 0;
 }
 
-.feature-card h3 {
-  color: #00ff41;
-  margin: 0 0 8px 0;
-  font-size: 16px;
+.action-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
-.feature-card p {
+.action-title {
+  color: #00ff41;
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.action-desc {
   color: #00cc33;
-  margin: 0;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.home-footer {
+  border-top: 1px solid rgba(0, 255, 65, 0.2);
+  padding: 16px 20px;
+}
+
+.recent-section h3 {
+  color: #00ff41;
+  font-size: 14px;
+  margin: 0 0 12px 0;
+  text-shadow: 0 0 5px #00ff41;
+}
+
+.recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recent-item {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  background: rgba(0, 51, 0, 0.1);
+  border: 1px solid rgba(0, 255, 65, 0.2);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.recent-item:hover {
+  background: rgba(0, 51, 0, 0.3);
+  border-color: #00ff41;
+}
+
+.recent-avatar {
+  width: 32px;
+  height: 32px;
+  background: #003300;
+  border: 1px solid #00ff41;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #00ff41;
   font-size: 12px;
-  line-height: 1.4;
+  font-weight: bold;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.recent-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.recent-name {
+  color: #00ff41;
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-message {
+  color: #00cc33;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 视图头部 */

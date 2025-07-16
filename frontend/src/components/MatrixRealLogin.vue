@@ -97,6 +97,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useMatrixStore } from '@/stores/matrix'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import * as sdk from 'matrix-js-sdk'
 
 export default {
@@ -105,6 +106,7 @@ export default {
   setup(props, { emit }) {
     const { t } = useI18n()
     const matrixStore = useMatrixStore()
+    const router = useRouter()
     
     const username = ref('')
     const homeserver = ref('matrix.org')
@@ -171,6 +173,10 @@ export default {
           userId: loginResponse.user_id,
           homeserver: homeserver.value
         })
+
+        // 登录成功后跳转到主页
+        console.log('登录成功，准备跳转到主页...')
+        router.push('/matrix')
 
       } catch (err) {
         console.error('Matrix login failed:', err)

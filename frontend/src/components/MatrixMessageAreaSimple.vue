@@ -71,18 +71,20 @@
 
               <!-- 普通消息 -->
               <div v-else class="regular-message-content">
-                <!-- 格式化消息内容 -->
-                <div
-                  v-if="message.formattedContent && message.format === 'org.matrix.custom.html'"
-                  class="message-text formatted-message"
-                  v-html="sanitizeHtml(message.formattedContent)"
-                ></div>
+                <div class="message-bubble">
+                  <!-- 格式化消息内容 -->
+                  <div
+                    v-if="message.formattedContent && message.format === 'org.matrix.custom.html'"
+                    class="message-text formatted-message"
+                    v-html="sanitizeHtml(message.formattedContent)"
+                  ></div>
 
-                <!-- 普通文本消息 -->
-                <div v-else class="message-text">{{ message.content }}</div>
+                  <!-- 普通文本消息 -->
+                  <div v-else class="message-text">{{ message.content }}</div>
+                </div>
 
-                <!-- 消息时间（自己的消息） -->
-                <div v-if="isOwnMessage(message)" class="message-meta">
+                <!-- 消息时间 -->
+                <div class="message-meta">
                   <span class="message-time">{{ formatMessageTime(message.timestamp) }}</span>
                 </div>
               </div>
@@ -319,12 +321,15 @@ watch(() => messages.value, () => {
 
 .message-item {
   display: flex;
-  margin-bottom: 8px;
-  padding: 4px 0;
+  margin-bottom: 12px;
+  padding: 8px 16px;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .message-item.own-message {
   flex-direction: row-reverse;
+  justify-content: flex-start;
 }
 
 .message-item.own-message .message-main {
@@ -340,23 +345,23 @@ watch(() => messages.value, () => {
 }
 
 .message-avatar {
-  width: 32px;
-  height: 32px;
-  margin-right: 8px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
 }
 
 .avatar-placeholder {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(0, 255, 0, 0.1);
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #66BB6A, #4CAF50);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #00ff00;
-  font-size: 12px;
+  color: white;
+  font-size: 14px;
   font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .message-main {
@@ -384,9 +389,64 @@ watch(() => messages.value, () => {
   font-size: 11px;
 }
 
+.message-meta {
+  margin-top: 4px;
+  text-align: right;
+}
+
+.own-message .message-meta {
+  text-align: left;
+}
+
+.message-time {
+  color: #999;
+  font-size: 11px;
+}
+
 .message-content {
   display: flex;
   flex-direction: column;
+  max-width: 60%;
+  word-wrap: break-word;
+}
+
+.message-bubble {
+  background: #f5f5f5;
+  padding: 10px 14px;
+  border-radius: 18px;
+  position: relative;
+  margin: 2px 0;
+  line-height: 1.4;
+  font-size: 14px;
+  color: #333;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.own-message .message-bubble {
+  background: linear-gradient(135deg, #95d475, #7bc96f);
+  color: white;
+  margin-left: auto;
+}
+
+.message-bubble::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  width: 0;
+  height: 0;
+  border: 6px solid transparent;
+}
+
+.message-bubble::before {
+  left: -12px;
+  border-right-color: #f5f5f5;
+}
+
+.own-message .message-bubble::before {
+  left: auto;
+  right: -12px;
+  border-left-color: #95d475;
+  border-right-color: transparent;
 }
 
 .system-message-content {

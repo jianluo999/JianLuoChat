@@ -28,7 +28,7 @@ const matrixStore = useMatrixStore()
 
 // 显示Matrix导航的条件
 const showMatrixNav = computed(() => {
-  return route.path === '/matrix'
+  return false // 禁用侧边栏导航
 })
 
 const handleCreateRoom = () => {
@@ -89,11 +89,7 @@ body {
 .main-content {
   height: 100vh;
   width: 100vw;
-  transition: margin-left 0.3s ease;
-}
-
-.main-content.with-nav {
-  margin-left: 60px;
+  /* 移除过渡效果和边距 */
 }
 
 /* 扫描线效果 */

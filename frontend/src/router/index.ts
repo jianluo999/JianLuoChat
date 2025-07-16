@@ -6,12 +6,27 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      redirect: '/matrix'
+      component: () => import('@/components/LayoutSelector.vue')
+    },
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/components/MatrixRealLogin.vue')
     },
     {
       path: '/matrix',
       name: 'matrix',
+      component: () => import('@/components/WeChatStyleLayout.vue')
+    },
+    {
+      path: '/element',
+      name: 'element',
       component: () => import('@/components/ElementStyleLayout.vue')
+    },
+    {
+      path: '/jianluo',
+      name: 'jianluo',
+      component: () => import('@/components/JianLuoChatLayout.vue')
     },
     {
       path: '/old-matrix',
