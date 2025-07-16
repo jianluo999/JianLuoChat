@@ -22,6 +22,29 @@
       </div>
     </div>
 
+    <!-- 房间搜索 -->
+    <div class="room-search-section">
+      <div class="search-container">
+        <div class="search-input-wrapper">
+          <svg class="search-icon" viewBox="0 0 24 24">
+            <path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"/>
+          </svg>
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="搜索房间..."
+            class="search-input"
+            @input="filterRooms"
+          />
+          <button v-if="searchQuery" @click="clearSearch" class="clear-search">
+            <svg viewBox="0 0 24 24">
+              <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Matrix Spaces -->
     <div class="spaces-section">
       <div class="section-header">
@@ -289,6 +312,7 @@ const matrixStore = useMatrixStore()
 // 状态管理
 const expandedSpaces = ref<string[]>([])
 const activeFilter = ref('all')
+const searchQuery = ref('')
 
 // 房间过滤器
 const roomFilters = computed(() => [
@@ -355,16 +379,33 @@ const publicRooms = computed(() => {
 })
 
 const filteredRooms = computed(() => {
+  let rooms = []
   switch (activeFilter.value) {
     case 'unread':
-      return unreadRooms.value
+      rooms = unreadRooms.value
+      break
     case 'encrypted':
-      return encryptedRooms.value
+      rooms = encryptedRooms.value
+      break
     case 'public':
-      return publicRooms.value
+      rooms = publicRooms.value
+      break
     default:
-      return allRooms.value
+      rooms = allRooms.value
   }
+
+  // 应用搜索过滤
+  if (searchQuery.value.trim()) {
+    const query = searchQuery.value.toLowerCase()
+    rooms = rooms.filter(room =>
+      room.name?.toLowerCase().includes(query) ||
+      room.topic?.toLowerCase().includes(query) ||
+      room.id?.toLowerCase().includes(query) ||
+      room.alias?.toLowerCase().includes(query)
+    )
+  }
+
+  return rooms
 })
 
 // 方法
@@ -446,6 +487,15 @@ const truncateMessage = (message: string, maxLength: number = 50): string => {
 const showRoomContextMenu = (room: any, event: MouseEvent) => {
   // TODO: 实现右键菜单
   console.log('Room context menu:', room, event)
+}
+
+// 搜索相关方法
+const filterRooms = () => {
+  // 搜索功能通过计算属性自动触发
+}
+
+const clearSearch = () => {
+  searchQuery.value = ''
 }
 
 // 生命周期
@@ -546,6 +596,81 @@ onMounted(async () => {
 .homeserver-url {
   color: #64b5f6;
   font-family: 'Courier New', monospace;
+}
+
+/* 房间搜索样式 */
+.room-search-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid #3a4a5c;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.search-container {
+  position: relative;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  width: 16px;
+  height: 16px;
+  fill: #64b5f6;
+  z-index: 1;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 12px 8px 36px;
+  background: rgba(0, 255, 136, 0.05);
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  border-radius: 6px;
+  color: #e0e6ed;
+  font-size: 0.85rem;
+  font-family: 'Courier New', monospace;
+  transition: all 0.3s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #00ff88;
+  background: rgba(0, 255, 136, 0.1);
+  box-shadow: 0 0 0 2px rgba(0, 255, 136, 0.1);
+}
+
+.search-input::placeholder {
+  color: #64b5f6;
+  opacity: 0.7;
+}
+
+.clear-search {
+  position: absolute;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s ease;
+}
+
+.clear-search:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.clear-search svg {
+  width: 14px;
+  height: 14px;
+  fill: #64b5f6;
 }
 
 .federation-indicator {

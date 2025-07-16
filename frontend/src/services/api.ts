@@ -32,7 +32,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Token expired or invalid
       localStorage.removeItem('token')
-      window.location.href = '/login'
+      // 不重定向，只是清除token，让应用自然处理未认证状态
+      console.log('JWT token expired or invalid, cleared from localStorage')
     }
     return Promise.reject(error)
   }
@@ -180,8 +181,8 @@ export const invitationAPI = {
   sendInvitation: (data: { targetUserId: string; roomId: string; message?: string }) =>
     api.post('/invitations', data),
 
-  // 获取收到的邀请
-  getReceivedInvitations: () => api.get('/invitations/received'),
+  // 获取收到的邀请（待处理的邀请）
+  getReceivedInvitations: () => api.get('/invitations/pending'),
 
   // 获取发送的邀请
   getSentInvitations: () => api.get('/invitations/sent'),

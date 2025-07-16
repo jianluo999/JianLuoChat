@@ -194,22 +194,43 @@ const searchRooms = async () => {
 }
 
 const loadRooms = async () => {
+  if (!matrixStore.matrixClient) {
+    console.error('请先登录 Matrix 账户')
+    return
+  }
+
   loading.value = true
-  
+
   try {
-    // 模拟一些公共房间数据
+    // 从Matrix服务器获取真实的公共房间数据
+    const response = await matrixStore.matrixClient.publicRooms({
+      server: 'matrix.org',
+      limit: 50
+    })
+
+    if (response.chunk && response.chunk.length > 0) {
+      rooms.value = response.chunk.map(room => ({
+        id: room.room_id,
+        name: room.name || room.canonical_alias || room.room_id,
+        alias: room.canonical_alias,
+        topic: room.topic,
+        isPublic: room.world_readable,
+        memberCount: room.num_joined_members || 0,
+        type: getRoomType(room),
+        encrypted: false, // 公共房间通常不加密
+        joined: false,
+        avatarUrl: room.avatar_url ? matrixStore.matrixClient.mxcUrlToHttp(room.avatar_url, 64, 64, 'crop') : null
+      }))
+
+      console.log(`从Matrix服务器加载了 ${rooms.value.length} 个公共房间`)
+    } else {
+      console.warn('没有找到公共房间')
+      rooms.value = []
+    }
+  } catch (error) {
+    console.error('Failed to load rooms:', error)
+    // 如果API失败，显示一些默认房间
     rooms.value = [
-      {
-        id: '#jianluochat-world:matrix.org',
-        name: 'JianLuoChat World',
-        alias: '#jianluochat-world:matrix.org',
-        topic: 'JianLuoChat全球用户交流频道',
-        isPublic: true,
-        memberCount: 1337,
-        type: 'world',
-        encrypted: false,
-        joined: false
-      },
       {
         id: '#matrix:matrix.org',
         name: 'Matrix HQ',
@@ -220,38 +241,62 @@ const loadRooms = async () => {
         type: 'tech',
         encrypted: false,
         joined: false
-      },
-      {
-        id: '#element-web:matrix.org',
-        name: 'Element Web',
-        alias: '#element-web:matrix.org',
-        topic: 'Element web client support',
-        isPublic: true,
-        memberCount: 3241,
-        type: 'tech',
-        encrypted: false,
-        joined: false
       }
     ]
-  } catch (error) {
-    console.error('Failed to load rooms:', error)
   } finally {
     loading.value = false
   }
 }
 
+// 根据房间信息判断房间类型
+const getRoomType = (room) => {
+  if (room.name && room.name.toLowerCase().includes('world')) return 'world'
+  if (room.name && (room.name.toLowerCase().includes('tech') || room.name.toLowerCase().includes('dev'))) return 'tech'
+  if (room.name && room.name.toLowerCase().includes('social')) return 'social'
+  return 'general'
+}
+
 const joinRoom = async (room: any) => {
+  if (!matrixStore.matrixClient) {
+    console.error('请先登录 Matrix 账户')
+    return
+  }
+
   joiningRooms.value.add(room.id)
-  
+
   try {
-    // 调用加入房间API
-    await matrixAPI.joinRoom(room.id)
+    console.log(`尝试加入房间: ${room.name} (${room.id})`)
+
+    // 使用Matrix客户端加入房间
+    await matrixStore.matrixClient.joinRoom(room.id)
     room.joined = true
-    
+
+    // 创建房间对象添加到store
+    const newRoom = {
+      id: room.id,
+      name: room.name,
+      type: 'room',
+      isPublic: room.isPublic,
+      memberCount: room.memberCount,
+      topic: room.topic,
+      encrypted: room.encrypted,
+      avatarUrl: room.avatarUrl,
+      unreadCount: 0,
+      mentionCount: 0,
+      lastMessage: null,
+      lastActivity: new Date().toISOString()
+    }
+
+    // 添加到Matrix store
+    matrixStore.addRoom(newRoom)
+
+    console.log(`✅ 成功加入房间: ${room.name}`)
+
     // 通知父组件
     emit('room-selected', room.id)
   } catch (error) {
     console.error('Failed to join room:', error)
+    alert(`加入房间失败: ${error.message || '未知错误'}`)
   } finally {
     joiningRooms.value.delete(room.id)
   }

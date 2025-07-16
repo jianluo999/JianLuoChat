@@ -15,15 +15,44 @@
           </button>
         </div>
         <div class="server-selector">
-          <label>服务器:</label>
+          <label>主要服务器:</label>
           <select v-model="selectedServer" @change="loadPublicRooms" class="server-select">
-            <option value="matrix.org">matrix.org</option>
-            <option value="mozilla.org">mozilla.org</option>
-            <option value="kde.org">kde.org</option>
-            <option value="gnome.org">gnome.org</option>
-            <option value="fedora.im">fedora.im</option>
+            <option
+              v-for="server in availableServers"
+              :key="server.name"
+              :value="server.name"
+              :title="server.description"
+            >
+              {{ server.label }}
+            </option>
           </select>
         </div>
+        <div class="load-more-controls">
+          <button
+            @click="loadFromMultipleServers"
+            :disabled="isLoading"
+            class="load-more-btn"
+            title="从多个服务器加载更多房间"
+          >
+            🌐 加载更多服务器
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 房间统计信息 -->
+    <div class="rooms-stats" v-if="!isLoading && publicRooms.length > 0">
+      <div class="stat-item">
+        <span class="stat-number">{{ publicRooms.length }}</span>
+        <span class="stat-label">总房间数</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-number">{{ filteredRooms.length }}</span>
+        <span class="stat-label">筛选结果</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-number">{{ selectedServer }}</span>
+        <span class="stat-label">主要服务器</span>
       </div>
     </div>
 
@@ -176,9 +205,21 @@ const isLoading = ref(false)
 const isJoining = ref({})
 const selectedRoom = ref(null)
 const currentPage = ref(1)
-const roomsPerPage = 6  // 减少每页显示数量，让分页更容易触发
+const roomsPerPage = 12  // 增加每页显示数量
 const nextBatch = ref(null)  // Matrix API 分页令牌
 const hasMoreRooms = ref(true)  // 是否还有更多房间
+
+// 扩展的服务器列表
+const availableServers = ref([
+  { name: 'matrix.org', label: 'Matrix.org (官方)', description: '官方Matrix服务器，房间最多' },
+  { name: 'mozilla.org', label: 'Mozilla', description: 'Mozilla基金会的Matrix服务器' },
+  { name: 'kde.org', label: 'KDE', description: 'KDE项目的Matrix服务器' },
+  { name: 'gnome.org', label: 'GNOME', description: 'GNOME项目的Matrix服务器' },
+  { name: 'libera.chat', label: 'Libera.Chat', description: 'IRC桥接服务器' },
+  { name: 'tchncs.de', label: 'tchncs.de', description: '德国的社区服务器' },
+  { name: 'envs.net', label: 'envs.net', description: '环境友好的社区服务器' },
+  { name: 'nitro.chat', label: 'Nitro.chat', description: '高性能Matrix服务器' }
+])
 
 // 计算属性
 const filteredRooms = computed(() => {
@@ -216,15 +257,17 @@ const loadPublicRooms = async (loadMore = false) => {
   try {
     const requestOptions = {
       server: selectedServer.value,
-      limit: 50,  // 增加每次请求的数量
+      limit: 100,  // 大幅增加每次请求的数量
       since: loadMore ? nextBatch.value : undefined
     }
 
     const response = await matrixStore.matrixClient.publicRooms(requestOptions)
 
     if (loadMore) {
-      // 追加到现有房间列表
-      publicRooms.value = [...publicRooms.value, ...(response.chunk || [])]
+      // 追加到现有房间列表，去重
+      const existingRoomIds = new Set(publicRooms.value.map(room => room.room_id))
+      const newRooms = (response.chunk || []).filter(room => !existingRoomIds.has(room.room_id))
+      publicRooms.value = [...publicRooms.value, ...newRooms]
     } else {
       // 重新加载房间列表
       publicRooms.value = response.chunk || []
@@ -236,10 +279,49 @@ const loadPublicRooms = async (loadMore = false) => {
     hasMoreRooms.value = !!response.next_batch
 
     console.log(`从 ${selectedServer.value} 加载了 ${response.chunk?.length || 0} 个公共房间，总计 ${publicRooms.value.length} 个`)
+
+    // 如果房间数量还是很少，尝试从其他服务器加载更多
+    if (!loadMore && publicRooms.value.length < 50) {
+      await loadFromMultipleServers()
+    }
   } catch (error) {
     console.error('加载公共房间失败:', error)
+    // 如果当前服务器失败，尝试从matrix.org加载
+    if (selectedServer.value !== 'matrix.org') {
+      console.log('尝试从matrix.org加载房间...')
+      selectedServer.value = 'matrix.org'
+      await loadPublicRooms(false)
+    }
   } finally {
     isLoading.value = false
+  }
+}
+
+// 从多个服务器加载房间
+const loadFromMultipleServers = async () => {
+  const serversToTry = ['matrix.org', 'mozilla.org', 'kde.org']
+  const currentServer = selectedServer.value
+
+  for (const server of serversToTry) {
+    if (server === currentServer) continue
+
+    try {
+      console.log(`尝试从 ${server} 加载更多房间...`)
+      const response = await matrixStore.matrixClient.publicRooms({
+        server: server,
+        limit: 50
+      })
+
+      if (response.chunk && response.chunk.length > 0) {
+        // 合并房间，去重
+        const existingRoomIds = new Set(publicRooms.value.map(room => room.room_id))
+        const newRooms = response.chunk.filter(room => !existingRoomIds.has(room.room_id))
+        publicRooms.value = [...publicRooms.value, ...newRooms]
+        console.log(`从 ${server} 添加了 ${newRooms.length} 个新房间`)
+      }
+    } catch (error) {
+      console.warn(`从 ${server} 加载房间失败:`, error)
+    }
   }
 }
 
@@ -453,6 +535,69 @@ defineExpose({
   padding: 8px 12px;
   border-radius: 6px;
   font-family: inherit;
+  min-width: 200px;
+}
+
+.load-more-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.load-more-btn {
+  background: linear-gradient(45deg, #64b5f6, #42a5f5);
+  border: none;
+  color: #000;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  font-family: inherit;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+}
+
+.load-more-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(100, 181, 246, 0.4);
+}
+
+.load-more-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 房间统计信息 */
+.rooms-stats {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin: 20px 0;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  border: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-number {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #00ff88;
+  font-family: 'Courier New', monospace;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: #64b5f6;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .loading-indicator {

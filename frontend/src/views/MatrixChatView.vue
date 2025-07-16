@@ -53,7 +53,8 @@
             </svg>
           </button>
           
-          <button 
+          <button
+            v-if="hasJwtToken"
             @click="showInvitations = true"
             class="header-button"
             :title="$t('matrix.invitations')"
@@ -114,25 +115,90 @@
             @user-clicked="handleUserClicked"
           />
           <div v-else class="no-room-selected">
-            <div class="welcome-message">
-              <h2>{{ $t('matrix.welcome') }}</h2>
-              <p>{{ $t('matrix.selectRoomToStart') }}</p>
-
-              <!-- Matrix聊天演示 -->
-              <div class="matrix-demo-container">
-                <MatrixChatDemo />
+            <div class="welcome-container">
+              <!-- 用户欢迎信息 -->
+              <div class="user-welcome-section">
+                <div class="user-avatar-large">
+                  <img v-if="matrixStore.currentUser?.avatarUrl"
+                       :src="matrixStore.currentUser.avatarUrl"
+                       :alt="matrixStore.currentUser.displayName" />
+                  <div v-else class="avatar-placeholder-large">
+                    {{ getUserInitial() }}
+                  </div>
+                </div>
+                <div class="welcome-text">
+                  <h1 class="welcome-title">欢迎 {{ matrixStore.currentUser?.displayName || matrixStore.currentUser?.userId }}</h1>
+                  <p class="welcome-subtitle">现在，让我们开始你的聊天之旅</p>
+                </div>
               </div>
 
-              <div class="quick-actions">
-                <button @click="showCreateRoom = true" class="quick-action-btn">
-                  {{ $t('matrix.createRoom') }}
-                </button>
-                <button @click="showRoomBrowser = true" class="quick-action-btn">
-                  {{ $t('matrix.browseRooms') }}
-                </button>
-                <button @click="showPublicRoomsExplorer = true" class="quick-action-btn primary">
-                  🌍 探索公共房间
-                </button>
+              <!-- 快速操作卡片 -->
+              <div class="quick-actions-grid">
+                <div class="action-card" @click="showCreateRoom = true">
+                  <div class="card-icon create-room">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/>
+                    </svg>
+                  </div>
+                  <div class="card-content">
+                    <h3>发起私聊</h3>
+                    <p>与其他用户开始一对一对话</p>
+                  </div>
+                </div>
+
+                <div class="action-card" @click="showRoomBrowser = true">
+                  <div class="card-icon browse-rooms">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8Z"/>
+                    </svg>
+                  </div>
+                  <div class="card-content">
+                    <h3>探索公共房间</h3>
+                    <p>发现并加入感兴趣的社区</p>
+                  </div>
+                </div>
+
+                <div class="action-card" @click="showCreateRoom = true">
+                  <div class="card-icon create-space">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8Z"/>
+                    </svg>
+                  </div>
+                  <div class="card-content">
+                    <h3>创建一个房间</h3>
+                    <p>建立你自己的聊天空间</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Matrix协议信息 -->
+              <div class="matrix-info-section">
+                <div class="protocol-badge">
+                  <svg class="protocol-icon" viewBox="0 0 24 24">
+                    <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8Z"/>
+                  </svg>
+                  <span>Matrix 协议</span>
+                </div>
+                <div class="protocol-features">
+                  <div class="feature-item">
+                    <svg class="feature-icon" viewBox="0 0 24 24">
+                      <path d="M12,17A2,2 0 0,0 14,15C14,13.89 13.1,13 12,13A2,2 0 0,0 10,15A2,2 0 0,0 12,17M18,8A2,2 0 0,1 20,10V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V10C4,8.89 4.9,8 6,8H7V6A5,5 0 0,1 12,1A5,5 0 0,1 17,6V8H18M12,3A3,3 0 0,0 9,6V8H15V6A3,3 0 0,0 12,3Z"/>
+                    </svg>
+                    <span>端到端加密</span>
+                  </div>
+                  <div class="feature-item">
+                    <svg class="feature-icon" viewBox="0 0 24 24">
+                      <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8Z"/>
+                    </svg>
+                    <span>去中心化网络</span>
+                  </div>
+                  <div class="feature-item">
+                    <svg class="feature-icon" viewBox="0 0 24 24">
+                      <path d="M13,9H11V7H13M13,17H11V11H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/>
+                    </svg>
+                    <span>实时同步</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -238,6 +304,11 @@ const newRoom = ref({
 // 邀请计数
 const pendingInvitations = ref(0)
 
+// JWT认证状态
+const hasJwtToken = computed(() => {
+  return !!localStorage.getItem('token')
+})
+
 // 事件处理
 
 // 真正的Matrix登录成功处理
@@ -299,6 +370,17 @@ const handleLogout = () => {
   }
 }
 
+const getUserInitial = () => {
+  const user = matrixStore.currentUser
+  if (user?.displayName) {
+    return user.displayName.charAt(0).toUpperCase()
+  }
+  if (user?.userId) {
+    return user.userId.charAt(1).toUpperCase() // 跳过@符号
+  }
+  return 'U'
+}
+
 const createRoom = async () => {
   if (!newRoom.value.name.trim()) return
   
@@ -319,11 +401,23 @@ const createRoom = async () => {
 }
 
 const loadPendingInvitations = async () => {
+  // 检查是否有JWT token，如果没有则跳过邀请加载
+  const token = localStorage.getItem('token')
+  if (!token) {
+    console.log('No JWT token found, skipping invitation loading')
+    pendingInvitations.value = 0
+    return
+  }
+
   try {
     const response = await invitationAPI.getReceivedInvitations()
-    pendingInvitations.value = response.data.filter((inv: any) => inv.status === 'pending').length
+    // 后端返回的数据结构是 { invitations: [...] }
+    const invitations = response.data.invitations || []
+    pendingInvitations.value = invitations.filter((inv: any) => inv.status === 'PENDING').length
   } catch (error) {
     console.error('Failed to load invitations:', error)
+    // 如果请求失败，设置为0避免无限重试
+    pendingInvitations.value = 0
   }
 }
 
@@ -515,48 +609,219 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 40px;
 }
 
-.welcome-message {
+.welcome-container {
+  max-width: 800px;
+  width: 100%;
   text-align: center;
-  max-width: 400px;
 }
 
-.welcome-message h2 {
-  color: #64b5f6;
-  margin-bottom: 16px;
+/* 用户欢迎区域 */
+.user-welcome-section {
+  margin-bottom: 48px;
 }
 
-.welcome-message p {
-  color: #b0bec5;
-  margin-bottom: 24px;
+.user-avatar-large {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  margin: 0 auto 24px;
+  overflow: hidden;
+  border: 3px solid #00ff88;
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
 }
 
-.matrix-demo-container {
-  margin: 30px 0;
-  text-align: left;
-  max-width: 900px;
+.user-avatar-large img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.quick-actions {
+.avatar-placeholder-large {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #00ff88 0%, #64b5f6 100%);
   display: flex;
-  gap: 12px;
+  align-items: center;
   justify-content: center;
+  font-size: 2rem;
+  font-weight: bold;
+  color: #0f0f23;
 }
 
-.quick-action-btn {
-  padding: 12px 24px;
-  background: #64b5f6;
-  color: white;
-  border: none;
-  border-radius: 8px;
+.welcome-title {
+  font-size: 2.5rem;
+  color: #00ff88;
+  margin-bottom: 8px;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+.welcome-subtitle {
+  font-size: 1.2rem;
+  color: #64b5f6;
+  margin-bottom: 0;
+}
+
+/* 快速操作卡片网格 */
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-bottom: 48px;
+}
+
+.action-card {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  border-radius: 16px;
+  padding: 32px 24px;
   cursor: pointer;
-  font-weight: 500;
-  transition: background 0.3s ease;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
 }
 
-.quick-action-btn:hover {
-  background: #42a5f5;
+.action-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.05) 0%, rgba(100, 181, 246, 0.05) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.action-card:hover {
+  border-color: #00ff88;
+  transform: translateY(-4px);
+  box-shadow: 0 8px 32px rgba(0, 255, 136, 0.2);
+}
+
+.action-card:hover::before {
+  opacity: 1;
+}
+
+.card-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.card-icon.create-room {
+  background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+}
+
+.card-icon.browse-rooms {
+  background: linear-gradient(135deg, #64b5f6 0%, #42a5f5 100%);
+}
+
+.card-icon.create-space {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+}
+
+.card-icon svg {
+  width: 28px;
+  height: 28px;
+  fill: #ffffff;
+}
+
+.card-content {
+  position: relative;
+  z-index: 1;
+}
+
+.card-content h3 {
+  font-size: 1.3rem;
+  color: #e0e6ed;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.card-content p {
+  color: #b0bec5;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Matrix协议信息区域 */
+.matrix-info-section {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(100, 181, 246, 0.2);
+  border-radius: 16px;
+  padding: 32px;
+  backdrop-filter: blur(10px);
+}
+
+.protocol-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #64b5f6;
+}
+
+.protocol-icon {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
+.protocol-features {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #00ff88;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.feature-icon {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .welcome-container {
+    padding: 20px;
+  }
+
+  .welcome-title {
+    font-size: 2rem;
+  }
+
+  .quick-actions-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .protocol-features {
+    flex-direction: column;
+    gap: 16px;
+  }
 }
 
 /* 模态框样式 */
