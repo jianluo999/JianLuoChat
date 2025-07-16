@@ -11,6 +11,11 @@ const router = createRouter({
     {
       path: '/matrix',
       name: 'matrix',
+      component: () => import('@/components/ElementStyleLayout.vue')
+    },
+    {
+      path: '/old-matrix',
+      name: 'old-matrix',
       component: () => import('@/views/MatrixChatView.vue')
     },
     {

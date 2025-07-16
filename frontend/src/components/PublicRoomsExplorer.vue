@@ -386,7 +386,8 @@ const joinRoom = async (room) => {
       encrypted: false,
       joinRule: 'public',
       historyVisibility: 'shared',
-      avatarUrl: room.avatar_url ? matrixStore.matrixClient.mxcUrlToHttp(room.avatar_url) : null
+      avatarUrl: room.avatar_url ? matrixStore.matrixClient.mxcUrlToHttp(room.avatar_url) : null,
+      lastActivity: Date.now()
     }
 
     // 添加到 Matrix store 的房间列表

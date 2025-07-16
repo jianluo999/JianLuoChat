@@ -174,6 +174,13 @@ public class RealMatrixService {
      * 发送消息到房间
      */
     public CompletableFuture<String> sendMessage(User user, String roomId, String message) {
+        return sendFormattedMessage(user, roomId, message, null, null);
+    }
+
+    /**
+     * 发送格式化消息到房间
+     */
+    public CompletableFuture<String> sendFormattedMessage(User user, String roomId, String message, String formattedBody, String format) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 String accessToken = userTokens.get(user.getUsername());
@@ -185,6 +192,12 @@ public class RealMatrixService {
                 Map<String, Object> messageData = new HashMap<>();
                 messageData.put("msgtype", "m.text");
                 messageData.put("body", message);
+
+                // 如果有格式化内容，添加格式化字段
+                if (formattedBody != null && !formattedBody.trim().isEmpty()) {
+                    messageData.put("format", format != null ? format : "org.matrix.custom.html");
+                    messageData.put("formatted_body", formattedBody);
+                }
 
                 String jsonBody = objectMapper.writeValueAsString(messageData);
 

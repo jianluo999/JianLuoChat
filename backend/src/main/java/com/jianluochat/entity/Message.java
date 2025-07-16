@@ -29,6 +29,14 @@ public class Message {
     @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    @Size(max = 4000)
+    @Column(name = "formatted_content", columnDefinition = "TEXT")
+    private String formattedContent;
+
+    @Size(max = 50)
+    @Column(name = "format")
+    private String format = "org.matrix.custom.html";
+
     @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false)
     private MessageType type = MessageType.TEXT;
@@ -81,6 +89,23 @@ public class Message {
         this.type = type;
     }
 
+    public Message(Room room, User sender, String content, String formattedContent, MessageType type) {
+        this.room = room;
+        this.sender = sender;
+        this.content = content;
+        this.formattedContent = formattedContent;
+        this.type = type;
+    }
+
+    public Message(Room room, User sender, String content, String formattedContent, String format, MessageType type) {
+        this.room = room;
+        this.sender = sender;
+        this.content = content;
+        this.formattedContent = formattedContent;
+        this.format = format;
+        this.type = type;
+    }
+
     // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -93,6 +118,12 @@ public class Message {
 
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
+
+    public String getFormattedContent() { return formattedContent; }
+    public void setFormattedContent(String formattedContent) { this.formattedContent = formattedContent; }
+
+    public String getFormat() { return format; }
+    public void setFormat(String format) { this.format = format; }
 
     public MessageType getType() { return type; }
     public void setType(MessageType type) { this.type = type; }

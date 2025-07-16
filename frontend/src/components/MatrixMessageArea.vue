@@ -97,100 +97,84 @@
         </div>
 
         <!-- 消息列表 -->
+        <div v-if="messages.length === 0" class="empty-messages">
+          <div class="empty-icon">💬</div>
+          <div class="empty-text">
+            <div class="empty-title">还没有消息</div>
+            <div class="empty-desc">成为第一个在这个房间发言的人吧！</div>
+          </div>
+        </div>
+
         <div
-          v-for="message in messages"
+          v-for="(message, index) in messages"
           :key="message.id"
           class="message-item"
           :class="{
             'own-message': isOwnMessage(message),
             'encrypted-message': message.encrypted,
             'system-message': message.type !== 'm.room.message',
-            'verification-message': message.type === 'm.key.verification.request'
+            'verification-message': message.type === 'm.key.verification.request',
+            'first-in-group': isFirstInGroup(message, index),
+            'last-in-group': isLastInGroup(message, index)
           }"
         >
-          <!-- 消息发送者信息 -->
-          <div class="message-header" v-if="!isOwnMessage(message)">
-            <MatrixUserID
-              :user-id="message.sender"
-              :display-name="message.senderName"
-              :avatar-url="message.senderAvatar"
-              :show-status="false"
-              :show-federation="true"
-              :show-actions="true"
-              clickable
-              @click="$emit('user-clicked', message.sender)"
-              @direct-message="startDirectMessage"
-              @invite="inviteUser"
-              @profile="showUserProfile"
-            />
+          <!-- 消息发送者头像和信息 -->
+          <div class="message-avatar" v-if="!isOwnMessage(message) && isFirstInGroup(message, index)">
+            <div class="avatar-container">
+              <img v-if="message.senderAvatar" :src="message.senderAvatar" :alt="message.senderName || message.sender" />
+              <div v-else class="avatar-placeholder">
+                {{ getUserInitials(message.senderName || message.sender) }}
+              </div>
+            </div>
           </div>
 
-          <!-- 消息内容 -->
-          <div class="message-content">
-            <!-- 加密状态指示器 -->
-            <div v-if="message.encrypted" class="message-encryption">
-              <svg class="encryption-icon" viewBox="0 0 24 24">
-                <path d="M12,17A2,2 0 0,0 14,15C14,13.89 13.1,13 12,13A2,2 0 0,0 10,15A2,2 0 0,0 12,17M18,8A2,2 0 0,1 20,10V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V10C4,8.89 4.9,8 6,8H7V6A5,5 0 0,1 12,1A5,5 0 0,1 17,6V8H18M12,3A3,3 0 0,0 9,6V8H15V6A3,3 0 0,0 12,3Z"/>
-              </svg>
-              <span class="encryption-text">{{ $t('matrix.encrypted') }}</span>
+          <div class="message-main" :class="{ 'with-avatar': !isOwnMessage(message) && isFirstInGroup(message, index) }">
+            <!-- 发送者名称和时间 -->
+            <div class="message-header" v-if="!isOwnMessage(message) && isFirstInGroup(message, index)">
+              <span class="sender-name">{{ getSenderDisplayName(message) }}</span>
+              <span class="message-timestamp">{{ formatMessageTime(message.timestamp) }}</span>
             </div>
 
-            <!-- 消息正文 -->
-            <div class="message-body">
-              <!-- 文本消息 -->
-              <div v-if="message.type === 'm.room.message'" class="text-message">
-                <div class="message-text" v-html="formatMessageContent(message.content)"></div>
-              </div>
-
-              <!-- 系统消息 -->
-              <div v-else-if="isSystemMessage(message)" class="system-message-content">
-                <svg class="system-icon" viewBox="0 0 24 24">
-                  <path d="M13,9H11V7H13M13,17H11V11H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/>
-                </svg>
-                <span>{{ formatSystemMessage(message) }}</span>
-              </div>
-
-              <!-- 设备验证消息 -->
-              <div v-else-if="message.type === 'm.key.verification.request'" class="verification-message-content">
-                <div class="verification-header">
-                  <svg class="verification-icon" viewBox="0 0 24 24">
-                    <path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z"/>
-                  </svg>
-                  <span>{{ $t('matrix.deviceVerificationRequest') }}</span>
+            <!-- 消息内容 -->
+            <div class="message-content">
+                <!-- 系统消息 -->
+                <div v-if="isSystemMessage(message)" class="system-message-content">
+                  <div class="system-icon">{{ getSystemMessageIcon(message.type) }}</div>
+                  <div class="system-text">{{ message.content }}</div>
                 </div>
-                <div class="verification-actions">
-                  <button @click="acceptVerification(message)" class="verify-accept">
-                    {{ $t('matrix.accept') }}
-                  </button>
-                  <button @click="declineVerification(message)" class="verify-decline">
-                    {{ $t('matrix.decline') }}
-                  </button>
-                </div>
-              </div>
-            </div>
 
-            <!-- 消息元数据 -->
-            <div class="message-meta">
-              <span class="message-time">{{ formatTimestamp(message.timestamp) }}</span>
-              <div v-if="message.edited" class="edited-indicator">
-                <svg viewBox="0 0 24 24">
-                  <path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z"/>
-                </svg>
-                <span>{{ $t('matrix.edited') }}</span>
-              </div>
-              <div v-if="isOwnMessage(message)" class="delivery-status">
-                <svg v-if="message.status === 'sending'" class="status-icon sending" viewBox="0 0 24 24">
-                  <path d="M12,4V2A10,10 0 0,0 2,12H4A8,8 0 0,1 12,4Z"/>
-                </svg>
-                <svg v-else-if="message.status === 'sent'" class="status-icon sent" viewBox="0 0 24 24">
-                  <path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z"/>
-                </svg>
-                <svg v-else-if="message.status === 'delivered'" class="status-icon delivered" viewBox="0 0 24 24">
-                  <path d="M0.41,13.41L6,19L7.41,17.58L1.83,12M22.24,5.58L11.66,16.17L7.5,12L6.07,13.41L11.66,19L23.66,7M18,7L16.59,5.58L10.24,11.93L11.66,13.34L18,7Z"/>
-                </svg>
-                <svg v-else-if="message.status === 'failed'" class="status-icon failed" viewBox="0 0 24 24">
-                  <path d="M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/>
-                </svg>
+                <!-- 普通消息 -->
+                <div v-else class="regular-message-content">
+                  <div class="message-bubble" :class="{ 'own-bubble': isOwnMessage(message) }">
+                    <div class="message-text">{{ message.content }}</div>
+
+                    <!-- 消息状态和时间（自己的消息） -->
+                    <div v-if="isOwnMessage(message)" class="message-meta">
+                      <span class="message-time">{{ formatMessageTime(message.timestamp) }}</span>
+                      <div class="message-status">
+                        <svg v-if="message.status === 'sending'" class="status-icon sending" viewBox="0 0 24 24">
+                          <path d="M12,4V2A10,10 0 0,0 2,12H4A8,8 0 0,1 12,4Z"/>
+                        </svg>
+                        <svg v-else-if="message.status === 'sent'" class="status-icon sent" viewBox="0 0 24 24">
+                          <path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z"/>
+                        </svg>
+                        <svg v-else-if="message.status === 'delivered'" class="status-icon delivered" viewBox="0 0 24 24">
+                          <path d="M0.41,13.41L6,19L7.41,17.58L1.83,12M22.24,5.58L11.66,16.17L7.5,12L6.07,13.41L11.66,19L23.66,7M18,7L16.59,5.58L10.24,11.93L11.66,13.34L18,7Z"/>
+                        </svg>
+                        <svg v-else-if="message.status === 'failed'" class="status-icon failed" viewBox="0 0 24 24">
+                          <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>
+                        </svg>
+                      </div>
+
+                      <!-- 加密状态 -->
+                      <div v-if="message.encrypted" class="encryption-indicator" title="此消息已加密">
+                        <svg class="encryption-icon" viewBox="0 0 24 24">
+                          <path d="M12,17A2,2 0 0,0 14,15C14,13.89 13.1,13 12,13A2,2 0 0,0 10,15A2,2 0 0,0 12,17M18,8A2,2 0 0,1 20,10V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V10C4,8.89 4.9,8 6,8H7V6A5,5 0 0,1 12,1A5,5 0 0,1 17,6V8H18M12,3A3,3 0 0,0 9,6V8H15V6A3,3 0 0,0 12,3Z"/>
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -285,6 +269,65 @@ const isOwnMessage = (message: any) => {
 
 const isSystemMessage = (message: any) => {
   return message.type !== 'm.room.message'
+}
+
+// 判断是否是消息组的第一条
+const isFirstInGroup = (message: any, index: number) => {
+  if (index === 0) return true
+  const prevMessage = messages.value[index - 1]
+  return prevMessage.sender !== message.sender ||
+         (message.timestamp - prevMessage.timestamp) > 300000 // 5分钟
+}
+
+// 判断是否是消息组的最后一条
+const isLastInGroup = (message: any, index: number) => {
+  if (index === messages.value.length - 1) return true
+  const nextMessage = messages.value[index + 1]
+  return nextMessage.sender !== message.sender ||
+         (nextMessage.timestamp - message.timestamp) > 300000 // 5分钟
+}
+
+// 获取用户头像首字母
+const getUserInitials = (name: string): string => {
+  if (!name) return '?'
+  return name.split(' ').map(word => word[0]).join('').toUpperCase().substring(0, 2)
+}
+
+// 获取发送者显示名称
+const getSenderDisplayName = (message: any): string => {
+  return message.senderName || message.sender.split(':')[0].substring(1)
+}
+
+// 格式化消息时间
+const formatMessageTime = (timestamp: number): string => {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+
+  if (diff < 60000) { // 1分钟内
+    return '刚刚'
+  } else if (diff < 3600000) { // 1小时内
+    return `${Math.floor(diff / 60000)}分钟前`
+  } else if (diff < 86400000) { // 24小时内
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  } else {
+    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+  }
+}
+
+// 获取系统消息图标
+const getSystemMessageIcon = (type: string): string => {
+  switch (type) {
+    case 'm.room.member': return '👤'
+    case 'm.room.create': return '🏠'
+    case 'm.room.join_rules': return '🔒'
+    case 'm.room.power_levels': return '⚡'
+    case 'm.room.name': return '📝'
+    case 'm.room.topic': return '💬'
+    case 'm.room.avatar': return '🖼️'
+    case 'm.room.encryption': return '🔐'
+    default: return 'ℹ️'
+  }
 }
 
 const formatTimestamp = (timestamp: number) => {
@@ -422,14 +465,37 @@ watch(() => matrixStore.currentMessages, () => {
   })
 }, { deep: true })
 
-// 监听房间变化，聚焦输入框
-watch(() => matrixStore.currentRoomId, () => {
+// 监听房间变化，加载消息并聚焦输入框
+watch(() => props.roomId, async (newRoomId, oldRoomId) => {
+  if (newRoomId && newRoomId !== oldRoomId) {
+    console.log(`🔄 房间切换: ${oldRoomId} -> ${newRoomId}`)
+
+    // 加载房间消息
+    try {
+      loading.value = true
+      await matrixStore.fetchMatrixMessages(newRoomId)
+
+      // 标记房间为已读
+      matrixStore.markRoomAsRead(newRoomId)
+
+      // 滚动到底部
+      nextTick(() => {
+        scrollToBottom()
+      })
+    } catch (error) {
+      console.error('Failed to load room messages:', error)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 聚焦输入框
   nextTick(() => {
     if (messageInput.value) {
       messageInput.value.focus()
     }
   })
-})
+}, { immediate: true })
 
 // 用户交互方法
 const startDirectMessage = (userId: string) => {
@@ -642,9 +708,93 @@ const declineVerification = (message: any) => {
 }
 
 .message-item {
-  border-left: 2px solid #003300;
-  padding-left: 12px;
-  transition: all 0.3s ease;
+  display: flex;
+  margin-bottom: 2px;
+  padding: 2px 16px;
+  position: relative;
+  transition: background-color 0.1s;
+}
+
+.message-item:hover {
+  background: rgba(0, 255, 0, 0.02);
+}
+
+.message-item.first-in-group {
+  margin-top: 8px;
+}
+
+.message-item.last-in-group {
+  margin-bottom: 8px;
+}
+
+.message-avatar {
+  width: 32px;
+  height: 32px;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.avatar-container {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(0, 255, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-placeholder {
+  color: #00ff00;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.message-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.message-main.with-avatar {
+  margin-top: 0;
+}
+
+/* 空消息状态 */
+.empty-messages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #666;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #00ff00;
+}
+
+.empty-desc {
+  font-size: 14px;
+  opacity: 0.7;
 }
 
 .message-item.own-message {

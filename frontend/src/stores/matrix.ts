@@ -93,6 +93,50 @@ export const useMatrixStore = defineStore('matrix', () => {
   const currentRoomId = ref<string | null>(null)
   const messages = ref<Map<string, MatrixMessage[]>>(new Map())
 
+  // 房间持久化存储
+  const saveRoomsToStorage = () => {
+    try {
+      const roomsData = rooms.value.map(room => ({
+        id: room.id,
+        name: room.name,
+        alias: room.alias,
+        topic: room.topic,
+        type: room.type,
+        isPublic: room.isPublic,
+        memberCount: room.memberCount,
+        encrypted: room.encrypted,
+        joinRule: room.joinRule,
+        historyVisibility: room.historyVisibility,
+        avatarUrl: room.avatarUrl,
+        lastActivity: room.lastActivity || Date.now()
+      }))
+      localStorage.setItem('matrix-rooms', JSON.stringify(roomsData))
+      console.log('Rooms saved to localStorage:', roomsData.length)
+    } catch (error) {
+      console.error('Failed to save rooms to localStorage:', error)
+    }
+  }
+
+  const loadRoomsFromStorage = () => {
+    try {
+      const savedRooms = localStorage.getItem('matrix-rooms')
+      if (savedRooms) {
+        const roomsData = JSON.parse(savedRooms)
+        rooms.value = roomsData.map((room: any) => ({
+          ...room,
+          members: room.members || [],
+          unreadCount: 0, // 重置未读计数
+          lastMessage: null // 重置最后消息
+        }))
+        console.log('Rooms loaded from localStorage:', rooms.value.length)
+        return true
+      }
+    } catch (error) {
+      console.error('Failed to load rooms from localStorage:', error)
+    }
+    return false
+  }
+
   // 用户状态
   const currentUser = ref<MatrixUser | null>(null)
   const onlineUsers = ref<Map<string, MatrixUser>>(new Map())
@@ -215,9 +259,12 @@ export const useMatrixStore = defineStore('matrix', () => {
     console.log('Matrix login info set and persisted:', info)
   }
 
-  // 初始化Matrix状态（从localStorage恢复登录信息）
+  // 初始化Matrix状态（从localStorage恢复登录信息和房间列表）
   const initializeMatrix = async () => {
     try {
+      // 首先加载房间列表（即使未登录也可以显示之前的房间）
+      loadRoomsFromStorage()
+
       const savedLoginInfo = localStorage.getItem('matrix-login-info')
       if (savedLoginInfo) {
         const loginData = JSON.parse(savedLoginInfo)
@@ -234,6 +281,13 @@ export const useMatrixStore = defineStore('matrix', () => {
 
           // 重新创建Matrix客户端
           await createMatrixClient(loginData.userId, loginData.accessToken, loginData.homeserver)
+
+          // 登录成功后，刷新房间列表
+          try {
+            await fetchMatrixRooms()
+          } catch (error) {
+            console.warn('Failed to refresh rooms after login restore:', error)
+          }
 
           console.log('Matrix login restored successfully')
           return true
@@ -471,7 +525,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       loading.value = true
       const response = await roomAPI.getUserRooms()
 
-      rooms.value = response.data.map((room: any) => ({
+      const fetchedRooms = response.data.map((room: any) => ({
         id: room.id,
         name: room.name,
         alias: room.alias,
@@ -483,8 +537,27 @@ export const useMatrixStore = defineStore('matrix', () => {
         unreadCount: 0,
         encrypted: room.encrypted || false,
         joinRule: room.joinRule || 'invite',
-        historyVisibility: room.historyVisibility || 'shared'
+        historyVisibility: room.historyVisibility || 'shared',
+        lastActivity: Date.now()
       }))
+
+      // 合并本地存储的房间和服务器获取的房间
+      const existingRoomIds = new Set(rooms.value.map(r => r.id))
+      const newRooms = fetchedRooms.filter(room => !existingRoomIds.has(room.id))
+
+      // 更新现有房间信息
+      rooms.value.forEach(localRoom => {
+        const serverRoom = fetchedRooms.find(r => r.id === localRoom.id)
+        if (serverRoom) {
+          Object.assign(localRoom, serverRoom)
+        }
+      })
+
+      // 添加新房间
+      rooms.value.push(...newRooms)
+
+      // 保存到localStorage
+      saveRoomsToStorage()
 
       return rooms.value
     } catch (err: any) {
@@ -525,6 +598,7 @@ export const useMatrixStore = defineStore('matrix', () => {
         }
         
         rooms.value.unshift(newRoom)
+        saveRoomsToStorage() // 保存到localStorage
         return { success: true, room: newRoom }
       } else {
         throw new Error('Failed to create room')
@@ -541,40 +615,89 @@ export const useMatrixStore = defineStore('matrix', () => {
   // Matrix消息管理
   const fetchMatrixMessages = async (roomId: string, limit = 50) => {
     try {
-      if (!currentUser.value) {
-        throw new Error('User not logged in')
+      if (!matrixClient.value) {
+        console.error('Matrix客户端未初始化')
+        return []
       }
+
+      console.log(`🔄 开始加载房间消息: ${roomId}`)
 
       let roomMessages: MatrixMessage[] = []
 
       if (roomId === 'world') {
-        // 世界频道消息暂时为空，实际应该从API获取
-        roomMessages = []
+        // 世界频道消息从后端API获取
+        try {
+          const response = await matrixAPI.getWorldChannelMessages()
+          console.log('World channel messages response:', response.data)
+
+          if (response.data && Array.isArray(response.data)) {
+            roomMessages = response.data.map((msg: any) => ({
+              id: msg.id,
+              roomId: 'world',
+              content: msg.content,
+              sender: msg.sender,
+              senderName: msg.sender, // Matrix用户ID，可以后续优化显示名
+              timestamp: msg.timestamp,
+              type: 'm.room.message',
+              eventId: msg.id,
+              encrypted: false,
+              status: 'sent' as const
+            }))
+          } else if (response.data && response.data.messages) {
+            // 如果返回格式是 { messages: [...] }
+            roomMessages = response.data.messages.map((msg: any) => ({
+              id: msg.id,
+              roomId: 'world',
+              content: msg.content,
+              sender: msg.sender,
+              senderName: msg.sender,
+              timestamp: msg.timestamp,
+              type: 'm.room.message',
+              eventId: msg.id,
+              encrypted: false,
+              status: 'sent' as const
+            }))
+          }
+        } catch (error) {
+          console.error('Failed to fetch world channel messages:', error)
+          roomMessages = []
+        }
       } else {
-        const response = await matrixAPI.getRoomMessages({
-          roomId,
-          limit
-        })
-        
-        if (response.data.success) {
-          roomMessages = response.data.messages.map((msg: any) => ({
-            id: msg.id,
-            roomId,
-            content: msg.content,
-            sender: msg.sender,
-            timestamp: msg.timestamp,
-            type: msg.type || 'm.text',
-            eventId: msg.eventId,
-            encrypted: msg.encrypted || false
-          }))
+        // 使用Matrix客户端获取房间消息历史
+        const messagesResponse = await matrixClient.value.roomMessages(roomId, '', limit, 'b')
+
+        if (messagesResponse && messagesResponse.chunk) {
+          console.log(`📨 获取到 ${messagesResponse.chunk.length} 条消息`)
+
+          roomMessages = messagesResponse.chunk
+            .filter((event: any) => event.type === 'm.room.message')
+            .map((event: any) => {
+              const content = event.content?.body || event.content?.formatted_body || ''
+              return {
+                id: event.event_id,
+                roomId,
+                content,
+                sender: event.sender,
+                senderName: event.sender, // 可以后续优化为显示名
+                timestamp: event.origin_server_ts,
+                type: event.type,
+                eventId: event.event_id,
+                encrypted: event.content?.algorithm ? true : false,
+                status: 'sent' as const
+              }
+            })
+            .reverse() // 反转顺序，让最新消息在底部
         }
       }
-      
+
       messages.value.set(roomId, roomMessages)
+      console.log(`✅ 房间 ${roomId} 消息加载完成，共 ${roomMessages.length} 条`)
       return roomMessages
     } catch (err: any) {
       error.value = 'Failed to fetch Matrix messages'
       console.error('Error fetching Matrix messages:', err)
+      // 如果加载失败，至少设置一个空数组
+      messages.value.set(roomId, [])
       return []
     }
   }
@@ -618,32 +741,38 @@ export const useMatrixStore = defineStore('matrix', () => {
         type: 'm.text'
       })
 
+      console.log('Send message response:', response.data)
+
+      // 处理不同的响应格式
+      let messageInfo = response.data
       if (response.data.success) {
-        const newMessage: MatrixMessage = {
-          id: response.data.messageInfo?.eventId || Date.now().toString(),
-          roomId,
-          content,
-          sender: currentUser.value.username,
-          timestamp: Date.now(),
-          type: 'm.text',
-          eventId: response.data.messageInfo?.eventId,
-          encrypted: false
-        }
-
-        // 添加到本地消息列表
-        const roomMessages = messages.value.get(roomId) || []
-        messages.value.set(roomId, [...roomMessages, newMessage])
-
-        // 更新房间最后消息
-        const room = roomId === 'world' ? worldChannel.value : rooms.value.find(r => r.id === roomId)
-        if (room) {
-          room.lastMessage = newMessage
-        }
-
-        return newMessage
-      } else {
-        throw new Error('Failed to send message')
+        messageInfo = response.data.messageInfo || response.data
       }
+
+      const newMessage: MatrixMessage = {
+        id: messageInfo.id || messageInfo.eventId || Date.now().toString(),
+        roomId,
+        content,
+        sender: messageInfo.sender?.username || currentUser.value.username,
+        senderName: messageInfo.sender?.displayName || currentUser.value.displayName || currentUser.value.username,
+        timestamp: messageInfo.timestamp || Date.now(),
+        type: 'm.room.message',
+        eventId: messageInfo.id || messageInfo.eventId,
+        encrypted: false,
+        status: 'sent' as const
+      }
+
+      // 添加到本地消息列表
+      const roomMessages = messages.value.get(roomId) || []
+      messages.value.set(roomId, [...roomMessages, newMessage])
+
+      // 更新房间最后消息
+      const room = roomId === 'world' ? worldChannel.value : rooms.value.find(r => r.id === roomId)
+      if (room) {
+        room.lastMessage = newMessage
+      }
+
+      return newMessage
     } catch (err: any) {
       error.value = 'Failed to send Matrix message'
       console.error('Error sending Matrix message:', err)
@@ -730,6 +859,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     const existingRoom = rooms.value.find(r => r.id === room.id)
     if (!existingRoom) {
       rooms.value.unshift(room)
+      saveRoomsToStorage() // 保存到localStorage
       console.log(`房间 "${room.name}" 已添加到房间列表`)
     } else {
       console.log(`房间 "${room.name}" 已存在于房间列表中`)

@@ -38,17 +38,18 @@ public class MessageController {
         try {
             String roomCode = (String) request.get("roomCode");
             String content = (String) request.get("content");
+            String formattedContent = (String) request.get("formattedContent");
             String typeStr = (String) request.get("type");
-            
+
             if (roomCode == null || content == null || content.trim().isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "房间码和消息内容不能为空"));
             }
-            
+
             Optional<Room> roomOpt = roomService.findByRoomCode(roomCode);
             if (roomOpt.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "房间不存在"));
             }
-            
+
             Message.MessageType type = Message.MessageType.TEXT;
             if (typeStr != null) {
                 try {
@@ -57,10 +58,17 @@ public class MessageController {
                     // 使用默认类型
                 }
             }
-            
+
             User user = userPrincipal.getUser();
-            Message message = messageService.sendMessage(roomOpt.get(), user, content, type);
-            
+            Message message;
+
+            // 如果有格式化内容，使用格式化消息方法
+            if (formattedContent != null && !formattedContent.trim().isEmpty()) {
+                message = messageService.sendFormattedMessage(roomOpt.get(), user, content, formattedContent, type);
+            } else {
+                message = messageService.sendMessage(roomOpt.get(), user, content, type);
+            }
+
             return ResponseEntity.ok(formatMessageResponse(message));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -252,6 +260,8 @@ public class MessageController {
         Map<String, Object> response = new HashMap<>();
         response.put("id", message.getId());
         response.put("content", message.getContent());
+        response.put("formattedContent", message.getFormattedContent());
+        response.put("format", message.getFormat());
         response.put("type", message.getType().toString());
         response.put("status", message.getStatus().toString());
         response.put("isEdited", message.getIsEdited());

@@ -143,8 +143,13 @@ export const matrixAPI = {
     api.get(`/matrix/rooms/${params.roomId}/messages`, { params }),
 
   // 发送消息
-  sendMessage: (data: { roomId: string; content: string; type?: string }) =>
-    api.post(`/matrix/rooms/${data.roomId}/messages`, data),
+  sendMessage: (data: { roomId: string; content: string; type?: string }) => {
+    // 世界频道使用不同的API端点
+    if (data.roomId === 'world') {
+      return api.post(`/rooms/world/messages`, data)
+    }
+    return api.post(`/matrix/rooms/${data.roomId}/messages`, data)
+  },
 
   // Matrix同步
   sync: (params: { username: string; since?: string; timeout?: number }) =>
@@ -162,6 +167,10 @@ export const matrixAPI = {
   // 加入Matrix房间
   joinRoom: (roomIdOrAlias: string) =>
     api.post(`/matrix/rooms/join`, { roomIdOrAlias }),
+
+  // 获取世界频道消息
+  getWorldChannelMessages: (limit = 50) =>
+    api.get(`/rooms/world/messages?limit=${limit}`),
 
   // Matrix联邦相关
   discoverServers: () => api.get('/matrix/servers'),

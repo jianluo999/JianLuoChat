@@ -1,6 +1,7 @@
 package com.jianluochat.service;
 
 import com.jianluochat.entity.Message;
+import com.jianluochat.entity.MessageBuilder;
 import com.jianluochat.entity.Room;
 import com.jianluochat.entity.RoomMember;
 import com.jianluochat.entity.User;
@@ -41,33 +42,68 @@ public class MessageService {
         if (!canUserSendMessage(room, sender)) {
             throw new RuntimeException("用户无权在此房间发送消息");
         }
-        
-        Message message = new Message(room, sender, content, type);
+
+        Message message = MessageBuilder.builder()
+            .room(room)
+            .sender(sender)
+            .content(content)
+            .type(type)
+            .build();
+
         Message savedMessage = messageRepository.save(message);
-        
+
         logger.info("Message sent in room {} by user {}", room.getRoomCode(), sender.getUsername());
-        
+
+        return savedMessage;
+    }
+
+    /**
+     * 发送格式化消息
+     */
+    public Message sendFormattedMessage(Room room, User sender, String content, String formattedContent, Message.MessageType type) {
+        // 检查用户是否可以在房间发送消息
+        if (!canUserSendMessage(room, sender)) {
+            throw new RuntimeException("用户无权在此房间发送消息");
+        }
+
+        Message message = MessageBuilder.builder()
+            .room(room)
+            .sender(sender)
+            .content(content)
+            .formattedContent(formattedContent)
+            .type(type)
+            .build();
+
+        Message savedMessage = messageRepository.save(message);
+
+        logger.info("Formatted message sent in room {} by user {}", room.getRoomCode(), sender.getUsername());
+
         return savedMessage;
     }
 
     /**
      * 发送文件消息
      */
-    public Message sendFileMessage(Room room, User sender, String content, String fileUrl, 
+    public Message sendFileMessage(Room room, User sender, String content, String fileUrl,
                                  String fileName, Long fileSize) {
         if (!canUserSendMessage(room, sender)) {
             throw new RuntimeException("用户无权在此房间发送消息");
         }
-        
-        Message message = new Message(room, sender, content, Message.MessageType.FILE);
-        message.setFileUrl(fileUrl);
-        message.setFileName(fileName);
-        message.setFileSize(fileSize);
-        
+
+        Message message = MessageBuilder.builder()
+            .room(room)
+            .sender(sender)
+            .content(content)
+            .fileUrl(fileUrl)
+            .fileName(fileName)
+            .fileSize(fileSize)
+            .type(Message.MessageType.FILE)
+            .build();
+
         Message savedMessage = messageRepository.save(message);
-        
+
         logger.info("File message sent in room {} by user {}", room.getRoomCode(), sender.getUsername());
-        
+
         return savedMessage;
     }
 
