@@ -78,6 +78,9 @@
           <button class="action-btn" @click="createGroupChat" title="创建群聊">
             👥
           </button>
+          <button class="action-btn" @click="showJoinRoomDialog" title="加入房间">
+            ➕
+          </button>
           <button class="action-btn" @click="toggleExplore" title="探索">
             🔍
           </button>
@@ -235,11 +238,46 @@
     />
 
     <!-- 创建群聊对话框 -->
-    <CreateGroupChatDialog 
-      v-if="showCreateGroup" 
+    <CreateGroupChatDialog
+      v-if="showCreateGroup"
       @close="showCreateGroup = false"
       @create-group="handleCreateGroup"
     />
+
+    <!-- 加入房间对话框 -->
+    <div v-if="showJoinRoom" class="modal-overlay" @click="closeJoinRoomDialog">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>🏠 加入房间</h3>
+          <button class="close-btn" @click="closeJoinRoomDialog">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="input-group">
+            <label>房间地址</label>
+            <input
+              v-model="joinRoomInput"
+              type="text"
+              placeholder="输入房间别名或ID，如：#friesport:mozilla.org"
+              class="room-input"
+              @keyup.enter="handleJoinRoom"
+            />
+            <div class="input-hint">
+              支持房间别名（#roomname:server.org）或房间ID（!roomid:server.org）
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="closeJoinRoomDialog">取消</button>
+          <button
+            class="join-btn primary"
+            @click="handleJoinRoom"
+            :disabled="!joinRoomInput.trim() || isJoiningRoom"
+          >
+            {{ isJoiningRoom ? '加入中...' : '加入房间' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -262,6 +300,9 @@ const publicRoomSearchQuery = ref('')
 const showStartDM = ref(false)
 const showCreateGroup = ref(false)
 const showExplore = ref(false)
+const showJoinRoom = ref(false)
+const joinRoomInput = ref('')
+const isJoiningRoom = ref(false)
 const publicRooms = ref<any[]>([])
 const isLoadingPublicRooms = ref(false)
 
@@ -349,6 +390,53 @@ const startDirectMessage = () => {
 
 const createGroupChat = () => {
   showCreateGroup.value = true
+}
+
+// 加入房间相关方法
+const showJoinRoomDialog = () => {
+  showJoinRoom.value = true
+  joinRoomInput.value = '' // 清空输入框
+}
+
+const closeJoinRoomDialog = () => {
+  showJoinRoom.value = false
+  joinRoomInput.value = ''
+  isJoiningRoom.value = false
+}
+
+const handleJoinRoom = async () => {
+  const roomAddress = joinRoomInput.value.trim()
+  if (!roomAddress) return
+
+  if (!matrixStore.matrixClient) {
+    alert('Matrix客户端未初始化，无法加入房间')
+    return
+  }
+
+  isJoiningRoom.value = true
+
+  try {
+    console.log(`🏠 尝试加入房间: ${roomAddress}`)
+
+    // 使用Matrix客户端加入房间
+    await matrixStore.matrixClient.joinRoom(roomAddress)
+    console.log(`✅ 成功加入房间: ${roomAddress}`)
+
+    // 刷新房间列表
+    await matrixStore.fetchMatrixRooms()
+
+    // 关闭对话框
+    closeJoinRoomDialog()
+
+    // 显示成功消息
+    alert(`✅ 成功加入房间: ${roomAddress}`)
+
+  } catch (error: any) {
+    console.error('❌ 加入房间失败:', error)
+    alert(`❌ 加入房间失败: ${error.message || '未知错误'}`)
+  } finally {
+    isJoiningRoom.value = false
+  }
 }
 
 const refreshRooms = async () => {
@@ -1298,6 +1386,143 @@ const initializeMatrixInBackground = async () => {
   cursor: pointer;
   font-size: 12px;
   transition: all 0.2s ease;
+}
+
+/* 加入房间对话框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #1e1e1e;
+  border: 2px solid #00ff41;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #333;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #00ff41;
+  font-size: 18px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn:hover {
+  color: #ff4444;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.input-group {
+  margin-bottom: 16px;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #00ff41;
+  font-weight: 500;
+}
+
+.room-input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: #fff;
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+}
+
+.room-input:focus {
+  outline: none;
+  border-color: #00ff41;
+  box-shadow: 0 0 5px rgba(0, 255, 65, 0.3);
+}
+
+.input-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #999;
+  line-height: 1.4;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #333;
+}
+
+.cancel-btn {
+  padding: 8px 16px;
+  border: 1px solid #666;
+  background: transparent;
+  color: #999;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.cancel-btn:hover {
+  background: #333;
+  color: #fff;
+}
+
+.join-btn.primary {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #66BB6A, #4CAF50);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.join-btn.primary:disabled {
+  background: #666;
+  cursor: not-allowed;
+}
+
+.join-btn.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #4CAF50, #388E3C);
 }
 
 .join-btn:hover {
