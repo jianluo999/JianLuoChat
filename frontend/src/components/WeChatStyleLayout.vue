@@ -1268,45 +1268,44 @@ onMounted(async () => {
   background: linear-gradient(135deg, #4CAF50, #45a049);
 }
 
-/* 底部退出按钮 */
+/* 底部退出按钮 - 微信风格 */
 .chat-list-footer {
-  padding: 15px 20px;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-  background: rgba(45, 90, 39, 0.05);
+  padding: 10px 15px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(248, 248, 248, 0.95);
   position: relative;
   z-index: 5;
 }
 
 .logout-btn {
   width: 100%;
-  padding: 10px 15px;
+  padding: 8px 12px;
   border: none;
-  background: linear-gradient(135deg, #d32f2f, #c62828);
-  color: white;
-  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  color: #666;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 400;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   transition: all 0.2s ease;
   position: relative;
   z-index: 10;
 }
 
 .logout-btn:hover {
-  background: linear-gradient(135deg, #c62828, #b71c1c);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(211, 47, 47, 0.3);
+  background: rgba(0, 0, 0, 0.08);
+  color: #333;
 }
 
 .logout-icon {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .logout-text {
-  font-size: 14px;
+  font-size: 13px;
 }
 </style>

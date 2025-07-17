@@ -238,34 +238,37 @@ watch(() => messages.value, () => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: rgba(0, 0, 0, 0.95);
-  font-family: 'Share Tech Mono', monospace;
+  background: #f5f5f5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
 .matrix-room-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 15px 20px;
-  border-bottom: 2px solid #00ff00;
-  background: rgba(0, 255, 0, 0.05);
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .room-name {
-  color: #00ff00;
-  font-weight: bold;
+  color: #333;
+  font-weight: 500;
   font-size: 16px;
 }
 
 .room-id {
-  color: #666;
+  color: #999;
   font-size: 12px;
+  margin-top: 2px;
 }
 
 .matrix-messages-container {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 16px;
+  background: #f5f5f5;
 }
 
 .no-room-selected {
@@ -274,7 +277,8 @@ watch(() => messages.value, () => {
   justify-content: center;
   height: 100%;
   text-align: center;
-  color: #666;
+  color: #999;
+  background: #f5f5f5;
 }
 
 .loading-messages {
@@ -283,7 +287,8 @@ watch(() => messages.value, () => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #00ff00;
+  color: #999;
+  background: #f5f5f5;
 }
 
 .loading-spinner {
@@ -296,35 +301,36 @@ watch(() => messages.value, () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
-  color: #666;
+  padding: 60px 20px;
+  color: #999;
   text-align: center;
 }
 
 .empty-icon {
   font-size: 48px;
   margin-bottom: 16px;
-  opacity: 0.5;
+  opacity: 0.3;
 }
 
 .empty-title {
-  font-size: 18px;
-  font-weight: bold;
+  font-size: 16px;
+  font-weight: 500;
   margin-bottom: 8px;
-  color: #00ff00;
+  color: #666;
 }
 
 .empty-desc {
   font-size: 14px;
   opacity: 0.7;
+  color: #999;
 }
 
 .message-item {
   display: flex;
-  margin-bottom: 12px;
-  padding: 8px 16px;
+  margin-bottom: 16px;
+  padding: 0 16px;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
 }
 
 .message-item.own-message {
@@ -338,8 +344,8 @@ watch(() => messages.value, () => {
 
 .message-item.system-message {
   justify-content: center;
-  background: rgba(255, 255, 0, 0.05);
-  border-radius: 8px;
+  background: transparent;
+  border-radius: 0;
   margin: 8px 0;
   padding: 8px;
 }
@@ -353,15 +359,14 @@ watch(() => messages.value, () => {
 .avatar-placeholder {
   width: 40px;
   height: 40px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #66BB6A, #4CAF50);
+  border-radius: 4px;
+  background: #ddd;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: #666;
   font-size: 14px;
-  font-weight: bold;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  font-weight: 400;
 }
 
 .message-main {
@@ -379,13 +384,14 @@ watch(() => messages.value, () => {
 }
 
 .sender-name {
-  color: #00ff00;
-  font-weight: bold;
-  font-size: 14px;
+  color: #576b95;
+  font-weight: 500;
+  font-size: 13px;
+  margin-bottom: 4px;
 }
 
 .message-timestamp {
-  color: #666;
+  color: #999;
   font-size: 11px;
 }
 
@@ -406,46 +412,48 @@ watch(() => messages.value, () => {
 .message-content {
   display: flex;
   flex-direction: column;
-  max-width: 60%;
+  max-width: 70%;
   word-wrap: break-word;
 }
 
 .message-bubble {
-  background: #f5f5f5;
-  padding: 10px 14px;
-  border-radius: 18px;
+  background: #ffffff;
+  padding: 8px 12px;
+  border-radius: 8px;
   position: relative;
   margin: 2px 0;
   line-height: 1.4;
   font-size: 14px;
   color: #333;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .own-message .message-bubble {
-  background: linear-gradient(135deg, #95d475, #7bc96f);
-  color: white;
+  background: #95ec69;
+  color: #333;
   margin-left: auto;
+  border: 1px solid rgba(149, 236, 105, 0.3);
 }
 
 .message-bubble::before {
   content: '';
   position: absolute;
-  top: 12px;
+  top: 10px;
   width: 0;
   height: 0;
-  border: 6px solid transparent;
+  border: 5px solid transparent;
 }
 
 .message-bubble::before {
-  left: -12px;
-  border-right-color: #f5f5f5;
+  left: -10px;
+  border-right-color: #ffffff;
 }
 
 .own-message .message-bubble::before {
   left: auto;
-  right: -12px;
-  border-left-color: #95d475;
+  right: -10px;
+  border-left-color: #95ec69;
   border-right-color: transparent;
 }
 

@@ -407,16 +407,17 @@ onUnmounted(() => {
 
 <style scoped>
 .message-input-container {
-  background: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid #3a4a5c;
+  background: #ffffff;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
 .reply-preview {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
-  background: rgba(100, 181, 246, 0.1);
-  border-bottom: 1px solid rgba(100, 181, 246, 0.3);
+  padding: 8px 16px;
+  background: #f0f0f0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .reply-content {
@@ -426,24 +427,24 @@ onUnmounted(() => {
 .reply-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: 6px;
+  margin-bottom: 2px;
 }
 
 .reply-icon {
-  color: #64b5f6;
-  font-size: 1.2rem;
+  color: #576b95;
+  font-size: 12px;
 }
 
 .reply-user {
-  color: #64b5f6;
-  font-weight: 600;
-  font-size: 0.9rem;
+  color: #576b95;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .reply-message {
-  color: #b0bec5;
-  font-size: 0.85rem;
+  color: #999;
+  font-size: 12px;
   max-width: 300px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -453,45 +454,45 @@ onUnmounted(() => {
 .cancel-reply {
   background: none;
   border: none;
-  color: #e0e6ed;
-  font-size: 1.2rem;
+  color: #666;
+  font-size: 16px;
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
-  transition: background 0.3s ease;
+  transition: background 0.2s ease;
 }
 
 .cancel-reply:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .input-area {
-  padding: 16px;
+  padding: 12px 16px;
 }
 
 .input-toolbar {
-  display: flex;
+  display: none; /* 隐藏工具栏，保持简洁的微信风格 */
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .toolbar-btn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: none;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
-  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  font-size: 14px;
 }
 
 .toolbar-btn:hover,
 .toolbar-btn.active {
-  background: rgba(100, 181, 246, 0.2);
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .toolbar-btn svg {
@@ -581,24 +582,25 @@ onUnmounted(() => {
 .input-wrapper {
   display: flex;
   align-items: flex-end;
-  gap: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  padding: 12px;
+  gap: 8px;
+  background: #f5f5f5;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  padding: 8px 12px;
 }
 
 .message-textarea {
   flex: 1;
   background: none;
   border: none;
-  color: #e0e6ed;
-  font-size: 1rem;
+  color: #333;
+  font-size: 14px;
   line-height: 1.4;
   resize: none;
   min-height: 20px;
   max-height: 120px;
   overflow-y: auto;
+  font-family: inherit;
 }
 
 .message-textarea:focus {
@@ -606,7 +608,7 @@ onUnmounted(() => {
 }
 
 .message-textarea::placeholder {
-  color: #666;
+  color: #999;
 }
 
 .input-actions {
@@ -615,33 +617,31 @@ onUnmounted(() => {
 }
 
 .send-button {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border: none;
-  background: #64b5f6;
-  border-radius: 8px;
+  background: #07c160;
+  border-radius: 4px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .send-button:hover:not(:disabled) {
-  background: #42a5f5;
-  transform: scale(1.05);
+  background: #06ad56;
 }
 
 .send-button:disabled {
-  background: #555;
+  background: #ddd;
   cursor: not-allowed;
-  transform: none;
 }
 
 .send-button svg {
-  width: 20px;
-  height: 20px;
-  fill: #1a1a2e;
+  width: 16px;
+  height: 16px;
+  fill: #ffffff;
 }
 
 .sending-spinner {
@@ -662,31 +662,31 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 8px;
-  font-size: 0.8rem;
+  margin-top: 6px;
+  font-size: 12px;
 }
 
 .typing-indicator {
-  color: #64b5f6;
+  color: #999;
 }
 
 .typing-users {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .message-info {
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: #b0bec5;
+  gap: 8px;
+  color: #999;
 }
 
 .encryption-status {
-  color: #ffa726;
+  color: #07c160;
 }
 
 .char-count.warning {
-  color: #f44336;
+  color: #fa5151;
 }
 
 .file-upload-preview {
