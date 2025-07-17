@@ -201,11 +201,11 @@ JianLuoChat embraces a **retro-futuristic aesthetic** inspired by classic termin
 JianLuoChat is designed to work seamlessly with Element and other Matrix clients:
 
 - **✅ Shared Rooms**: Join rooms created by Element users
-- **✅ Real-time Messaging**: Send and receive messages with Element users instantly
+- **✅ Real-time Messaging**: Send and receive messages with Element users instantly (non-encrypted rooms)
 - **✅ User Discovery**: Find and communicate with users from any Matrix client
 - **✅ Federation Support**: Connect across different Matrix homeservers
 - **✅ Protocol Compliance**: Full Matrix Client-Server API implementation
-- **🚧 E2E Encryption**: End-to-end encryption compatibility (in development)
+- **⚠️ E2E Encryption**: Encrypted rooms cannot send messages yet (in development)
 - **🚧 File Sharing**: File transfer with Element users (in development)
 - **🚧 Voice/Video**: WebRTC calls with Element users (planned)
 
@@ -320,11 +320,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 简络聊设计为与Element和其他Matrix客户端无缝协作：
 
 - **✅ 共享房间**：加入Element用户创建的房间
-- **✅ 实时消息**：与Element用户即时收发消息
+- **✅ 实时消息**：与Element用户即时收发消息（非加密房间）
 - **✅ 用户发现**：查找并与任何Matrix客户端的用户通信
 - **✅ 联邦支持**：跨不同Matrix家庭服务器连接
 - **✅ 协议合规**：完整的Matrix Client-Server API实现
-- **🚧 端到端加密**：端到端加密兼容性（开发中）
+- **⚠️ 端到端加密**：加密房间暂不支持发送消息（开发中）
 - **🚧 文件共享**：与Element用户文件传输（开发中）
 - **🚧 语音/视频**：与Element用户WebRTC通话（计划中）
 

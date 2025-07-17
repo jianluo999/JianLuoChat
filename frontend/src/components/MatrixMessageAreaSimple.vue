@@ -29,10 +29,10 @@
       <div v-else class="messages-list">
         <!-- 空消息状态 -->
         <div v-if="messages.length === 0" class="empty-messages">
-          <div class="empty-icon">💬</div>
+          <div class="empty-icon">{{ getEmptyStateIcon() }}</div>
           <div class="empty-text">
-            <div class="empty-title">还没有消息</div>
-            <div class="empty-desc">成为第一个在这个房间发言的人吧！</div>
+            <div class="empty-title">{{ getEmptyStateTitle() }}</div>
+            <div class="empty-desc">{{ getEmptyStateDesc() }}</div>
           </div>
         </div>
         
@@ -96,11 +96,16 @@
 
     <!-- Matrix消息输入 -->
     <MatrixMessageInput
-      v-if="currentRoom"
+      v-if="currentRoom && canSendMessages"
       :room-id="currentRoom.id"
       :placeholder="`发送消息到 ${currentRoom.name}...`"
       @send-message="handleSendMessage"
     />
+
+    <!-- 无发送权限提示 -->
+    <div v-else-if="currentRoom && !canSendMessages" class="no-send-permission">
+      🔒 您在此房间只有查看权限，无法发送消息
+    </div>
   </div>
 </template>
 
@@ -199,10 +204,89 @@ const handleSendMessage = async (content: string) => {
     nextTick(() => {
       scrollToBottom()
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to send message:', error)
+
+    // 显示用户友好的错误提示
+    const errorMessage = error.message || '发送消息失败'
+
+    // 可以在这里添加Toast通知或其他UI反馈
+    // 暂时使用alert作为临时解决方案
+    if (errorMessage.includes('加密')) {
+      alert('⚠️ 加密房间暂不支持\n\n' + errorMessage)
+    } else {
+      alert('❌ 发送失败: ' + errorMessage)
+    }
   }
 }
+
+// 根据房间状态获取空状态图标
+const getEmptyStateIcon = () => {
+  if (!currentRoom.value) return '💬'
+
+  // 检查房间权限
+  const matrixClient = matrixStore.matrixClient
+  if (matrixClient) {
+    const room = matrixClient.getRoom(currentRoom.value.id)
+    if (room) {
+      const canSend = room.maySendMessage()
+      if (!canSend) return '🔒'
+    }
+  }
+
+  return '💬'
+}
+
+// 根据房间状态获取空状态标题
+const getEmptyStateTitle = () => {
+  if (!currentRoom.value) return '还没有消息'
+
+  // 检查房间权限
+  const matrixClient = matrixStore.matrixClient
+  if (matrixClient) {
+    const room = matrixClient.getRoom(currentRoom.value.id)
+    if (room) {
+      const canSend = room.maySendMessage()
+      if (!canSend) return '只读房间'
+    }
+  }
+
+  return '还没有消息'
+}
+
+// 根据房间状态获取空状态描述
+const getEmptyStateDesc = () => {
+  if (!currentRoom.value) return '成为第一个在这个房间发言的人吧！'
+
+  // 检查房间权限
+  const matrixClient = matrixStore.matrixClient
+  if (matrixClient) {
+    const room = matrixClient.getRoom(currentRoom.value.id)
+    if (room) {
+      const canSend = room.maySendMessage()
+      if (!canSend) {
+        return '您在此房间只有查看权限，无法发送消息'
+      }
+    }
+  }
+
+  return '成为第一个在这个房间发言的人吧！'
+}
+
+// 检查是否可以发送消息
+const canSendMessages = computed(() => {
+  if (!currentRoom.value) return false
+
+  const matrixClient = matrixStore.matrixClient
+  if (matrixClient) {
+    const room = matrixClient.getRoom(currentRoom.value.id)
+    if (room) {
+      return room.maySendMessage()
+    }
+  }
+
+  return true // 默认允许发送
+})
 
 // 监听房间变化，加载消息
 watch(() => props.roomId, async (newRoomId, oldRoomId) => {
@@ -323,6 +407,17 @@ watch(() => messages.value, () => {
   font-size: 14px;
   opacity: 0.7;
   color: #999;
+}
+
+.no-send-permission {
+  padding: 16px;
+  text-align: center;
+  background: rgba(255, 193, 7, 0.1);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: 8px;
+  color: #856404;
+  font-size: 14px;
+  margin: 16px;
 }
 
 .message-item {

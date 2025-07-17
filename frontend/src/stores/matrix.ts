@@ -334,7 +334,11 @@ export const useMatrixStore = defineStore('matrix', () => {
         accessToken: accessToken,
         userId: userId,
         deviceId: 'jianluochat_web_client',
-        timelineSupport: true
+        timelineSupport: true,
+        // 尝试启用加密支持
+        // cryptoStore: 'indexeddb',  // 暂时注释掉，使用initRustCrypto代替
+        // cryptoCallbacks: {},
+        // verificationMethods: []
       })
 
       // 设置客户端
@@ -365,6 +369,37 @@ export const useMatrixStore = defineStore('matrix', () => {
           console.log('⚠️ 客户端已经在运行，先停止')
           client.stopClient()
           await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+
+        // 初始化加密支持
+        console.log('🔐 初始化端到端加密支持...')
+        try {
+          // 检查客户端是否有加密方法
+          console.log('🔍 检查可用的加密方法:', {
+            initRustCrypto: typeof (client as any).initRustCrypto,
+            getCrypto: typeof client.getCrypto
+          })
+
+          // 尝试不同的加密初始化方法
+          if (typeof (client as any).initRustCrypto === 'function') {
+            await (client as any).initRustCrypto({
+              useIndexedDB: true,
+              cryptoDatabasePrefix: 'jianluochat-crypto'
+            })
+            console.log('✅ Rust加密初始化成功')
+          } else {
+            console.warn('⚠️ 客户端不支持Rust加密初始化方法')
+            // 尝试检查是否已经有加密支持
+            const crypto = client.getCrypto()
+            if (crypto) {
+              console.log('✅ 客户端已有加密支持')
+            } else {
+              console.warn('⚠️ 客户端没有加密支持')
+            }
+          }
+        } catch (cryptoError) {
+          console.warn('⚠️ 加密初始化失败，但继续启动客户端:', cryptoError)
+          // 不要因为加密失败而停止整个流程
         }
 
         await client.startClient({
@@ -455,6 +490,46 @@ export const useMatrixStore = defineStore('matrix', () => {
             }
           }
         }, 5000)
+      })
+
+      // 设置Matrix事件监听器
+      console.log('🎧 设置Matrix事件监听器...')
+
+      // 监听新消息事件
+      client.on('Room.timeline' as any, (event: any, room: any, toStartOfTimeline: boolean) => {
+        if (toStartOfTimeline) return // 忽略历史消息
+
+        if (event.getType() === 'm.room.message') {
+          console.log('📨 收到新消息事件:', event.getId(), 'in room:', room.roomId)
+
+          const content = event.getContent()?.body || event.getContent()?.formatted_body || ''
+          const newMessage: MatrixMessage = {
+            id: event.getId(),
+            roomId: room.roomId,
+            content,
+            sender: event.getSender(),
+            senderName: event.getSender(),
+            timestamp: event.getTs(),
+            type: event.getType(),
+            eventId: event.getId(),
+            encrypted: !!event.getContent()?.algorithm,
+            status: 'sent' as const
+          }
+
+          // 添加到消息列表
+          const roomMessages = messages.value.get(room.roomId) || []
+          const existingMessage = roomMessages.find(m => m.id === newMessage.id)
+          if (!existingMessage) {
+            messages.value.set(room.roomId, [...roomMessages, newMessage])
+            console.log('✅ 新消息已添加到本地列表')
+
+            // 更新房间最后消息
+            const targetRoom = rooms.value.find(r => r.id === room.roomId)
+            if (targetRoom) {
+              targetRoom.lastMessage = newMessage
+            }
+          }
+        }
       })
 
       // 最终状态检查
@@ -880,7 +955,7 @@ export const useMatrixStore = defineStore('matrix', () => {
 
         // 如果房间不存在，可能是刚创建的房间，等待同步
         if (!room) {
-          console.log(`房间 ${roomId} 暂时不存在，等待同步...`)
+          console.log(`❌ 房间 ${roomId} 暂时不存在，等待同步...`)
 
           // 等待一段时间让Matrix客户端同步新房间
           await new Promise(resolve => setTimeout(resolve, 2000))
@@ -900,22 +975,66 @@ export const useMatrixStore = defineStore('matrix', () => {
           }
 
           if (!room) {
-            console.warn(`房间 ${roomId} 最终未找到`)
+            console.warn(`❌ 房间 ${roomId} 最终未找到`)
             return []
           }
         }
 
+        // 检查房间权限和状态
+        console.log(`🏠 房间信息:`, {
+          roomId,
+          name: room.name,
+          myMembership: room.getMyMembership(),
+          canSendMessage: room.maySendMessage(),
+          isEncrypted: room.hasEncryptionStateEvent(),
+          memberCount: room.getJoinedMemberCount(),
+          visibility: room.getJoinRule()
+        })
+
         // 获取房间的时间线事件
         const timeline = room.getLiveTimeline()
-        const events = timeline.getEvents()
+        let events = timeline.getEvents()
+
+        // 如果事件很少，尝试加载更多历史消息
+        if (events.length < 10) {
+          console.log(`📚 当前事件较少(${events.length}条)，尝试加载更多历史消息...`)
+          try {
+            await matrixClient.value.scrollback(room, 30)
+            events = timeline.getEvents()
+            console.log(`📚 加载历史消息后，共有 ${events.length} 条事件`)
+          } catch (scrollError) {
+            console.warn('加载历史消息失败:', scrollError)
+          }
+        }
 
         if (events && events.length > 0) {
           console.log(`📨 获取到 ${events.length} 条事件`)
 
-          roomMessages = events
-            .filter((event: any) => event.getType() === 'm.room.message')
+          // 调试：显示所有事件类型
+          const eventTypes = events.map((event: any) => event.getType())
+          console.log(`🔍 事件类型分布:`, eventTypes)
+
+          // 过滤消息事件
+          const messageEvents = events.filter((event: any) => event.getType() === 'm.room.message')
+          console.log(`💬 消息事件数量: ${messageEvents.length}`)
+
+          // 调试：显示被过滤掉的事件
+          const nonMessageEvents = events.filter((event: any) => event.getType() !== 'm.room.message')
+          if (nonMessageEvents.length > 0) {
+            console.log(`🚫 非消息事件:`, nonMessageEvents.map((e: any) => e.getType()))
+          }
+
+          roomMessages = messageEvents
             .map((event: any) => {
               const content = event.getContent()?.body || event.getContent()?.formatted_body || ''
+              console.log(`📝 处理消息事件:`, {
+                id: event.getId(),
+                type: event.getType(),
+                sender: event.getSender(),
+                content: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
+                timestamp: new Date(event.getTs()).toLocaleString()
+              })
+
               return {
                 id: event.getId(),
                 roomId,
@@ -979,9 +1098,27 @@ export const useMatrixStore = defineStore('matrix', () => {
 
       // 尝试真实的Matrix消息发送
       if (matrixClient.value) {
+        // 检查房间是否加密
+        const matrixRoom = matrixClient.value.getRoom(roomId)
+        const isEncrypted = matrixRoom?.hasEncryptionStateEvent()
+
+        if (isEncrypted) {
+          console.log('🔐 检测到加密房间，检查加密支持...')
+          const crypto = matrixClient.value.getCrypto()
+          if (!crypto) {
+            console.warn('⚠️ 房间需要加密但客户端不支持加密')
+            throw new Error('🔐 此房间启用了端到端加密，当前版本暂不支持。\n\n💡 建议：\n• 选择非加密房间进行聊天\n• 或在Element等客户端中关闭房间加密\n• 加密功能正在开发中，敬请期待！')
+          } else {
+            console.log('✅ 客户端支持加密，尝试发送加密消息')
+          }
+        }
+
         // 使用Matrix客户端发送消息
+        console.log(`📤 发送消息到房间 ${roomId} (加密: ${isEncrypted ? '是' : '否'})`)
+
+        // 先发送消息，成功后再添加到本地列表
         const response = await matrixClient.value.sendTextMessage(roomId, content)
-        console.log('Matrix client send message response:', response)
+        console.log('✅ Matrix消息发送成功:', response)
 
         // 创建本地消息对象
         const newMessage: MatrixMessage = {
@@ -996,14 +1133,18 @@ export const useMatrixStore = defineStore('matrix', () => {
           status: 'sent'
         }
 
-        // 添加到本地消息列表
+        // 只有发送成功后才添加到本地消息列表
         const roomMessages = messages.value.get(roomId) || []
-        messages.value.set(roomId, [...roomMessages, newMessage])
+        const existingMessage = roomMessages.find(m => m.id === newMessage.id)
+        if (!existingMessage) {
+          messages.value.set(roomId, [...roomMessages, newMessage])
+          console.log('✅ 消息已添加到本地列表')
+        }
 
         // 更新房间最后消息
-        const room = rooms.value.find(r => r.id === roomId)
-        if (room) {
-          room.lastMessage = newMessage
+        const targetRoom = rooms.value.find(r => r.id === roomId)
+        if (targetRoom) {
+          targetRoom.lastMessage = newMessage
         }
 
         return newMessage
@@ -1040,16 +1181,23 @@ export const useMatrixStore = defineStore('matrix', () => {
         messages.value.set(roomId, [...roomMessages, newMessage])
 
         // 更新房间最后消息
-        const room = roomId === 'world' ? worldChannel.value : rooms.value.find(r => r.id === roomId)
-        if (room) {
-          room.lastMessage = newMessage
+        const targetRoom = roomId === 'world' ? worldChannel.value : rooms.value.find(r => r.id === roomId)
+        if (targetRoom) {
+          targetRoom.lastMessage = newMessage
         }
 
         return newMessage
       }
     } catch (err: any) {
       error.value = 'Failed to send Matrix message'
-      console.error('Error sending Matrix message:', err)
+      console.error('❌ Matrix消息发送失败:', err)
+
+      // 如果是加密错误，提供更友好的错误信息
+      if (err.message && err.message.includes('encryption')) {
+        const friendlyError = new Error('🔐 此房间启用了端到端加密，当前版本暂不支持。\n\n💡 建议：\n• 选择非加密房间进行聊天\n• 或在Element等客户端中关闭房间加密\n• 加密功能正在开发中，敬请期待！')
+        throw friendlyError
+      }
+
       throw err
     }
   }
