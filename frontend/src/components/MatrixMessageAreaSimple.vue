@@ -11,7 +11,7 @@
     </div>
 
     <!-- Matrix消息容器 -->
-    <div class="matrix-messages-container" ref="messagesContainer">
+    <div class="matrix-messages-container" ref="messagesContainer" @scroll="handleScroll">
       <div v-if="!currentRoom" class="no-room-selected">
         <div class="welcome-content">
           <div class="welcome-message">
@@ -134,6 +134,8 @@ const currentRoom = computed(() => {
 
 const messages = computed(() => {
   if (!props.roomId) return []
+  // 监听messageUpdateTrigger以确保响应式更新
+  matrixStore.messageUpdateTrigger
   return matrixStore.messages.get(props.roomId) || []
 })
 
@@ -193,6 +195,51 @@ const sanitizeHtml = (html: string): string => {
 const scrollToBottom = () => {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+  }
+}
+
+// 加载更多历史消息
+const loadMoreMessages = async () => {
+  if (!currentRoom.value || loading.value) return
+
+  try {
+    loading.value = true
+    console.log('📚 加载更多历史消息...')
+
+    // 记录当前滚动位置
+    const container = messagesContainer.value
+    if (!container) return
+
+    const oldScrollHeight = container.scrollHeight
+    const oldScrollTop = container.scrollTop
+
+    // 调用store中的加载历史消息方法
+    await matrixStore.loadMoreHistoryMessages(currentRoom.value.id)
+
+    // 恢复滚动位置，保持用户当前查看的位置
+    nextTick(() => {
+      if (container) {
+        const newScrollHeight = container.scrollHeight
+        const heightDifference = newScrollHeight - oldScrollHeight
+        container.scrollTop = oldScrollTop + heightDifference
+      }
+    })
+
+  } catch (error) {
+    console.error('加载历史消息失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 处理滚动事件
+const handleScroll = (event: Event) => {
+  const container = event.target as HTMLElement
+  if (!container) return
+
+  // 如果滚动到顶部附近（距离顶部小于100px），加载更多历史消息
+  if (container.scrollTop < 100) {
+    loadMoreMessages()
   }
 }
 
@@ -309,10 +356,19 @@ watch(() => props.roomId, async (newRoomId, oldRoomId) => {
   }
 }, { immediate: true })
 
-// 监听消息变化，自动滚动到底部
-watch(() => messages.value, () => {
+// 监听消息变化，只有在用户在底部时才自动滚动到底部
+watch(() => messages.value, (newMessages, oldMessages) => {
   nextTick(() => {
-    scrollToBottom()
+    const container = messagesContainer.value
+    if (!container) return
+
+    // 检查用户是否在底部附近（距离底部小于100px）
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100
+
+    // 如果是新消息（不是历史消息）且用户在底部，则滚动到底部
+    if (isNearBottom && newMessages && oldMessages && newMessages.length > oldMessages.length) {
+      scrollToBottom()
+    }
   })
 }, { deep: true })
 </script>

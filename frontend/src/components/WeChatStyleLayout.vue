@@ -90,6 +90,9 @@
           <button class="action-btn" @click="debugMatrixClient" title="调试Matrix客户端">
             🐛
           </button>
+          <button class="action-btn" @click="testFastMessage" title="测试快速消息">
+            ⚡
+          </button>
         </div>
       </div>
 
@@ -549,12 +552,44 @@ const debugMatrixClient = () => {
     })
   })
 
-  alert(`调试信息已输出到控制台。\n总房间数: ${debugInfo.totalRooms}\n已加入: ${debugInfo.joinedRooms}\n本地存储: ${debugInfo.localRoomsCount}`)
+  // 调试当前房间的消息
+  if (matrixStore.currentRoomId) {
+    console.log('🔍 当前房间消息调试:')
+    matrixStore.debugMessages(matrixStore.currentRoomId)
+  }
+
+  alert(`调试信息已输出到控制台。\n总房间数: ${debugInfo.totalRooms}\n已加入: ${debugInfo.joinedRooms}\n本地存储: ${debugInfo.localRoomsCount}\n当前房间: ${matrixStore.currentRoomId || '无'}`)
 }
 
 const handleStartDM = (_userId: string) => {
   // 处理开始私聊逻辑
   showStartDM.value = false
+}
+
+// 测试快速消息功能
+const testFastMessage = async () => {
+  if (!matrixStore.currentRoomId) {
+    alert('请先选择一个房间')
+    return
+  }
+
+  const testContent = `⚡ 快速测试消息 ${new Date().toLocaleTimeString()}`
+
+  try {
+    console.log('🚀 测试快速消息发送...')
+    const startTime = Date.now()
+
+    await matrixStore.sendMatrixMessage(matrixStore.currentRoomId, testContent)
+
+    const endTime = Date.now()
+    const duration = endTime - startTime
+
+    console.log(`✅ 快速消息测试完成，耗时: ${duration}ms`)
+    alert(`快速消息发送完成！\n耗时: ${duration}ms\n内容: ${testContent}`)
+  } catch (error) {
+    console.error('❌ 快速消息测试失败:', error)
+    alert(`快速消息测试失败: ${error}`)
+  }
 }
 
 const handleCreateGroup = async (groupData: any) => {
@@ -718,7 +753,20 @@ const joinPublicRoom = async (roomId: string) => {
 onMounted(async () => {
   console.log('🚀 WeChatStyleLayout 组件挂载开始')
 
-  // 首先尝试从localStorage恢复登录状态
+  // 首先尝试初始化Matrix状态（包括恢复房间列表）
+  try {
+    const initialized = await matrixStore.initializeMatrix()
+    console.log('📊 Matrix初始化结果:', initialized)
+
+    if (initialized) {
+      console.log('✅ Matrix已初始化，房间数量:', matrixStore.rooms.length)
+      return // 如果初始化成功，就不需要检查token了
+    }
+  } catch (error) {
+    console.error('❌ Matrix初始化失败:', error)
+  }
+
+  // 如果Matrix初始化失败，检查存储的登录信息
   const storedToken = localStorage.getItem('matrix_access_token')
   const storedLoginInfo = localStorage.getItem('matrix_login_info')
 
@@ -726,7 +774,8 @@ onMounted(async () => {
     hasToken: !!storedToken,
     hasLoginInfo: !!storedLoginInfo,
     isLoggedIn: matrixStore.isLoggedIn,
-    hasClient: !!matrixStore.matrixClient
+    hasClient: !!matrixStore.matrixClient,
+    roomsCount: matrixStore.rooms.length
   })
 
   if (storedToken && storedLoginInfo) {
@@ -734,9 +783,12 @@ onMounted(async () => {
 
     // 在后台异步初始化Matrix客户端
     initializeMatrixInBackground()
-  } else {
-    console.log('❌ 没有找到存储的登录信息，跳转到登录页面')
+  } else if (matrixStore.rooms.length === 0) {
+    // 只有在没有房间列表的情况下才跳转到登录页面
+    console.log('❌ 没有找到存储的登录信息且无房间列表，跳转到登录页面')
     router.push('/login')
+  } else {
+    console.log('📚 虽然没有登录信息，但有房间列表，允许界面显示')
   }
 })
 
