@@ -369,26 +369,27 @@ const refreshRooms = async () => {
     console.log(`📡 当前同步状态: ${syncState}`)
 
     // 如果客户端没有在同步，重新启动
-    if (syncState === 'STOPPED' || syncState === 'ERROR') {
+    if (syncState === 'STOPPED' || syncState === 'ERROR' || syncState === null) {
       console.log('🚀 重新启动Matrix客户端同步...')
       await matrixStore.matrixClient.startClient({ initialSyncLimit: 50 })
 
       // 等待同步完成
       await new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          matrixStore.matrixClient?.removeListener('sync', onSync)
+          console.warn('同步等待超时，继续刷新房间列表')
+          resolve(true)
+        }, 15000) // 增加超时时间到15秒
+
         const onSync = (state: string) => {
           console.log(`🔄 同步状态: ${state}`)
           if (state === 'PREPARED' || state === 'SYNCING') {
+            clearTimeout(timeout)
             matrixStore.matrixClient?.removeListener('sync', onSync)
             resolve(true)
           }
         }
         matrixStore.matrixClient?.on('sync', onSync)
-
-        // 10秒超时
-        setTimeout(() => {
-          matrixStore.matrixClient?.removeListener('sync', onSync)
-          resolve(true)
-        }, 10000)
       })
     }
 
@@ -397,9 +398,9 @@ const refreshRooms = async () => {
     console.log(`✅ 房间列表刷新完成，当前房间数量: ${matrixStore.rooms.length}`)
 
     if (matrixStore.rooms.length === 0) {
-      alert('没有找到房间。请确保您已在Element客户端中加入了一些房间。')
+      console.warn('没有找到房间，可能需要加入一些房间')
     } else {
-      alert(`成功刷新房间列表，找到 ${matrixStore.rooms.length} 个房间`)
+      console.log(`成功刷新房间列表，找到 ${matrixStore.rooms.length} 个房间`)
     }
 
   } catch (error: any) {
@@ -506,13 +507,23 @@ const handleCreateGroup = async (groupData: any) => {
     matrixStore.addRoom(newRoom)
     console.log(`✅ 房间 "${newRoom.name}" 已添加到房间列表`)
 
+    // 等待一下让Matrix客户端同步新房间
+    await new Promise(resolve => setTimeout(resolve, 1000))
+
+    // 尝试刷新房间列表以确保新房间被正确同步
+    try {
+      await matrixStore.fetchMatrixRooms()
+    } catch (refreshError) {
+      console.warn('刷新房间列表失败，但继续选择房间:', refreshError)
+    }
+
     // 选择新创建的房间
     selectRoom(newRoom.id)
 
     // 关闭对话框
     showCreateGroup.value = false
 
-    alert(`房间 "${groupData.name}" 创建成功！`)
+    console.log(`房间 "${groupData.name}" 创建成功！`)
 
   } catch (error: any) {
     console.error('❌ 创建房间失败:', error)

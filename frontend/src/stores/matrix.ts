@@ -327,26 +327,181 @@ export const useMatrixStore = defineStore('matrix', () => {
       // 动态导入matrix-js-sdk
       const { createClient } = await import('matrix-js-sdk')
 
+      console.log(`🔧 创建Matrix客户端: ${userId} @ ${homeserver}`)
+
       const client = createClient({
         baseUrl: `https://${homeserver}`,
         accessToken: accessToken,
         userId: userId,
         deviceId: 'jianluochat_web_client',
-        timelineSupport: true,
-        unstableClientRelationAggregation: true
+        timelineSupport: true
       })
 
       // 设置客户端
       matrixClient.value = client
       console.log('Matrix client created successfully:', client)
 
+      // 添加错误监听器
+      client.on('sync' as any, (state: string, prevState: string | null, data: any) => {
+        console.log(`🔄 Matrix同步状态变化: ${prevState} -> ${state}`, data)
+      })
+
+      client.on('error' as any, (error: any) => {
+        console.error('❌ Matrix客户端错误:', error)
+      })
+
+      // 验证客户端配置
+      console.log('🔍 验证Matrix客户端配置...')
+      console.log('- 用户ID:', client.getUserId())
+      console.log('- 服务器URL:', client.getHomeserverUrl())
+      console.log('- 设备ID:', client.getDeviceId())
+      console.log('- 访问令牌:', client.getAccessToken() ? '已设置' : '未设置')
+
       // 启动客户端
-      await client.startClient({ initialSyncLimit: 10 })
+      console.log('🚀 启动Matrix客户端...')
+      try {
+        // 先检查客户端是否已经在运行
+        if (client.clientRunning) {
+          console.log('⚠️ 客户端已经在运行，先停止')
+          client.stopClient()
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+
+        await client.startClient({
+          initialSyncLimit: 10,
+          lazyLoadMembers: true
+        })
+        console.log('✅ Matrix客户端启动命令已发送')
+
+        // 立即检查同步状态
+        const immediateState = client.getSyncState()
+        console.log('📊 启动后立即检查同步状态:', immediateState)
+
+      } catch (startError) {
+        console.error('❌ 启动Matrix客户端失败:', startError)
+        throw startError
+      }
+
+      // 等待客户端准备就绪
+      console.log('⏳ 等待Matrix客户端同步...')
+      await new Promise((resolve) => {
+        let syncEventReceived = false
+
+        const timeout = setTimeout(() => {
+          if (!syncEventReceived) {
+            console.warn('⚠️ 没有收到任何同步事件，可能存在网络或认证问题')
+            console.log('🔍 尝试手动触发同步...')
+
+            // 尝试手动触发同步
+            try {
+              const syncState = client.getSyncState()
+              console.log('📊 超时时的同步状态:', syncState)
+
+              // 如果状态是null，可能需要重新启动
+              if (syncState === null) {
+                console.log('🔄 同步状态为null，尝试重新启动客户端...')
+                client.startClient({ initialSyncLimit: 5 }).catch((err: any) => {
+                  console.error('重新启动客户端失败:', err)
+                })
+              }
+            } catch (err) {
+              console.error('手动检查同步状态失败:', err)
+            }
+          }
+
+          client.removeListener('sync' as any, onSync)
+          console.warn('⚠️ Matrix客户端同步超时，但继续执行...')
+          resolve(true)
+        }, 25000) // 增加到25秒超时
+
+        const onSync = (state: string, prevState: string | null, data: any) => {
+          syncEventReceived = true
+          console.log(`🔄 Matrix同步状态变化: ${prevState} -> ${state}`)
+          if (data && data.error) {
+            console.error('同步错误详情:', data.error)
+          }
+
+          if (state === 'PREPARED' || state === 'SYNCING') {
+            clearTimeout(timeout)
+            client.removeListener('sync' as any, onSync)
+            console.log('✅ Matrix客户端同步已准备就绪')
+            resolve(true)
+          } else if (state === 'ERROR') {
+            console.error('❌ Matrix客户端同步错误，但继续执行')
+            // 不要立即停止，给更多时间
+          }
+        }
+
+        client.on('sync' as any, onSync)
+
+        // 检查当前状态
+        const currentState = client.getSyncState()
+        console.log(`📊 当前同步状态: ${currentState}`)
+        if (currentState === 'PREPARED' || currentState === 'SYNCING') {
+          clearTimeout(timeout)
+          client.removeListener('sync' as any, onSync)
+          console.log('✅ Matrix客户端已经在同步中')
+          resolve(true)
+        }
+
+        // 额外的状态检查
+        setTimeout(() => {
+          if (!syncEventReceived) {
+            const state = client.getSyncState()
+            console.log('📊 5秒后检查同步状态:', state)
+            if (state !== null) {
+              syncEventReceived = true
+              console.log('🎉 检测到同步状态变化')
+            }
+          }
+        }, 5000)
+      })
+
+      // 最终状态检查
+      const finalState = client.getSyncState()
+      console.log('🎉 Matrix客户端创建和启动完成，最终同步状态:', finalState)
+
+      // 添加持续监控
+      const monitor = setInterval(() => {
+        const state = client.getSyncState()
+        if (state !== null) {
+          console.log('🔄 检测到同步状态变化:', state)
+          clearInterval(monitor)
+        }
+      }, 2000)
+
+      // 10秒后停止监控
+      setTimeout(() => clearInterval(monitor), 10000)
 
       return client
     } catch (error) {
       console.error('Failed to create Matrix client:', error)
       throw error
+    }
+  }
+
+  // 诊断Matrix客户端状态
+  const diagnoseMatrixClient = () => {
+    if (!matrixClient.value) {
+      console.log('❌ Matrix客户端未初始化')
+      return
+    }
+
+    const client = matrixClient.value
+    console.log('🔍 Matrix客户端诊断信息:')
+    console.log('- 用户ID:', client.getUserId())
+    console.log('- 服务器URL:', client.getHomeserverUrl())
+    console.log('- 设备ID:', client.getDeviceId())
+    console.log('- 访问令牌:', client.getAccessToken() ? '已设置' : '未设置')
+    console.log('- 客户端运行状态:', client.clientRunning)
+    console.log('- 同步状态:', client.getSyncState())
+    console.log('- 房间数量:', client.getRooms().length)
+
+    try {
+      console.log('- 存储状态:', client.store ? '已初始化' : '未初始化')
+      console.log('- 同步令牌:', client.store.getSyncToken() ? '已设置' : '未设置')
+    } catch (err) {
+      console.log('- 存储状态检查失败:', err)
     }
   }
 
@@ -526,7 +681,36 @@ export const useMatrixStore = defineStore('matrix', () => {
 
       // 如果有Matrix客户端，直接从客户端获取房间
       if (matrixClient.value) {
+        // 确保客户端已经同步
+        const syncState = matrixClient.value.getSyncState()
+        console.log(`📡 当前Matrix同步状态: ${syncState}`)
+
+        // 如果同步状态不是PREPARED或SYNCING，等待一下
+        if (syncState !== 'PREPARED' && syncState !== 'SYNCING') {
+          console.log('⏳ 等待Matrix客户端同步...')
+          await new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+              matrixClient.value?.removeListener('sync', onSync)
+              console.warn('Matrix同步等待超时，继续获取房间')
+              resolve(true)
+            }, 5000)
+
+            const onSync = (state: string) => {
+              console.log(`🔄 等待同步状态: ${state}`)
+              if (state === 'PREPARED' || state === 'SYNCING') {
+                clearTimeout(timeout)
+                matrixClient.value?.removeListener('sync', onSync)
+                resolve(true)
+              }
+            }
+
+            matrixClient.value?.on('sync', onSync)
+          })
+        }
+
         const clientRooms = matrixClient.value.getRooms()
+        console.log(`📊 从Matrix客户端获取到 ${clientRooms.length} 个房间`)
+
         const fetchedRooms = clientRooms.map((room: any) => ({
           id: room.roomId,
           name: room.name || room.roomId,
@@ -546,6 +730,7 @@ export const useMatrixStore = defineStore('matrix', () => {
         // 更新房间列表
         rooms.value.splice(0, rooms.value.length, ...fetchedRooms)
         saveRoomsToStorage()
+        console.log(`✅ 房间列表已更新，共 ${fetchedRooms.length} 个房间`)
         return rooms.value
       }
 
@@ -691,10 +876,33 @@ export const useMatrixStore = defineStore('matrix', () => {
         }
       } else {
         // 使用Matrix客户端获取房间消息历史
-        const room = matrixClient.value.getRoom(roomId)
+        let room = matrixClient.value.getRoom(roomId)
+
+        // 如果房间不存在，可能是刚创建的房间，等待同步
         if (!room) {
-          console.warn(`房间 ${roomId} 不存在`)
-          return []
+          console.log(`房间 ${roomId} 暂时不存在，等待同步...`)
+
+          // 等待一段时间让Matrix客户端同步新房间
+          await new Promise(resolve => setTimeout(resolve, 2000))
+
+          // 再次尝试获取房间
+          room = matrixClient.value.getRoom(roomId)
+
+          if (!room) {
+            console.warn(`房间 ${roomId} 仍然不存在，可能需要手动刷新`)
+            // 尝试刷新房间列表
+            try {
+              await fetchMatrixRooms()
+              room = matrixClient.value.getRoom(roomId)
+            } catch (refreshError) {
+              console.error('刷新房间列表失败:', refreshError)
+            }
+          }
+
+          if (!room) {
+            console.warn(`房间 ${roomId} 最终未找到`)
+            return []
+          }
         }
 
         // 获取房间的时间线事件
