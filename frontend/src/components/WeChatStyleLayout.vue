@@ -81,6 +81,12 @@
           <button class="action-btn" @click="toggleExplore" title="探索">
             🔍
           </button>
+          <button class="action-btn" @click="refreshRooms" title="刷新房间列表">
+            🔄
+          </button>
+          <button class="action-btn" @click="debugMatrixClient" title="调试Matrix客户端">
+            🐛
+          </button>
         </div>
       </div>
 
@@ -99,10 +105,18 @@
 
       <!-- 聊天列表 -->
       <div class="chat-list">
-        <div v-if="filteredRooms.length === 0" class="empty-chat-list">
+        <!-- 加载状态 -->
+        <div v-if="matrixStore.loading && matrixStore.rooms.length === 0" class="loading-chat-list">
+          <div class="loading-spinner"></div>
+          <div class="loading-message">正在加载聊天列表...</div>
+        </div>
+
+        <!-- 空状态 -->
+        <div v-else-if="filteredRooms.length === 0" class="empty-chat-list">
           <div class="empty-message">暂无聊天</div>
         </div>
 
+        <!-- 聊天列表 -->
         <div
           v-for="room in filteredRooms"
           :key="room.id"
@@ -230,7 +244,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMatrixStore } from '@/stores/matrix'
 import MatrixMessageAreaSimple from './MatrixMessageAreaSimple.vue'
@@ -251,48 +265,11 @@ const showExplore = ref(false)
 const publicRooms = ref<any[]>([])
 const isLoadingPublicRooms = ref(false)
 
-// 模拟数据（用于演示）
-const mockRooms = ref([
-  {
-    id: '1',
-    name: '老金的知识分享 3 群',
-    lastMessage: '适法用Claude code',
-    lastEventTimestamp: Date.now() - 1000 * 60 * 5, // 5分钟前
-    unreadCount: 3
-  },
-  {
-    id: '2',
-    name: '订阅号',
-    lastMessage: '管理员发送了一条消息',
-    lastEventTimestamp: Date.now() - 1000 * 60 * 30, // 30分钟前
-    unreadCount: 0
-  },
-  {
-    id: '3',
-    name: '文件传输助手',
-    lastMessage: '你们起来大家都程序吧',
-    lastEventTimestamp: Date.now() - 1000 * 60 * 60 * 2, // 2小时前
-    unreadCount: 0
-  },
-  {
-    id: '4',
-    name: '老金的知识分享 3 群',
-    lastMessage: '@Colin 还有自力群?',
-    lastEventTimestamp: Date.now() - 1000 * 60 * 60 * 5, // 5小时前
-    unreadCount: 1
-  },
-  {
-    id: '5',
-    name: '哈哈咨询顾问',
-    lastMessage: '2024年第7期1期间中期之...',
-    lastEventTimestamp: Date.now() - 1000 * 60 * 60 * 24, // 1天前
-    unreadCount: 0
-  }
-])
+
 
 // 计算属性
 const filteredRooms = computed(() => {
-  const rooms = matrixStore.rooms?.length > 0 ? matrixStore.rooms : mockRooms.value
+  const rooms = matrixStore.rooms || []
   if (!roomSearchQuery.value) return rooms
   return rooms.filter(room =>
     room.name.toLowerCase().includes(roomSearchQuery.value.toLowerCase())
@@ -352,8 +329,18 @@ const formatTime = (timestamp: number) => {
   }
 }
 
-const selectRoom = (roomId: string) => {
+const selectRoom = async (roomId: string) => {
   currentRoomId.value = roomId
+  matrixStore.setCurrentRoom(roomId)
+
+  // 加载房间消息
+  try {
+    console.log(`🔄 选择房间: ${roomId}，开始加载消息...`)
+    await matrixStore.fetchMatrixMessages(roomId)
+    console.log(`✅ 房间 ${roomId} 消息加载完成`)
+  } catch (error) {
+    console.error('Failed to load room messages:', error)
+  }
 }
 
 const startDirectMessage = () => {
@@ -364,14 +351,173 @@ const createGroupChat = () => {
   showCreateGroup.value = true
 }
 
-const handleStartDM = (userId: string) => {
+const refreshRooms = async () => {
+  console.log('🔄 手动刷新房间列表...')
+
+  if (!matrixStore.matrixClient) {
+    console.error('❌ Matrix客户端未初始化')
+    alert('Matrix客户端未初始化，无法刷新房间')
+    return
+  }
+
+  try {
+    // 显示加载状态
+    matrixStore.loading = true
+
+    // 检查同步状态
+    const syncState = matrixStore.matrixClient.getSyncState()
+    console.log(`📡 当前同步状态: ${syncState}`)
+
+    // 如果客户端没有在同步，重新启动
+    if (syncState === 'STOPPED' || syncState === 'ERROR') {
+      console.log('🚀 重新启动Matrix客户端同步...')
+      await matrixStore.matrixClient.startClient({ initialSyncLimit: 50 })
+
+      // 等待同步完成
+      await new Promise((resolve) => {
+        const onSync = (state: string) => {
+          console.log(`🔄 同步状态: ${state}`)
+          if (state === 'PREPARED' || state === 'SYNCING') {
+            matrixStore.matrixClient?.removeListener('sync', onSync)
+            resolve(true)
+          }
+        }
+        matrixStore.matrixClient?.on('sync', onSync)
+
+        // 10秒超时
+        setTimeout(() => {
+          matrixStore.matrixClient?.removeListener('sync', onSync)
+          resolve(true)
+        }, 10000)
+      })
+    }
+
+    // 强制重新获取房间列表 - 使用简化版本
+    await matrixStore.fetchMatrixRoomsSimple()
+    console.log(`✅ 房间列表刷新完成，当前房间数量: ${matrixStore.rooms.length}`)
+
+    if (matrixStore.rooms.length === 0) {
+      alert('没有找到房间。请确保您已在Element客户端中加入了一些房间。')
+    } else {
+      alert(`成功刷新房间列表，找到 ${matrixStore.rooms.length} 个房间`)
+    }
+
+  } catch (error: any) {
+    console.error('❌ 刷新房间列表失败:', error)
+    alert('刷新房间列表失败: ' + (error?.message || '未知错误'))
+  } finally {
+    matrixStore.loading = false
+  }
+}
+
+const debugMatrixClient = () => {
+  console.log('🐛 Matrix客户端调试信息:')
+
+  if (!matrixStore.matrixClient) {
+    console.error('❌ Matrix客户端未初始化')
+    alert('Matrix客户端未初始化')
+    return
+  }
+
+  const client = matrixStore.matrixClient
+  const debugInfo = {
+    // 基本信息
+    userId: client.getUserId(),
+    homeserver: client.getHomeserverUrl(),
+    accessToken: !!client.getAccessToken(),
+    deviceId: client.getDeviceId(),
+
+    // 同步状态
+    syncState: client.getSyncState(),
+    isStarted: client.isStarted(),
+
+    // 房间信息
+    totalRooms: client.getRooms().length,
+    joinedRooms: client.getRooms().filter((r: any) => r.getMyMembership() === 'join').length,
+    invitedRooms: client.getRooms().filter((r: any) => r.getMyMembership() === 'invite').length,
+
+    // 存储状态
+    localRoomsCount: matrixStore.rooms.length,
+
+    // 连接状态
+    connectionState: matrixStore.connection
+  }
+
+  console.log('📊 调试信息:', debugInfo)
+
+  // 显示房间详情
+  const rooms = client.getRooms()
+  console.log('🏠 所有房间详情:')
+  rooms.forEach((room: any, index: number) => {
+    console.log(`房间 ${index + 1}:`, {
+      id: room.roomId,
+      name: room.name || '无名称',
+      alias: room.getCanonicalAlias() || '无别名',
+      membership: room.getMyMembership(),
+      memberCount: room.getJoinedMemberCount(),
+      isSpace: room.isSpaceRoom(),
+      type: room.getType()
+    })
+  })
+
+  alert(`调试信息已输出到控制台。\n总房间数: ${debugInfo.totalRooms}\n已加入: ${debugInfo.joinedRooms}\n本地存储: ${debugInfo.localRoomsCount}`)
+}
+
+const handleStartDM = (_userId: string) => {
   // 处理开始私聊逻辑
   showStartDM.value = false
 }
 
-const handleCreateGroup = (groupData: any) => {
-  // 处理创建群聊逻辑
-  showCreateGroup.value = false
+const handleCreateGroup = async (groupData: any) => {
+  console.log('🏗️ 开始创建群聊:', groupData)
+
+  if (!matrixStore.matrixClient) {
+    console.error('❌ Matrix客户端未初始化')
+    alert('Matrix客户端未初始化，无法创建房间')
+    return
+  }
+
+  try {
+    console.log('📡 调用Matrix客户端创建房间...')
+
+    // 使用Matrix客户端创建房间
+    const response = await matrixStore.matrixClient.createRoom(groupData)
+    console.log('✅ 房间创建成功:', response)
+
+    // 创建本地房间对象
+    const newRoom: any = {
+      id: response.room_id,
+      name: groupData.name,
+      alias: groupData.room_alias_name ? `#${groupData.room_alias_name}:${matrixStore.matrixClient.getDomain()}` : '',
+      topic: groupData.topic || '',
+      type: groupData.visibility === 'public' ? 'public' as const : 'private' as const,
+      isPublic: groupData.visibility === 'public',
+      memberCount: 1,
+      members: [matrixStore.matrixClient.getUserId()],
+      unreadCount: 0,
+      encrypted: groupData.initial_state?.some((state: any) => state.type === 'm.room.encryption') || false,
+      joinRule: groupData.preset === 'public_chat' ? 'public' : 'invite',
+      historyVisibility: 'shared',
+      lastActivity: Date.now(),
+      avatarUrl: undefined
+    }
+
+    // 添加到房间列表
+    matrixStore.addRoom(newRoom)
+    console.log(`✅ 房间 "${newRoom.name}" 已添加到房间列表`)
+
+    // 选择新创建的房间
+    selectRoom(newRoom.id)
+
+    // 关闭对话框
+    showCreateGroup.value = false
+
+    alert(`房间 "${groupData.name}" 创建成功！`)
+
+  } catch (error: any) {
+    console.error('❌ 创建房间失败:', error)
+    alert('创建房间失败: ' + (error?.message || '未知错误'))
+  }
 }
 
 // 切换探索面板
@@ -470,8 +616,69 @@ const joinPublicRoom = async (roomId: string) => {
   }
 }
 
-onMounted(() => {
-  // 初始化逻辑
+onMounted(async () => {
+  console.log('🚀 WeChatStyleLayout 组件挂载开始')
+  console.log('📊 当前 Matrix Store 状态:', {
+    isLoggedIn: matrixStore.isLoggedIn,
+    hasClient: !!matrixStore.matrixClient,
+    roomsCount: matrixStore.rooms.length,
+    currentUser: matrixStore.currentUser,
+    userInfo: matrixStore.userInfo
+  })
+
+  // 检查登录状态
+  if (!matrixStore.isLoggedIn) {
+    console.log('❌ 用户未登录，跳转到登录页面')
+    router.push('/login')
+    return
+  }
+
+  // 等待Matrix初始化完成
+  console.log('🔄 等待Matrix初始化完成...')
+
+  // 如果Matrix客户端还未初始化，等待一下
+  let retryCount = 0
+  const maxRetries = 10
+
+  while (!matrixStore.matrixClient && retryCount < maxRetries) {
+    console.log(`⏳ 等待Matrix客户端初始化... (${retryCount + 1}/${maxRetries})`)
+    await new Promise(resolve => setTimeout(resolve, 500))
+    retryCount++
+  }
+
+  if (!matrixStore.matrixClient) {
+    console.error('❌ Matrix客户端初始化超时')
+    return
+  }
+
+  console.log('✅ Matrix客户端已初始化')
+  console.log('📊 Matrix客户端详细信息:', {
+    userId: matrixStore.matrixClient.getUserId(),
+    homeserver: matrixStore.matrixClient.getHomeserverUrl(),
+    accessToken: !!matrixStore.matrixClient.getAccessToken(),
+    syncState: matrixStore.matrixClient.getSyncState()
+  })
+
+  // 强制获取房间列表（无论是否已有数据）
+  console.log('🔄 强制获取房间列表...')
+  console.log(`📊 获取前房间数量: ${matrixStore.rooms.length}`)
+
+  try {
+    await matrixStore.fetchMatrixRoomsSimple()
+    console.log(`✅ 房间列表获取完成，当前房间数量: ${matrixStore.rooms.length}`)
+    console.log('📊 房间列表详情:', matrixStore.rooms)
+  } catch (error) {
+    console.error('❌ 获取房间列表失败:', error)
+
+    // 尝试直接从Matrix客户端获取房间
+    console.log('🔄 尝试直接从Matrix客户端获取房间...')
+    try {
+      const directRooms = matrixStore.matrixClient.getRooms()
+      console.log(`📊 直接从客户端获取到 ${directRooms.length} 个房间:`, directRooms)
+    } catch (directError) {
+      console.error('❌ 直接获取房间也失败:', directError)
+    }
+  }
 })
 </script>
 
@@ -685,6 +892,35 @@ onMounted(() => {
 .chat-list {
   flex: 1;
   overflow-y: auto;
+}
+
+.loading-chat-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #999;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #4a7c59;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 10px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-message {
+  font-size: 14px;
+  color: #666;
 }
 
 .empty-chat-list {
