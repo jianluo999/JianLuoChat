@@ -6,7 +6,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: () => import('@/components/LayoutSelector.vue')
+      redirect: '/login'
     },
     {
       path: '/login',
@@ -14,47 +14,57 @@ const router = createRouter({
       component: () => import('@/components/MatrixRealLogin.vue')
     },
     {
-      path: '/matrix',
-      name: 'matrix',
+      path: '/chat',
+      name: 'chat',
       component: () => import('@/components/WeChatStyleLayout.vue')
-    },
-    {
-      path: '/element',
-      name: 'element',
-      component: () => import('@/components/ElementStyleLayout.vue')
-    },
-    {
-      path: '/jianluo',
-      name: 'jianluo',
-      component: () => import('@/components/JianLuoChatLayout.vue')
-    },
-    {
-      path: '/old-matrix',
-      name: 'old-matrix',
-      component: () => import('@/views/MatrixChatView.vue')
-    },
-    {
-      path: '/test',
-      name: 'test',
-      component: () => import('@/test/MatrixIntegrationTest.vue')
-    },
-    {
-      path: '/interop-test',
-      name: 'interop-test',
-      component: () => import('@/components/MatrixInteroperabilityTest.vue')
     },
     {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
-      redirect: '/matrix'
+      redirect: '/login'
     }
   ]
 })
 
-// 简化的路由守卫 - Matrix有自己的认证系统
-router.beforeEach((to, from, next) => {
+// 路由守卫 - 检查登录状态
+router.beforeEach(async (to, from, next) => {
   console.log('Navigating to:', to.path)
-  next()
+
+  // 检查是否有存储的登录信息
+  const hasToken = localStorage.getItem('matrix_access_token')
+  const hasLoginInfo = localStorage.getItem('matrix_login_info')
+
+  console.log('Route guard - hasToken:', !!hasToken, 'hasLoginInfo:', !!hasLoginInfo)
+
+  // 给localStorage一点时间更新
+  await new Promise(resolve => setTimeout(resolve, 10))
+
+  // 重新检查
+  const hasTokenAfterDelay = localStorage.getItem('matrix_access_token')
+  const hasLoginInfoAfterDelay = localStorage.getItem('matrix_login_info')
+
+  console.log('Route guard after delay - hasToken:', !!hasTokenAfterDelay, 'hasLoginInfo:', !!hasLoginInfoAfterDelay)
+
+  if (to.path === '/login') {
+    // 如果已经登录，重定向到聊天页面
+    if (hasTokenAfterDelay && hasLoginInfoAfterDelay) {
+      console.log('Already logged in, redirecting to chat')
+      next('/chat')
+    } else {
+      next()
+    }
+  } else if (to.path === '/chat') {
+    // 如果没有登录，重定向到登录页面
+    if (!hasTokenAfterDelay || !hasLoginInfoAfterDelay) {
+      console.log('Not logged in, redirecting to login')
+      next('/login')
+    } else {
+      console.log('Logged in, proceeding to chat')
+      next()
+    }
+  } else {
+    next()
+  }
 })
 
 export default router

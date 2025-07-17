@@ -6,7 +6,7 @@
         <!-- 用户头像 -->
         <div class="user-avatar-nav">
           <div class="avatar-placeholder-nav">
-            {{ getUserInitials(matrixStore.userInfo?.displayName || matrixStore.userInfo?.userId || 'U') }}
+            {{ getUserInitials(matrixStore.currentUser?.displayName || matrixStore.currentUser?.username || 'U') }}
           </div>
         </div>
       </div>
@@ -392,8 +392,8 @@ const refreshRooms = async () => {
       })
     }
 
-    // 强制重新获取房间列表 - 使用简化版本
-    await matrixStore.fetchMatrixRoomsSimple()
+    // 强制重新获取房间列表
+    await matrixStore.fetchMatrixRooms()
     console.log(`✅ 房间列表刷新完成，当前房间数量: ${matrixStore.rooms.length}`)
 
     if (matrixStore.rooms.length === 0) {
@@ -429,7 +429,7 @@ const debugMatrixClient = () => {
 
     // 同步状态
     syncState: client.getSyncState(),
-    isStarted: client.isStarted(),
+    isStarted: typeof client.isStarted === 'function' ? client.isStarted() : 'unknown',
 
     // 房间信息
     totalRooms: client.getRooms().length,
@@ -618,68 +618,93 @@ const joinPublicRoom = async (roomId: string) => {
 
 onMounted(async () => {
   console.log('🚀 WeChatStyleLayout 组件挂载开始')
-  console.log('📊 当前 Matrix Store 状态:', {
+
+  // 首先尝试从localStorage恢复登录状态
+  const storedToken = localStorage.getItem('matrix_access_token')
+  const storedLoginInfo = localStorage.getItem('matrix_login_info')
+
+  console.log('📊 检查存储的登录信息:', {
+    hasToken: !!storedToken,
+    hasLoginInfo: !!storedLoginInfo,
     isLoggedIn: matrixStore.isLoggedIn,
-    hasClient: !!matrixStore.matrixClient,
-    roomsCount: matrixStore.rooms.length,
-    currentUser: matrixStore.currentUser,
-    userInfo: matrixStore.userInfo
+    hasClient: !!matrixStore.matrixClient
   })
 
-  // 检查登录状态
-  if (!matrixStore.isLoggedIn) {
-    console.log('❌ 用户未登录，跳转到登录页面')
+  if (storedToken && storedLoginInfo) {
+    console.log('✅ 发现存储的登录信息，界面可以显示')
+
+    // 在后台异步初始化Matrix客户端
+    initializeMatrixInBackground()
+  } else {
+    console.log('❌ 没有找到存储的登录信息，跳转到登录页面')
     router.push('/login')
-    return
-  }
-
-  // 等待Matrix初始化完成
-  console.log('🔄 等待Matrix初始化完成...')
-
-  // 如果Matrix客户端还未初始化，等待一下
-  let retryCount = 0
-  const maxRetries = 10
-
-  while (!matrixStore.matrixClient && retryCount < maxRetries) {
-    console.log(`⏳ 等待Matrix客户端初始化... (${retryCount + 1}/${maxRetries})`)
-    await new Promise(resolve => setTimeout(resolve, 500))
-    retryCount++
-  }
-
-  if (!matrixStore.matrixClient) {
-    console.error('❌ Matrix客户端初始化超时')
-    return
-  }
-
-  console.log('✅ Matrix客户端已初始化')
-  console.log('📊 Matrix客户端详细信息:', {
-    userId: matrixStore.matrixClient.getUserId(),
-    homeserver: matrixStore.matrixClient.getHomeserverUrl(),
-    accessToken: !!matrixStore.matrixClient.getAccessToken(),
-    syncState: matrixStore.matrixClient.getSyncState()
-  })
-
-  // 强制获取房间列表（无论是否已有数据）
-  console.log('🔄 强制获取房间列表...')
-  console.log(`📊 获取前房间数量: ${matrixStore.rooms.length}`)
-
-  try {
-    await matrixStore.fetchMatrixRoomsSimple()
-    console.log(`✅ 房间列表获取完成，当前房间数量: ${matrixStore.rooms.length}`)
-    console.log('📊 房间列表详情:', matrixStore.rooms)
-  } catch (error) {
-    console.error('❌ 获取房间列表失败:', error)
-
-    // 尝试直接从Matrix客户端获取房间
-    console.log('🔄 尝试直接从Matrix客户端获取房间...')
-    try {
-      const directRooms = matrixStore.matrixClient.getRooms()
-      console.log(`📊 直接从客户端获取到 ${directRooms.length} 个房间:`, directRooms)
-    } catch (directError) {
-      console.error('❌ 直接获取房间也失败:', directError)
-    }
   }
 })
+
+// 后台异步初始化Matrix客户端
+const initializeMatrixInBackground = async () => {
+  try {
+    console.log('🔄 在后台初始化Matrix客户端...')
+
+    // 如果store中还没有客户端，尝试初始化
+    if (!matrixStore.matrixClient) {
+      await matrixStore.initializeMatrix()
+    }
+
+    // 等待Matrix客户端初始化完成，但不阻塞界面
+    let retryCount = 0
+    const maxRetries = 60 // 增加重试次数，但不阻塞界面
+
+    const waitForClient = async () => {
+      while (!matrixStore.matrixClient && retryCount < maxRetries) {
+        console.log(`⏳ Matrix客户端后台初始化中... (${retryCount + 1}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        retryCount++
+      }
+
+      if (matrixStore.matrixClient) {
+        console.log('✅ Matrix客户端后台初始化完成')
+        console.log('📊 Matrix客户端详细信息:', {
+          userId: matrixStore.matrixClient.getUserId(),
+          homeserver: matrixStore.matrixClient.getHomeserverUrl(),
+          syncState: matrixStore.matrixClient.getSyncState()
+        })
+
+        // 获取房间列表
+        try {
+          console.log('🔄 后台获取房间列表...')
+          const rooms = matrixStore.matrixClient.getRooms()
+          console.log(`📊 从客户端获取到 ${rooms.length} 个房间`)
+
+          // 转换房间格式并添加到store
+          const convertedRooms = rooms.map((room: any) => ({
+            id: room.roomId,
+            name: room.name || room.roomId,
+            type: 'private',
+            isPublic: false,
+            memberCount: room.getJoinedMemberCount(),
+            unreadCount: 0,
+            encrypted: room.hasEncryptionStateEvent()
+          }))
+
+          matrixStore.rooms.splice(0, matrixStore.rooms.length, ...convertedRooms)
+          console.log('✅ 房间列表已更新')
+        } catch (roomError) {
+          console.error('❌ 获取房间列表失败:', roomError)
+        }
+      } else {
+        console.error('❌ Matrix客户端后台初始化超时')
+      }
+    }
+
+    // 异步执行，不阻塞界面
+    waitForClient()
+
+  } catch (error) {
+    console.error('❌ 后台初始化Matrix失败:', error)
+    // 不跳转到登录页面，让用户可以继续使用界面
+  }
+}
 </script>
 
 <style scoped>

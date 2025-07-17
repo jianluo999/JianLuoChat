@@ -523,7 +523,34 @@ export const useMatrixStore = defineStore('matrix', () => {
   const fetchMatrixRooms = async () => {
     try {
       loading.value = true
-      const response = await roomAPI.getUserRooms()
+
+      // 如果有Matrix客户端，直接从客户端获取房间
+      if (matrixClient.value) {
+        const clientRooms = matrixClient.value.getRooms()
+        const fetchedRooms = clientRooms.map((room: any) => ({
+          id: room.roomId,
+          name: room.name || room.roomId,
+          alias: room.getCanonicalAlias(),
+          topic: room.currentState.getStateEvents('m.room.topic', '')?.getContent()?.topic || '',
+          type: room.getJoinRule() === 'public' ? 'public' : 'private',
+          isPublic: room.getJoinRule() === 'public',
+          memberCount: room.getJoinedMemberCount() || 0,
+          members: [],
+          unreadCount: room.getUnreadNotificationCount() || 0,
+          encrypted: room.hasEncryptionStateEvent(),
+          joinRule: room.getJoinRule() || 'invite',
+          historyVisibility: room.getHistoryVisibility() || 'shared',
+          lastActivity: Date.now()
+        }))
+
+        // 更新房间列表
+        rooms.value.splice(0, rooms.value.length, ...fetchedRooms)
+        saveRoomsToStorage()
+        return rooms.value
+      }
+
+      // 如果没有Matrix客户端，尝试从API获取
+      const response = await roomAPI.getRooms()
 
       const fetchedRooms = response.data.map((room: any) => ({
         id: room.id,
@@ -664,29 +691,37 @@ export const useMatrixStore = defineStore('matrix', () => {
         }
       } else {
         // 使用Matrix客户端获取房间消息历史
-        const messagesResponse = await matrixClient.value.roomMessages(roomId, '', limit, 'b')
+        const room = matrixClient.value.getRoom(roomId)
+        if (!room) {
+          console.warn(`房间 ${roomId} 不存在`)
+          return []
+        }
 
-        if (messagesResponse && messagesResponse.chunk) {
-          console.log(`📨 获取到 ${messagesResponse.chunk.length} 条消息`)
+        // 获取房间的时间线事件
+        const timeline = room.getLiveTimeline()
+        const events = timeline.getEvents()
 
-          roomMessages = messagesResponse.chunk
-            .filter((event: any) => event.type === 'm.room.message')
+        if (events && events.length > 0) {
+          console.log(`📨 获取到 ${events.length} 条事件`)
+
+          roomMessages = events
+            .filter((event: any) => event.getType() === 'm.room.message')
             .map((event: any) => {
-              const content = event.content?.body || event.content?.formatted_body || ''
+              const content = event.getContent()?.body || event.getContent()?.formatted_body || ''
               return {
-                id: event.event_id,
+                id: event.getId(),
                 roomId,
                 content,
-                sender: event.sender,
-                senderName: event.sender, // 可以后续优化为显示名
-                timestamp: event.origin_server_ts,
-                type: event.type,
-                eventId: event.event_id,
-                encrypted: event.content?.algorithm ? true : false,
+                sender: event.getSender(),
+                senderName: event.getSender(), // 可以后续优化为显示名
+                timestamp: event.getTs(),
+                type: event.getType(),
+                eventId: event.getId(),
+                encrypted: !!event.getContent()?.algorithm,
                 status: 'sent' as const
               }
             })
-            .reverse() // 反转顺序，让最新消息在底部
+            .slice(-limit) // 只取最后的limit条消息
         }
       }
 
@@ -735,44 +770,75 @@ export const useMatrixStore = defineStore('matrix', () => {
       }
 
       // 尝试真实的Matrix消息发送
-      const response = await matrixAPI.sendMessage({
-        roomId,
-        content,
-        type: 'm.text'
-      })
+      if (matrixClient.value) {
+        // 使用Matrix客户端发送消息
+        const response = await matrixClient.value.sendTextMessage(roomId, content)
+        console.log('Matrix client send message response:', response)
 
-      console.log('Send message response:', response.data)
+        // 创建本地消息对象
+        const newMessage: MatrixMessage = {
+          id: response.event_id,
+          roomId,
+          content,
+          sender: matrixClient.value.getUserId() || currentUser.value.id,
+          senderName: currentUser.value.displayName || currentUser.value.username,
+          timestamp: Date.now(),
+          type: 'm.room.message',
+          eventId: response.event_id,
+          status: 'sent'
+        }
 
-      // 处理不同的响应格式
-      let messageInfo = response.data
-      if (response.data.success) {
-        messageInfo = response.data.messageInfo || response.data
+        // 添加到本地消息列表
+        const roomMessages = messages.value.get(roomId) || []
+        messages.value.set(roomId, [...roomMessages, newMessage])
+
+        // 更新房间最后消息
+        const room = rooms.value.find(r => r.id === roomId)
+        if (room) {
+          room.lastMessage = newMessage
+        }
+
+        return newMessage
+      } else {
+        // 如果没有Matrix客户端，尝试通过API发送
+        const response = await matrixAPI.sendMessage({
+          roomId,
+          content,
+          type: 'm.text'
+        })
+        console.log('API send message response:', response.data)
+
+        // 处理API响应格式
+        let messageInfo = response.data
+        if (response.data.success) {
+          messageInfo = response.data.messageInfo || response.data
+        }
+
+        const newMessage: MatrixMessage = {
+          id: messageInfo.id || messageInfo.eventId || Date.now().toString(),
+          roomId,
+          content,
+          sender: messageInfo.sender?.username || currentUser.value.username,
+          senderName: messageInfo.sender?.displayName || currentUser.value.displayName || currentUser.value.username,
+          timestamp: messageInfo.timestamp || Date.now(),
+          type: 'm.room.message',
+          eventId: messageInfo.id || messageInfo.eventId,
+          encrypted: false,
+          status: 'sent' as const
+        }
+
+        // 添加到本地消息列表
+        const roomMessages = messages.value.get(roomId) || []
+        messages.value.set(roomId, [...roomMessages, newMessage])
+
+        // 更新房间最后消息
+        const room = roomId === 'world' ? worldChannel.value : rooms.value.find(r => r.id === roomId)
+        if (room) {
+          room.lastMessage = newMessage
+        }
+
+        return newMessage
       }
-
-      const newMessage: MatrixMessage = {
-        id: messageInfo.id || messageInfo.eventId || Date.now().toString(),
-        roomId,
-        content,
-        sender: messageInfo.sender?.username || currentUser.value.username,
-        senderName: messageInfo.sender?.displayName || currentUser.value.displayName || currentUser.value.username,
-        timestamp: messageInfo.timestamp || Date.now(),
-        type: 'm.room.message',
-        eventId: messageInfo.id || messageInfo.eventId,
-        encrypted: false,
-        status: 'sent' as const
-      }
-
-      // 添加到本地消息列表
-      const roomMessages = messages.value.get(roomId) || []
-      messages.value.set(roomId, [...roomMessages, newMessage])
-
-      // 更新房间最后消息
-      const room = roomId === 'world' ? worldChannel.value : rooms.value.find(r => r.id === roomId)
-      if (room) {
-        room.lastMessage = newMessage
-      }
-
-      return newMessage
     } catch (err: any) {
       error.value = 'Failed to send Matrix message'
       console.error('Error sending Matrix message:', err)

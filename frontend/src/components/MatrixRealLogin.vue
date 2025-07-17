@@ -94,7 +94,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useMatrixStore } from '@/stores/matrix'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -157,7 +157,16 @@ export default {
           initial_device_display_name: 'JianLuoChat Matrix Client'
         })
 
-        // 保存登录信息
+        // 立即保存登录信息到localStorage，确保路由守卫能检测到
+        localStorage.setItem('matrix_access_token', loginResponse.access_token)
+        localStorage.setItem('matrix_login_info', JSON.stringify({
+          userId: loginResponse.user_id,
+          accessToken: loginResponse.access_token,
+          deviceId: loginResponse.device_id,
+          homeserver: homeserver.value
+        }))
+
+        // 保存到store
         await matrixStore.setClient(client)
         await matrixStore.setLoginInfo({
           userId: loginResponse.user_id,
@@ -166,17 +175,22 @@ export default {
           homeserver: homeserver.value
         })
 
-        // 启动客户端
-        await client.startClient()
-
         emit('login-success', {
           userId: loginResponse.user_id,
           homeserver: homeserver.value
         })
 
-        // 登录成功后跳转到主页
-        console.log('登录成功，准备跳转到主页...')
-        router.push('/matrix')
+        // 立即跳转到聊天页面
+        console.log('登录成功，立即跳转到聊天页面...')
+        router.push('/chat')
+
+        // 在后台异步启动客户端
+        console.log('在后台启动Matrix客户端...')
+        client.startClient().then(() => {
+          console.log('Matrix客户端已在后台启动完成')
+        }).catch((error) => {
+          console.error('后台启动Matrix客户端失败:', error)
+        })
 
       } catch (err) {
         console.error('Matrix login failed:', err)
