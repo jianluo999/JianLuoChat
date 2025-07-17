@@ -217,6 +217,31 @@ JianLuoChat is designed to work seamlessly with Element and other Matrix clients
 - **Matrix**: matrix-js-sdk, Matrix Client-Server API
 - **UI**: Custom CSS with retro terminal styling
 
+### 📋 Changelog
+
+#### v1.2.0 (2025-01-17) - Fast Login & UI Optimization
+**🚀 Performance Improvements**
+- **Fast Login**: Reduced login time from 10-30 seconds to almost instant redirect
+- **Async Initialization**: Matrix client starts in background without blocking UI
+- **Route Optimization**: Simplified routing structure for faster page transitions
+
+**🎨 UI Enhancements**
+- **WeChat-style Chat Bubbles**: Adopted WeChat's classic green (#95ec69) and white color scheme
+- **Message Input Optimization**: Clean WeChat-style design
+- **Logout Button Repositioning**: Moved to bottom-left corner following WeChat design patterns
+- **Overall Layout Optimization**: Maintained WeChat's classic layout structure
+
+**🔧 Technical Fixes**
+- **Message Retrieval API**: Fixed roomMessagesAPI calls using correct Matrix client methods
+- **Room List Optimization**: Prioritized Matrix client for room fetching with API fallback
+- **Message Sending Improvements**: Used Matrix client's sendTextMessage method
+- **Debug Features**: Fixed client status checking methods
+
+**📱 User Experience**
+- **Instant Response**: Users see chat interface immediately after login
+- **Background Loading**: Room lists and messages load asynchronously in background
+- **Smooth Interactions**: Significantly improved overall application responsiveness
+
 #### Project Structure
 ```
 jianluochat/
@@ -399,12 +424,40 @@ npm run dev
 - 中英双语界面
 - 房间列表和导航
 - 消息历史记录
+- **🚀 快速登录优化**（v1.2.0新增）
+- **� 微信风格界面**（v1.2.0新增）
+- **🔧 API调用修复**（v1.2.0新增）
 
-**🚧 开发中功能**
+**�🚧 开发中功能**
 - 端到端加密支持（Element兼容）
 - 文件传输功能（跨客户端）
 - 语音/视频通话（WebRTC）
 - 推送通知
+
+### 📋 更新日志
+
+#### v1.2.0 (2025-01-17) - 快速登录与界面优化
+**🚀 性能优化**
+- **快速登录**: 登录时间从10-30秒缩短到几乎瞬间跳转
+- **异步初始化**: Matrix客户端在后台异步启动，不阻塞界面
+- **路由优化**: 简化路由结构，提升页面切换速度
+
+**🎨 界面改进**
+- **微信风格聊天气泡**: 采用微信经典的绿色(#95ec69)和白色配色
+- **消息输入框优化**: 简洁的微信风格设计
+- **登出按钮重新定位**: 移至左下角，符合微信设计习惯
+- **整体布局优化**: 保持微信的经典布局结构
+
+**🔧 技术修复**
+- **消息获取API**: 修复roomMessagesAPI调用，使用正确的Matrix客户端方法
+- **房间列表优化**: 优先使用Matrix客户端获取房间，添加API fallback
+- **消息发送改进**: 使用Matrix客户端的sendTextMessage方法
+- **调试功能**: 修复客户端状态检查方法
+
+**📱 用户体验**
+- **即时响应**: 用户登录后立即看到聊天界面
+- **后台加载**: 房间列表和消息在后台异步加载
+- **流畅交互**: 大幅提升整体应用响应速度
 
 ### 🤝 贡献指南
 
