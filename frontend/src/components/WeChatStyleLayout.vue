@@ -502,7 +502,7 @@ const refreshRooms = async () => {
   }
 }
 
-const debugMatrixClient = () => {
+const debugMatrixClient = async () => {
   console.log('🐛 Matrix客户端调试信息:')
 
   if (!matrixStore.matrixClient) {
@@ -511,54 +511,81 @@ const debugMatrixClient = () => {
     return
   }
 
-  const client = matrixStore.matrixClient
-  const debugInfo = {
-    // 基本信息
-    userId: client.getUserId(),
-    homeserver: client.getHomeserverUrl(),
-    accessToken: !!client.getAccessToken(),
-    deviceId: client.getDeviceId(),
+  try {
+    // 使用新的诊断功能
+    const diagnosis = await matrixStore.diagnoseMatrixConnection()
+    console.log('📊 Matrix连接诊断结果:', diagnosis)
 
-    // 同步状态
-    syncState: client.getSyncState(),
-    isStarted: typeof client.isStarted === 'function' ? client.isStarted() : 'unknown',
+    const client = matrixStore.matrixClient
+    const debugInfo = {
+      // 基本信息
+      userId: client.getUserId(),
+      homeserver: client.getHomeserverUrl(),
+      accessToken: !!client.getAccessToken(),
+      deviceId: client.getDeviceId(),
 
-    // 房间信息
-    totalRooms: client.getRooms().length,
-    joinedRooms: client.getRooms().filter((r: any) => r.getMyMembership() === 'join').length,
-    invitedRooms: client.getRooms().filter((r: any) => r.getMyMembership() === 'invite').length,
+      // 同步状态
+      syncState: client.getSyncState(),
+      isStarted: typeof client.isStarted === 'function' ? client.isStarted() : 'unknown',
 
-    // 存储状态
-    localRoomsCount: matrixStore.rooms.length,
+      // 房间信息
+      totalRooms: client.getRooms().length,
+      joinedRooms: client.getRooms().filter((r: any) => r.getMyMembership() === 'join').length,
+      invitedRooms: client.getRooms().filter((r: any) => r.getMyMembership() === 'invite').length,
 
-    // 连接状态
-    connectionState: matrixStore.connection
-  }
+      // 存储状态
+      localRoomsCount: matrixStore.rooms.length,
 
-  console.log('📊 调试信息:', debugInfo)
+      // 连接状态
+      connectionState: matrixStore.connection,
 
-  // 显示房间详情
-  const rooms = client.getRooms()
-  console.log('🏠 所有房间详情:')
-  rooms.forEach((room: any, index: number) => {
-    console.log(`房间 ${index + 1}:`, {
-      id: room.roomId,
-      name: room.name || '无名称',
-      alias: room.getCanonicalAlias() || '无别名',
-      membership: room.getMyMembership(),
-      memberCount: room.getJoinedMemberCount(),
-      isSpace: room.isSpaceRoom(),
-      type: room.getType()
+      // 诊断结果
+      diagnosis: diagnosis
+    }
+
+    console.log('📊 调试信息:', debugInfo)
+
+    // 显示房间详情
+    const rooms = client.getRooms()
+    console.log('🏠 所有房间详情:')
+    rooms.forEach((room: any, index: number) => {
+      console.log(`房间 ${index + 1}:`, {
+        id: room.roomId,
+        name: room.name || '无名称',
+        alias: room.getCanonicalAlias() || '无别名',
+        membership: room.getMyMembership(),
+        memberCount: room.getJoinedMemberCount(),
+        isSpace: room.isSpaceRoom(),
+        type: room.getType()
+      })
     })
-  })
 
-  // 调试当前房间的消息
-  if (matrixStore.currentRoomId) {
-    console.log('🔍 当前房间消息调试:')
-    matrixStore.debugMessages(matrixStore.currentRoomId)
+    // 调试当前房间的消息
+    if (matrixStore.currentRoomId) {
+      console.log('🔍 当前房间消息调试:')
+      matrixStore.debugMessages(matrixStore.currentRoomId)
+    }
+
+    // 显示诊断结果和建议
+    let alertMessage = `Matrix客户端诊断结果:
+总房间数: ${debugInfo.totalRooms}
+已加入: ${debugInfo.joinedRooms}
+本地存储: ${debugInfo.localRoomsCount}
+同步状态: ${debugInfo.syncState}
+网络连接: ${diagnosis.networkConnectivity ? '正常' : '异常'}
+认证状态: ${diagnosis.authValid ? '有效' : '无效'}
+当前房间: ${matrixStore.currentRoomId || '无'}`
+
+    if (diagnosis.recommendations.length > 0) {
+      alertMessage += '\n\n💡 建议:\n' + diagnosis.recommendations.join('\n')
+    }
+
+    alert(alertMessage)
+
+  } catch (error) {
+    console.error('❌ 获取调试信息失败:', error)
+    alert('获取调试信息失败: ' + (error as Error).message)
   }
-
-  alert(`调试信息已输出到控制台。\n总房间数: ${debugInfo.totalRooms}\n已加入: ${debugInfo.joinedRooms}\n本地存储: ${debugInfo.localRoomsCount}\n当前房间: ${matrixStore.currentRoomId || '无'}`)
 }
 
 const handleStartDM = (_userId: string) => {
