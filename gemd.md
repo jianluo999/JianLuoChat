@@ -7,7 +7,7 @@
 [![Matrix](https://img.shields.io/badge/Matrix-decentralized-008661.svg)](https://matrix.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ed.svg)](https://www.docker.com/)
 
----
+---用的是matrix-js-sdk v37.10.0，这是一个相对较新的版本，支持Rust加密。
 
 ## 核心理念与设计哲学
 

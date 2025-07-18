@@ -93,6 +93,12 @@
           <button class="action-btn" @click="testFastMessage" title="测试快速消息">
             ⚡
           </button>
+          <button class="action-btn" @click="openEncryptionSettings" title="加密设置">
+            🔐
+          </button>
+          <button class="action-btn" @click="openEncryptionTest" title="加密测试">
+            🧪
+          </button>
         </div>
       </div>
 
@@ -617,6 +623,16 @@ const testFastMessage = async () => {
     console.error('❌ 快速消息测试失败:', error)
     alert(`快速消息测试失败: ${error}`)
   }
+}
+
+// 打开加密设置页面
+const openEncryptionSettings = () => {
+  router.push('/encryption-settings')
+}
+
+// 打开加密测试页面
+const openEncryptionTest = () => {
+  router.push('/encryption-test')
 }
 
 const handleCreateGroup = async (groupData: any) => {

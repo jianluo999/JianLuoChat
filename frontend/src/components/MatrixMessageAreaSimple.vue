@@ -7,6 +7,15 @@
           <div class="room-name">{{ currentRoom.name }}</div>
           <div class="room-id">{{ currentRoom.id }}</div>
         </div>
+        <!-- 加密状态指示器 -->
+        <EncryptionIndicator
+          type="room"
+          :encrypted="currentRoom.encrypted"
+          :member-count="currentRoom.memberCount"
+          :verified-devices="getVerifiedDevicesCount()"
+          :total-devices="getTotalDevicesCount()"
+          :algorithm="getRoomEncryptionAlgorithm()"
+        />
       </div>
     </div>
 
@@ -83,9 +92,15 @@
                   <div v-else class="message-text">{{ message.content }}</div>
                 </div>
 
-                <!-- 消息时间 -->
+                <!-- 消息时间和加密状态 -->
                 <div class="message-meta">
                   <span class="message-time">{{ formatMessageTime(message.timestamp) }}</span>
+                  <EncryptionIndicator
+                    type="message"
+                    :encrypted="message.encrypted"
+                    :decrypted="!message.decryptionError"
+                    :decryption-error="message.decryptionError"
+                  />
                 </div>
               </div>
             </div>
@@ -113,6 +128,7 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import { useMatrixStore } from '@/stores/matrix'
 import MatrixMessageInput from './MatrixMessageInput.vue'
+import EncryptionIndicator from './EncryptionIndicator.vue'
 
 interface Props {
   roomId?: string
@@ -334,6 +350,22 @@ const canSendMessages = computed(() => {
 
   return true // 默认允许发送
 })
+
+// 加密相关方法
+const getVerifiedDevicesCount = (): number => {
+  // 这里需要实现获取已验证设备数量的逻辑
+  return 0
+}
+
+const getTotalDevicesCount = (): number => {
+  // 这里需要实现获取总设备数量的逻辑
+  return 1
+}
+
+const getRoomEncryptionAlgorithm = (): string | undefined => {
+  if (!currentRoom.value?.encrypted) return undefined
+  return 'm.megolm.v1.aes-sha2' // 默认算法
+}
 
 // 监听房间变化，加载消息
 watch(() => props.roomId, async (newRoomId, oldRoomId) => {

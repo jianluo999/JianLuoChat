@@ -19,6 +19,16 @@ const router = createRouter({
       component: () => import('@/components/WeChatStyleLayout.vue')
     },
     {
+      path: '/encryption-settings',
+      name: 'encryption-settings',
+      component: () => import('@/pages/EncryptionSettings.vue')
+    },
+    {
+      path: '/encryption-test',
+      name: 'encryption-test',
+      component: () => import('@/pages/EncryptionTest.vue')
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       redirect: '/login'
@@ -53,13 +63,13 @@ router.beforeEach(async (to, from, next) => {
     } else {
       next()
     }
-  } else if (to.path === '/chat') {
+  } else if (to.path === '/chat' || to.path === '/encryption-settings' || to.path === '/encryption-test') {
     // 如果没有登录，重定向到登录页面
     if (!hasTokenAfterDelay || !hasLoginInfoAfterDelay) {
       console.log('Not logged in, redirecting to login')
       next('/login')
     } else {
-      console.log('Logged in, proceeding to chat')
+      console.log('Logged in, proceeding to', to.path)
       next()
     }
   } else {

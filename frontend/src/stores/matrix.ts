@@ -371,22 +371,39 @@ export const useMatrixStore = defineStore('matrix', () => {
           await new Promise(resolve => setTimeout(resolve, 1000))
         }
 
-        // 初始化加密支持
+        // 初始化端到端加密支持
         console.log('🔐 初始化端到端加密支持...')
         try {
           // 检查客户端是否有加密方法
           console.log('🔍 检查可用的加密方法:', {
             initRustCrypto: typeof (client as any).initRustCrypto,
-            getCrypto: typeof client.getCrypto
+            getCrypto: typeof client.getCrypto,
+            isCryptoEnabled: typeof (client as any).isCryptoEnabled === 'function' ? (client as any).isCryptoEnabled() : 'unknown'
           })
 
-          // 尝试不同的加密初始化方法
+          // 确保在启动客户端之前初始化加密
           if (typeof (client as any).initRustCrypto === 'function') {
+            console.log('🔧 正在初始化Rust加密引擎...')
             await (client as any).initRustCrypto({
               useIndexedDB: true,
-              cryptoDatabasePrefix: 'jianluochat-crypto'
+              cryptoDatabasePrefix: 'jianluochat-crypto',
+              // 添加更多配置选项
+              storagePassword: undefined, // 可以后续添加密码保护
+              storageKey: undefined
             })
-            console.log('✅ Rust加密初始化成功')
+            console.log('✅ Rust加密引擎初始化成功')
+
+            // 验证加密是否真正可用
+            const crypto = client.getCrypto()
+            if (crypto) {
+              console.log('✅ 加密API可用，支持的功能:', {
+                canEncryptToDevice: typeof crypto.encryptToDeviceMessages === 'function',
+                canVerifyDevice: typeof crypto.requestDeviceVerification === 'function',
+                canBackupKeys: typeof crypto.exportRoomKeys === 'function'
+              })
+            } else {
+              console.warn('⚠️ 加密初始化完成但API不可用')
+            }
           } else {
             console.warn('⚠️ 客户端不支持Rust加密初始化方法')
             // 尝试检查是否已经有加密支持
@@ -394,12 +411,23 @@ export const useMatrixStore = defineStore('matrix', () => {
             if (crypto) {
               console.log('✅ 客户端已有加密支持')
             } else {
-              console.warn('⚠️ 客户端没有加密支持')
+              console.warn('⚠️ 客户端没有加密支持，将以非加密模式运行')
             }
           }
-        } catch (cryptoError) {
-          console.warn('⚠️ 加密初始化失败，但继续启动客户端:', cryptoError)
-          // 不要因为加密失败而停止整个流程
+        } catch (cryptoError: any) {
+          console.error('❌ 加密初始化失败:', cryptoError)
+          console.warn('⚠️ 将以非加密模式继续启动客户端')
+
+          // 记录详细错误信息以便调试
+          if (cryptoError.message) {
+            console.error('错误详情:', cryptoError.message)
+          }
+          if (cryptoError.stack) {
+            console.error('错误堆栈:', cryptoError.stack)
+          }
+
+          // 不要因为加密失败而停止整个流程，但要记录状态
+          error.value = `加密初始化失败: ${cryptoError.message || '未知错误'}`
         }
 
         await client.startClient({
@@ -1283,7 +1311,26 @@ export const useMatrixStore = defineStore('matrix', () => {
             console.warn('⚠️ 房间需要加密但客户端不支持加密')
             throw new Error('🔐 此房间启用了端到端加密，当前版本暂不支持。\n\n💡 建议：\n• 选择非加密房间进行聊天\n• 或在Element等客户端中关闭房间加密\n• 加密功能正在开发中，敬请期待！')
           } else {
-            console.log('✅ 客户端支持加密，尝试发送加密消息')
+            console.log('✅ 客户端支持加密，准备发送加密消息')
+
+            // 检查房间成员的设备状态
+            try {
+              const roomMembers = matrixRoom.getJoinedMembers()
+              console.log(`🔍 检查房间成员设备状态 (${roomMembers.length} 个成员)`)
+
+              // 确保我们有所有成员的设备密钥
+              for (const member of roomMembers) {
+                const userId = member.userId
+                try {
+                  const devices = await crypto.getUserDevices(userId)
+                  console.log(`👤 用户 ${userId} 有 ${devices.size} 个设备`)
+                } catch (deviceError) {
+                  console.warn(`⚠️ 无法获取用户 ${userId} 的设备信息:`, deviceError)
+                }
+              }
+            } catch (memberError) {
+              console.warn('⚠️ 检查成员设备状态时出错:', memberError)
+            }
           }
         }
 
