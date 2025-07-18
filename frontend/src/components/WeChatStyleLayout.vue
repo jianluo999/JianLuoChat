@@ -99,6 +99,9 @@
           <button class="action-btn" @click="openEncryptionTest" title="加密测试">
             🧪
           </button>
+          <button class="action-btn" @click="openCryptoDebug" title="加密调试">
+            🔧
+          </button>
         </div>
       </div>
 
@@ -633,6 +636,11 @@ const openEncryptionSettings = () => {
 // 打开加密测试页面
 const openEncryptionTest = () => {
   router.push('/encryption-test')
+}
+
+// 打开加密调试页面
+const openCryptoDebug = () => {
+  router.push('/crypto-debug')
 }
 
 const handleCreateGroup = async (groupData: any) => {

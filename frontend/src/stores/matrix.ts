@@ -145,6 +145,129 @@ export const useMatrixStore = defineStore('matrix', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  // 加密初始化函数
+  const initializeEncryption = async (client: any) => {
+    try {
+      // 首先初始化加密环境
+      const { initializeCryptoEnvironment, getFriendlyErrorMessage, retryWithBackoff } = await import('@/utils/wasmLoader')
+
+      const envReady = await initializeCryptoEnvironment()
+      if (!envReady) {
+        console.warn('⚠️ 加密环境不满足要求，跳过加密初始化')
+        return false
+      }
+
+      // 检查客户端是否有加密方法
+      console.log('🔍 检查可用的加密方法:', {
+        initRustCrypto: typeof (client as any).initRustCrypto,
+        getCrypto: typeof client.getCrypto,
+        isCryptoEnabled: typeof (client as any).isCryptoEnabled === 'function' ? (client as any).isCryptoEnabled() : 'unknown'
+      })
+
+      // 确保在启动客户端之前初始化加密
+      if (typeof (client as any).initRustCrypto === 'function') {
+        console.log('🔧 正在初始化Rust加密引擎...')
+
+        // 使用重试机制初始化加密
+        const cryptoInitialized = await retryWithBackoff(async () => {
+          // 尝试多种配置策略
+          const cryptoConfigs = [
+            // 策略1: 使用IndexedDB
+            {
+              useIndexedDB: true,
+              cryptoDatabasePrefix: 'jianluochat-crypto',
+              storagePassword: undefined,
+              storageKey: undefined
+            },
+            // 策略2: 使用内存存储（如果IndexedDB失败）
+            {
+              useIndexedDB: false,
+              cryptoDatabasePrefix: undefined,
+              storagePassword: undefined,
+              storageKey: undefined
+            }
+          ]
+
+          let lastError: any = null
+
+          for (const config of cryptoConfigs) {
+            try {
+              console.log(`🔧 尝试加密配置:`, config)
+              await (client as any).initRustCrypto(config)
+              console.log('✅ Rust加密引擎初始化成功')
+              return true
+            } catch (configError: any) {
+              console.warn(`⚠️ 配置失败:`, configError.message)
+              lastError = configError
+
+              // 如果是WASM相关错误，尝试下一个配置
+              if (configError.message.includes('WebAssembly') ||
+                  configError.message.includes('wasm') ||
+                  configError.message.includes('MIME type')) {
+                continue
+              }
+
+              // 其他错误直接跳出
+              break
+            }
+          }
+
+          throw lastError || new Error('所有加密配置都失败了')
+        }, 2, 2000) // 最多重试2次，每次间隔2秒
+
+        if (!cryptoInitialized) {
+          return false
+        }
+
+        // 验证加密是否真正可用
+        const crypto = client.getCrypto()
+        if (crypto) {
+          console.log('✅ 加密API可用，支持的功能:', {
+            canEncryptToDevice: typeof crypto.encryptToDeviceMessages === 'function',
+            canVerifyDevice: typeof crypto.requestDeviceVerification === 'function',
+            canBackupKeys: typeof crypto.exportRoomKeys === 'function'
+          })
+          return true
+        } else {
+          console.warn('⚠️ 加密初始化完成但API不可用')
+          return false
+        }
+      } else {
+        console.warn('⚠️ 客户端不支持Rust加密初始化方法')
+        // 尝试检查是否已经有加密支持
+        const crypto = client.getCrypto()
+        if (crypto) {
+          console.log('✅ 客户端已有加密支持')
+          return true
+        } else {
+          console.warn('⚠️ 客户端没有加密支持，将以非加密模式运行')
+          return false
+        }
+      }
+    } catch (cryptoError: any) {
+      console.error('❌ 加密初始化失败:', cryptoError)
+      console.warn('⚠️ 将以非加密模式继续启动客户端')
+
+      // 记录详细错误信息以便调试
+      if (cryptoError.message) {
+        console.error('错误详情:', cryptoError.message)
+      }
+      if (cryptoError.stack) {
+        console.error('错误堆栈:', cryptoError.stack)
+      }
+
+      // 使用友好的错误信息
+      try {
+        const { getFriendlyErrorMessage } = await import('@/utils/wasmLoader')
+        error.value = getFriendlyErrorMessage(cryptoError)
+      } catch {
+        error.value = `加密初始化失败: ${cryptoError.message || '未知错误'}`
+      }
+
+      return false
+    }
+  }
+
   // 计算属性
   const currentRoom = computed(() => {
     if (currentRoomId.value === 'world') {
@@ -374,60 +497,29 @@ export const useMatrixStore = defineStore('matrix', () => {
         // 初始化端到端加密支持
         console.log('🔐 初始化端到端加密支持...')
         try {
-          // 检查客户端是否有加密方法
-          console.log('🔍 检查可用的加密方法:', {
-            initRustCrypto: typeof (client as any).initRustCrypto,
-            getCrypto: typeof client.getCrypto,
-            isCryptoEnabled: typeof (client as any).isCryptoEnabled === 'function' ? (client as any).isCryptoEnabled() : 'unknown'
-          })
-
-          // 确保在启动客户端之前初始化加密
+          // 暂时使用简化的加密初始化
           if (typeof (client as any).initRustCrypto === 'function') {
-            console.log('🔧 正在初始化Rust加密引擎...')
-            await (client as any).initRustCrypto({
-              useIndexedDB: true,
-              cryptoDatabasePrefix: 'jianluochat-crypto',
-              // 添加更多配置选项
-              storagePassword: undefined, // 可以后续添加密码保护
-              storageKey: undefined
-            })
-            console.log('✅ Rust加密引擎初始化成功')
+            console.log('🔧 尝试初始化Rust加密引擎...')
 
-            // 验证加密是否真正可用
+            // 使用最简单的配置
+            await (client as any).initRustCrypto({
+              useIndexedDB: false, // 暂时使用内存存储避免WASM问题
+            })
+            console.log('✅ Rust加密引擎初始化成功（内存模式）')
+
+            // 验证加密是否可用
             const crypto = client.getCrypto()
             if (crypto) {
-              console.log('✅ 加密API可用，支持的功能:', {
-                canEncryptToDevice: typeof crypto.encryptToDeviceMessages === 'function',
-                canVerifyDevice: typeof crypto.requestDeviceVerification === 'function',
-                canBackupKeys: typeof crypto.exportRoomKeys === 'function'
-              })
+              console.log('✅ 加密API可用')
             } else {
-              console.warn('⚠️ 加密初始化完成但API不可用')
+              console.warn('⚠️ 加密API不可用')
             }
           } else {
-            console.warn('⚠️ 客户端不支持Rust加密初始化方法')
-            // 尝试检查是否已经有加密支持
-            const crypto = client.getCrypto()
-            if (crypto) {
-              console.log('✅ 客户端已有加密支持')
-            } else {
-              console.warn('⚠️ 客户端没有加密支持，将以非加密模式运行')
-            }
+            console.warn('⚠️ 客户端不支持Rust加密')
           }
         } catch (cryptoError: any) {
-          console.error('❌ 加密初始化失败:', cryptoError)
-          console.warn('⚠️ 将以非加密模式继续启动客户端')
-
-          // 记录详细错误信息以便调试
-          if (cryptoError.message) {
-            console.error('错误详情:', cryptoError.message)
-          }
-          if (cryptoError.stack) {
-            console.error('错误堆栈:', cryptoError.stack)
-          }
-
-          // 不要因为加密失败而停止整个流程，但要记录状态
-          error.value = `加密初始化失败: ${cryptoError.message || '未知错误'}`
+          console.warn('⚠️ 加密初始化失败，继续以非加密模式运行:', cryptoError.message)
+          // 不要因为加密失败而阻止客户端启动
         }
 
         await client.startClient({
