@@ -219,6 +219,12 @@ JianLuoChat is designed to work seamlessly with Element and other Matrix clients
 
 ### 📋 Changelog
 
+#### v1.2.1 (2025-01-18) - UI Button Fix & Sync Optimization
+**🔧 Interface Fixes**
+- **Button Layout Fix**: Fixed refresh button being hidden by reorganizing header actions
+- **More Actions Menu**: Added collapsible menu for secondary functions (⋯)
+- **Matrix Sync Optimization**: Reduced sync timeout from 15s to 3s for faster room loading
+
 #### v1.2.0 (2025-01-17) - Fast Login & UI Optimization
 **🚀 Performance Improvements**
 - **Fast Login**: Reduced login time from 10-30 seconds to almost instant redirect
@@ -435,6 +441,12 @@ npm run dev
 - 推送通知
 
 ### 📋 更新日志
+
+#### v1.2.1 (2025-01-18) - 界面按钮修复与同步优化
+**🔧 界面修复**
+- **按钮布局修复**: 重新组织头部操作区域，解决刷新按钮被遮挡问题
+- **更多操作菜单**: 添加可折叠的次要功能菜单（⋯）
+- **Matrix同步优化**: 将同步超时时间从15秒减少到3秒，提升房间加载速度
 
 #### v1.2.0 (2025-01-17) - 快速登录与界面优化
 **🚀 性能优化**
