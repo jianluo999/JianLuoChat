@@ -346,9 +346,46 @@ export const useMatrixStore = defineStore('matrix', () => {
   // Matrix客户端实例
   const matrixClient = ref<any>(null)
   const loginInfo = ref<any>(null)
+  const clientInitializing = ref(false)
+
+  // 清理现有Matrix客户端
+  const cleanupMatrixClient = async () => {
+    if (matrixClient.value) {
+      try {
+        console.log('🧹 清理现有Matrix客户端...')
+
+        // 移除所有事件监听器
+        matrixClient.value.removeAllListeners()
+
+        // 停止客户端
+        if (matrixClient.value.clientRunning) {
+          matrixClient.value.stopClient()
+        }
+
+        // 清理加密存储
+        const crypto = matrixClient.value.getCrypto()
+        if (crypto) {
+          try {
+            await crypto.stop()
+          } catch (cryptoError) {
+            console.warn('清理加密存储时出错:', cryptoError)
+          }
+        }
+
+        console.log('✅ Matrix客户端清理完成')
+      } catch (error) {
+        console.warn('清理Matrix客户端时出错:', error)
+      } finally {
+        matrixClient.value = null
+      }
+    }
+  }
 
   // 设置Matrix客户端
   const setClient = async (client: any) => {
+    // 先清理现有客户端
+    await cleanupMatrixClient()
+
     matrixClient.value = client
     console.log('Matrix client set:', client)
   }
@@ -384,6 +421,12 @@ export const useMatrixStore = defineStore('matrix', () => {
 
   // 初始化Matrix状态（从localStorage恢复登录信息和房间列表）
   const initializeMatrix = async () => {
+    // 防止重复初始化
+    if (clientInitializing.value) {
+      console.log('⚠️ Matrix正在初始化中，跳过重复初始化')
+      return false
+    }
+
     try {
       // 首先加载房间列表（即使未登录也可以显示之前的房间）
       loadRoomsFromStorage()
@@ -422,12 +465,17 @@ export const useMatrixStore = defineStore('matrix', () => {
     } catch (error) {
       console.error('Failed to restore Matrix login:', error)
       localStorage.removeItem('matrix-login-info')
+      // 确保清理失败的状态
+      await cleanupMatrixClient()
     }
     return false
   }
 
   // 登出函数
-  const logout = () => {
+  const logout = async () => {
+    // 先清理Matrix客户端
+    await cleanupMatrixClient()
+
     // 清除内存状态
     connection.value = {
       connected: false,
@@ -436,7 +484,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
     currentUser.value = null
     loginInfo.value = null
-    matrixClient.value = null
+    clientInitializing.value = false
 
     // 清除localStorage
     localStorage.removeItem('matrix-login-info')
@@ -446,7 +494,18 @@ export const useMatrixStore = defineStore('matrix', () => {
 
   // 创建Matrix客户端实例
   const createMatrixClient = async (userId: string, accessToken: string, homeserver: string) => {
+    // 防止并发创建多个客户端
+    if (clientInitializing.value) {
+      console.log('⚠️ 客户端正在初始化中，跳过重复创建')
+      return matrixClient.value
+    }
+
     try {
+      clientInitializing.value = true
+
+      // 先清理现有客户端
+      await cleanupMatrixClient()
+
       // 动态导入matrix-js-sdk
       const { createClient } = await import('matrix-js-sdk')
 
@@ -497,14 +556,24 @@ export const useMatrixStore = defineStore('matrix', () => {
         // 初始化端到端加密支持
         console.log('🔐 初始化端到端加密支持...')
         try {
-          // 暂时使用简化的加密初始化
+          // 检查是否支持加密
           if (typeof (client as any).initRustCrypto === 'function') {
             console.log('🔧 尝试初始化Rust加密引擎...')
 
-            // 使用最简单的配置
-            await (client as any).initRustCrypto({
-              useIndexedDB: false, // 暂时使用内存存储避免WASM问题
+            // 使用更安全的加密配置
+            const cryptoConfig = {
+              useIndexedDB: false, // 使用内存存储避免WASM问题
+              storagePassword: undefined,
+              storageKey: undefined
+            }
+
+            // 添加超时保护
+            const cryptoPromise = (client as any).initRustCrypto(cryptoConfig)
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error('加密初始化超时')), 10000)
             })
+
+            await Promise.race([cryptoPromise, timeoutPromise])
             console.log('✅ Rust加密引擎初始化成功（内存模式）')
 
             // 验证加密是否可用
@@ -519,6 +588,16 @@ export const useMatrixStore = defineStore('matrix', () => {
           }
         } catch (cryptoError: any) {
           console.warn('⚠️ 加密初始化失败，继续以非加密模式运行:', cryptoError.message)
+
+          // 如果是WASM相关错误，提供更详细的信息
+          if (cryptoError.message && (
+            cryptoError.message.includes('null pointer') ||
+            cryptoError.message.includes('wasm') ||
+            cryptoError.message.includes('WebAssembly')
+          )) {
+            console.warn('💡 检测到WASM相关错误，建议刷新页面或使用非加密模式')
+          }
+
           // 不要因为加密失败而阻止客户端启动
         }
 
@@ -720,7 +799,11 @@ export const useMatrixStore = defineStore('matrix', () => {
       return client
     } catch (error) {
       console.error('Failed to create Matrix client:', error)
+      // 清理失败的客户端
+      await cleanupMatrixClient()
       throw error
+    } finally {
+      clientInitializing.value = false
     }
   }
 
@@ -925,15 +1008,15 @@ export const useMatrixStore = defineStore('matrix', () => {
     const diagnosis = {
       clientExists: !!matrixClient.value,
       clientRunning: false,
-      syncState: null,
-      userId: null,
-      homeserver: null,
+      syncState: null as string | null,
+      userId: null as string | null,
+      homeserver: null as string | null,
       accessToken: false,
-      deviceId: null,
+      deviceId: null as string | null,
       roomCount: 0,
       networkConnectivity: false,
       authValid: false,
-      recommendations: []
+      recommendations: [] as string[]
     }
 
     if (matrixClient.value) {
@@ -1716,6 +1799,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     startMatrixSync,
     diagnoseMatrixConnection,
     startSync,
+    cleanupMatrixClient,
     
     // 辅助方法
     setCurrentRoom,

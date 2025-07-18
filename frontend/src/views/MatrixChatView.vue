@@ -434,19 +434,26 @@ watch(() => matrixStore.rooms, (rooms) => {
 // 初始化
 onMounted(async () => {
   try {
-    // 尝试从localStorage恢复登录状态
-    const restored = await matrixStore.initializeMatrix()
+    // 检查是否已经初始化，避免重复初始化
+    if (matrixStore.matrixClient && matrixStore.isConnected) {
+      console.log('Matrix已经初始化，跳过重复初始化')
+    } else {
+      // 尝试从localStorage恢复登录状态
+      const restored = await matrixStore.initializeMatrix()
 
-    if (restored) {
-      console.log('Matrix login restored from localStorage')
-      // 恢复服务器选择
-      const savedServer = localStorage.getItem('matrix-selected-server')
-      if (savedServer) {
-        selectedServer.value = savedServer
+      if (restored) {
+        console.log('Matrix login restored from localStorage')
       }
+    }
 
-      // 加载邀请和房间信息
-      await loadPendingInvitations()
+    // 恢复服务器选择
+    const savedServer = localStorage.getItem('matrix-selected-server')
+    if (savedServer) {
+      selectedServer.value = savedServer
+    }
+
+    // 加载邀请和房间信息
+    await loadPendingInvitations()
 
       // 选择默认房间
       const rooms = matrixStore.rooms

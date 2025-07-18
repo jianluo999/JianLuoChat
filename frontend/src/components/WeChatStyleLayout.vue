@@ -853,6 +853,12 @@ const joinPublicRoom = async (roomId: string) => {
 onMounted(async () => {
   console.log('🚀 WeChatStyleLayout 组件挂载开始')
 
+  // 检查是否已经有Matrix客户端在运行，避免重复初始化
+  if (matrixStore.matrixClient && matrixStore.isConnected) {
+    console.log('✅ Matrix客户端已存在且已连接，跳过初始化')
+    return
+  }
+
   // 首先尝试初始化Matrix状态（包括恢复房间列表）
   try {
     const initialized = await matrixStore.initializeMatrix()
@@ -880,9 +886,7 @@ onMounted(async () => {
 
   if (storedToken && storedLoginInfo) {
     console.log('✅ 发现存储的登录信息，界面可以显示')
-
-    // 在后台异步初始化Matrix客户端
-    initializeMatrixInBackground()
+    // 注意：不再调用 initializeMatrixInBackground，避免重复初始化
   } else if (matrixStore.rooms.length === 0) {
     // 只有在没有房间列表的情况下才跳转到登录页面
     console.log('❌ 没有找到存储的登录信息且无房间列表，跳转到登录页面')
@@ -892,70 +896,7 @@ onMounted(async () => {
   }
 })
 
-// 后台异步初始化Matrix客户端
-const initializeMatrixInBackground = async () => {
-  try {
-    console.log('🔄 在后台初始化Matrix客户端...')
-
-    // 如果store中还没有客户端，尝试初始化
-    if (!matrixStore.matrixClient) {
-      await matrixStore.initializeMatrix()
-    }
-
-    // 等待Matrix客户端初始化完成，但不阻塞界面
-    let retryCount = 0
-    const maxRetries = 60 // 增加重试次数，但不阻塞界面
-
-    const waitForClient = async () => {
-      while (!matrixStore.matrixClient && retryCount < maxRetries) {
-        console.log(`⏳ Matrix客户端后台初始化中... (${retryCount + 1}/${maxRetries})`)
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        retryCount++
-      }
-
-      if (matrixStore.matrixClient) {
-        console.log('✅ Matrix客户端后台初始化完成')
-        console.log('📊 Matrix客户端详细信息:', {
-          userId: matrixStore.matrixClient.getUserId(),
-          homeserver: matrixStore.matrixClient.getHomeserverUrl(),
-          syncState: matrixStore.matrixClient.getSyncState()
-        })
-
-        // 获取房间列表
-        try {
-          console.log('🔄 后台获取房间列表...')
-          const rooms = matrixStore.matrixClient.getRooms()
-          console.log(`📊 从客户端获取到 ${rooms.length} 个房间`)
-
-          // 转换房间格式并添加到store
-          const convertedRooms = rooms.map((room: any) => ({
-            id: room.roomId,
-            name: room.name || room.roomId,
-            type: 'private',
-            isPublic: false,
-            memberCount: room.getJoinedMemberCount(),
-            unreadCount: 0,
-            encrypted: room.hasEncryptionStateEvent()
-          }))
-
-          matrixStore.rooms.splice(0, matrixStore.rooms.length, ...convertedRooms)
-          console.log('✅ 房间列表已更新')
-        } catch (roomError) {
-          console.error('❌ 获取房间列表失败:', roomError)
-        }
-      } else {
-        console.error('❌ Matrix客户端后台初始化超时')
-      }
-    }
-
-    // 异步执行，不阻塞界面
-    waitForClient()
-
-  } catch (error) {
-    console.error('❌ 后台初始化Matrix失败:', error)
-    // 不跳转到登录页面，让用户可以继续使用界面
-  }
-}
+// 注释：已移除 initializeMatrixInBackground 函数以避免重复初始化
 </script>
 
 <style scoped>
