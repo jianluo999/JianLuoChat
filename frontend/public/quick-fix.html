@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix设备冲突快速修复</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .title {
+            color: #dc3545;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .description {
+            color: #6c757d;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .fix-button {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            transition: background 0.3s;
+        }
+        .fix-button:hover {
+            background: #c82333;
+        }
+        .fix-button.success {
+            background: #28a745;
+        }
+        .fix-button.success:hover {
+            background: #218838;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .steps {
+            text-align: left;
+            margin: 20px 0;
+        }
+        .steps ol {
+            padding-left: 20px;
+        }
+        .steps li {
+            margin: 10px 0;
+            line-height: 1.5;
+        }
+        .code {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 10px 0;
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">🔧 Matrix设备冲突快速修复</h1>
+        
+        <div class="description">
+            检测到Matrix客户端设备冲突问题。这通常是由于多个客户端实例或设备密钥冲突导致的。
+            <br><br>
+            <strong>当前问题：</strong> "One time key already exists" 错误
+        </div>
+
+        <div id="status"></div>
+
+        <button class="fix-button" onclick="quickFix()">🚀 一键修复</button>
+        <button class="fix-button" onclick="manualSteps()">📋 手动步骤</button>
+        <button class="fix-button success" onclick="testFix()">✅ 测试修复</button>
+
+        <div id="content"></div>
+    </div>
+
+    <script>
+        function showStatus(message, type = 'success') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        function showContent(content) {
+            document.getElementById('content').innerHTML = content;
+        }
+
+        async function quickFix() {
+            showStatus('🔄 正在执行快速修复...', 'warning');
+            
+            try {
+                // 步骤1: 清理所有Matrix相关数据
+                console.log('🧹 清理localStorage...');
+                const keysToRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && (key.includes('matrix') || key.includes('crypto') || key.includes('device'))) {
+                        keysToRemove.push(key);
+                    }
+                }
+                
+                keysToRemove.forEach(key => {
+                    localStorage.removeItem(key);
+                    console.log(`🗑️ 删除: ${key}`);
+                });
+
+                // 步骤2: 清理sessionStorage
+                console.log('🧹 清理sessionStorage...');
+                const sessionKeysToRemove = [];
+                for (let i = 0; i < sessionStorage.length; i++) {
+                    const key = sessionStorage.key(i);
+                    if (key && (key.includes('matrix') || key.includes('crypto') || key.includes('device'))) {
+                        sessionKeysToRemove.push(key);
+                    }
+                }
+                
+                sessionKeysToRemove.forEach(key => {
+                    sessionStorage.removeItem(key);
+                    console.log(`🗑️ 删除session: ${key}`);
+                });
+
+                // 步骤3: 清理IndexedDB
+                console.log('🧹 清理IndexedDB...');
+                if ('indexedDB' in window) {
+                    const databases = await indexedDB.databases();
+                    const matrixDbs = databases.filter(db => 
+                        db.name && (
+                            db.name.includes('matrix') || 
+                            db.name.includes('crypto') || 
+                            db.name.includes('jianluochat')
+                        )
+                    );
+                    
+                    for (const db of matrixDbs) {
+                        console.log(`🗑️ 删除数据库: ${db.name}`);
+                        indexedDB.deleteDatabase(db.name);
+                    }
+                    
+                    console.log(`✅ 删除了 ${matrixDbs.length} 个数据库`);
+                }
+
+                // 步骤4: 清理全局变量
+                console.log('🧹 清理全局变量...');
+                const globalKeys = Object.keys(window);
+                let clearedCount = 0;
+                
+                for (const key of globalKeys) {
+                    if (key.includes('matrix') || key.includes('crypto') || key.includes('wasm')) {
+                        try {
+                            delete window[key];
+                            clearedCount++;
+                        } catch (error) {
+                            // 忽略无法删除的属性
+                        }
+                    }
+                }
+                
+                console.log(`✅ 清理了 ${clearedCount} 个全局变量`);
+
+                // 步骤5: 设置修复标志
+                localStorage.setItem('matrix-conflict-fixed', Date.now().toString());
+                localStorage.setItem('matrix-enable-crypto', 'false'); // 禁用加密避免冲突
+
+                showStatus('✅ 快速修复完成！请刷新页面以应用更改。', 'success');
+                
+                showContent(`
+                    <div class="steps">
+                        <h3>✅ 修复完成</h3>
+                        <p>已执行以下操作：</p>
+                        <ol>
+                            <li>清理了 ${keysToRemove.length} 个localStorage项</li>
+                            <li>清理了 ${sessionKeysToRemove.length} 个sessionStorage项</li>
+                            <li>清理了Matrix相关数据库</li>
+                            <li>清理了 ${clearedCount} 个全局变量</li>
+                            <li>禁用了加密功能（避免冲突）</li>
+                        </ol>
+                        <p><strong>下一步：</strong></p>
+                        <div class="code">
+                            请刷新页面，然后重新登录Matrix账户
+                        </div>
+                    </div>
+                `);
+
+                // 3秒后自动刷新
+                setTimeout(() => {
+                    if (confirm('修复完成！是否立即刷新页面？')) {
+                        window.location.reload();
+                    }
+                }, 3000);
+
+            } catch (error) {
+                console.error('修复失败:', error);
+                showStatus(`❌ 修复失败: ${error.message}`, 'error');
+            }
+        }
+
+        function manualSteps() {
+            showContent(`
+                <div class="steps">
+                    <h3>📋 手动修复步骤</h3>
+                    <p>如果自动修复失败，请按以下步骤手动操作：</p>
+                    <ol>
+                        <li><strong>清理浏览器数据：</strong>
+                            <div class="code">
+                                按 F12 → Application → Storage → Clear storage
+                            </div>
+                        </li>
+                        <li><strong>或者在控制台运行：</strong>
+                            <div class="code">
+                                localStorage.clear();<br>
+                                sessionStorage.clear();<br>
+                                location.reload();
+                            </div>
+                        </li>
+                        <li><strong>禁用加密（推荐）：</strong>
+                            <div class="code">
+                                localStorage.setItem('matrix-enable-crypto', 'false');
+                            </div>
+                        </li>
+                        <li><strong>重新登录：</strong>
+                            <div class="code">
+                                刷新页面后重新输入Matrix账户信息
+                            </div>
+                        </li>
+                    </ol>
+                    <p><strong>注意：</strong> 这将清除所有本地数据，但不会影响服务器上的数据。</p>
+                </div>
+            `);
+        }
+
+        function testFix() {
+            showStatus('🔍 正在测试修复效果...', 'warning');
+            
+            const deviceId = localStorage.getItem('matrix-device-id');
+            const loginInfo = localStorage.getItem('matrix-login-info');
+            const fixedFlag = localStorage.getItem('matrix-conflict-fixed');
+            const cryptoDisabled = localStorage.getItem('matrix-enable-crypto') === 'false';
+            
+            let testResult = '<div class="steps"><h3>🔍 测试结果</h3>';
+            
+            if (!deviceId && !loginInfo) {
+                testResult += '<p>✅ 本地数据已清理</p>';
+            } else {
+                testResult += '<p>⚠️ 仍有残留数据</p>';
+            }
+            
+            if (fixedFlag) {
+                const fixTime = new Date(parseInt(fixedFlag)).toLocaleString();
+                testResult += `<p>✅ 修复标志存在 (${fixTime})</p>`;
+            } else {
+                testResult += '<p>❌ 未找到修复标志</p>';
+            }
+            
+            if (cryptoDisabled) {
+                testResult += '<p>✅ 加密已禁用</p>';
+            } else {
+                testResult += '<p>⚠️ 加密仍然启用</p>';
+            }
+            
+            // 检查IndexedDB
+            if ('indexedDB' in window) {
+                indexedDB.databases().then(databases => {
+                    const matrixDbs = databases.filter(db => 
+                        db.name && (db.name.includes('matrix') || db.name.includes('crypto'))
+                    );
+                    
+                    if (matrixDbs.length === 0) {
+                        testResult += '<p>✅ IndexedDB已清理</p>';
+                    } else {
+                        testResult += `<p>⚠️ 仍有 ${matrixDbs.length} 个数据库</p>`;
+                    }
+                    
+                    testResult += '</div>';
+                    showContent(testResult);
+                    
+                    if (!deviceId && !loginInfo && fixedFlag && cryptoDisabled && matrixDbs.length === 0) {
+                        showStatus('✅ 修复测试通过！可以安全地重新登录了。', 'success');
+                    } else {
+                        showStatus('⚠️ 修复可能不完整，建议重新执行修复。', 'warning');
+                    }
+                });
+            } else {
+                testResult += '</div>';
+                showContent(testResult);
+            }
+        }
+
+        // 页面加载时显示当前状态
+        window.addEventListener('load', () => {
+            const fixedFlag = localStorage.getItem('matrix-conflict-fixed');
+            if (fixedFlag) {
+                const fixTime = new Date(parseInt(fixedFlag)).toLocaleString();
+                showStatus(`ℹ️ 检测到之前的修复记录 (${fixTime})`, 'warning');
+            } else {
+                showStatus('⚠️ 检测到设备冲突，建议执行修复操作', 'error');
+            }
+        });
+    </script>
+</body>
+</html>

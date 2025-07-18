@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { matrixAPI, roomAPI } from '@/services/api'
+import { deviceConflictUtils } from '@/utils/deviceConflictResolver'
 
 // Matrix消息接口
 export interface MatrixMessage {
@@ -74,7 +75,7 @@ export interface MatrixConnectionState {
   deviceId?: string
   syncState: MatrixSyncState
 }
-
+ 
 export const useMatrixStore = defineStore('matrix', () => {
   // Matrix连接状态
   const connection = ref<MatrixConnectionState>({
@@ -486,10 +487,43 @@ export const useMatrixStore = defineStore('matrix', () => {
     loginInfo.value = null
     clientInitializing.value = false
 
-    // 清除localStorage
+    // 清除localStorage，包括设备ID
     localStorage.removeItem('matrix-login-info')
+    localStorage.removeItem('matrix-device-id')
 
     console.log('Matrix logout completed')
+  }
+
+  // 清理设备冲突的函数
+  const clearDeviceConflicts = async () => {
+    try {
+      console.log('🧹 开始清理设备冲突...')
+
+      // 清理localStorage中的设备相关数据
+      localStorage.removeItem('matrix-device-id')
+      localStorage.removeItem('matrix-login-info')
+
+      // 清理IndexedDB中的加密存储
+      try {
+        const databases = await indexedDB.databases()
+        for (const db of databases) {
+          if (db.name && (db.name.includes('matrix') || db.name.includes('crypto'))) {
+            console.log('🗑️ 删除数据库:', db.name)
+            indexedDB.deleteDatabase(db.name)
+          }
+        }
+      } catch (dbError) {
+        console.warn('清理数据库失败:', dbError)
+      }
+
+      // 清理现有客户端
+      await cleanupMatrixClient()
+
+      console.log('✅ 设备冲突清理完成，建议重新登录')
+
+    } catch (error) {
+      console.error('❌ 清理设备冲突失败:', error)
+    }
   }
 
   // 创建Matrix客户端实例
@@ -511,11 +545,28 @@ export const useMatrixStore = defineStore('matrix', () => {
 
       console.log(`🔧 创建Matrix客户端: ${userId} @ ${homeserver}`)
 
+      // 生成唯一的设备ID，避免多个客户端实例冲突
+      const generateUniqueDeviceId = () => {
+        const timestamp = Date.now()
+        const random = Math.random().toString(36).substring(2, 8)
+        return `jianluochat_web_${timestamp}_${random}`
+      }
+
+      // 尝试从localStorage获取已保存的设备ID，如果没有则生成新的
+      let deviceId = localStorage.getItem('matrix-device-id')
+      if (!deviceId) {
+        deviceId = generateUniqueDeviceId()
+        localStorage.setItem('matrix-device-id', deviceId)
+        console.log('🆔 生成新的设备ID:', deviceId)
+      } else {
+        console.log('🆔 使用已保存的设备ID:', deviceId)
+      }
+
       const client = createClient({
         baseUrl: `https://${homeserver}`,
         accessToken: accessToken,
         userId: userId,
-        deviceId: 'jianluochat_web_client',
+        deviceId: deviceId,
         timelineSupport: true,
         // 尝试启用加密支持
         // cryptoStore: 'indexeddb',  // 暂时注释掉，使用initRustCrypto代替
@@ -553,52 +604,78 @@ export const useMatrixStore = defineStore('matrix', () => {
           await new Promise(resolve => setTimeout(resolve, 1000))
         }
 
-        // 初始化端到端加密支持
-        console.log('🔐 初始化端到端加密支持...')
-        try {
-          // 检查是否支持加密
-          if (typeof (client as any).initRustCrypto === 'function') {
-            console.log('🔧 尝试初始化Rust加密引擎...')
+        // 暂时完全跳过加密初始化以避免设备冲突
+        console.log('🔐 跳过端到端加密初始化（避免设备冲突）')
+        console.log('💡 当前以非加密模式运行，适合开发和测试环境')
 
-            // 使用更安全的加密配置
-            const cryptoConfig = {
-              useIndexedDB: false, // 使用内存存储避免WASM问题
-              storagePassword: undefined,
-              storageKey: undefined
-            }
+        // 可选：如果需要加密，可以通过环境变量控制
+        const enableCrypto = localStorage.getItem('matrix-enable-crypto') === 'true'
 
-            // 添加超时保护
-            const cryptoPromise = (client as any).initRustCrypto(cryptoConfig)
-            const timeoutPromise = new Promise((_, reject) => {
-              setTimeout(() => reject(new Error('加密初始化超时')), 10000)
-            })
+        if (enableCrypto) {
+          console.log('🔧 检测到加密启用标志，尝试初始化加密...')
+          try {
+            // 检查是否支持加密
+            if (typeof (client as any).initRustCrypto === 'function') {
+              console.log('🔧 尝试初始化Rust加密引擎...')
 
-            await Promise.race([cryptoPromise, timeoutPromise])
-            console.log('✅ Rust加密引擎初始化成功（内存模式）')
+              // 为每个设备使用唯一的加密存储前缀，避免冲突
+              const cryptoStorePrefix = `jianluochat-crypto-${deviceId}-${Date.now()}`
 
-            // 验证加密是否可用
-            const crypto = client.getCrypto()
-            if (crypto) {
-              console.log('✅ 加密API可用')
+              // 使用更安全的加密配置
+              const cryptoConfig = {
+                useIndexedDB: false, // 使用内存存储避免WASM问题和设备冲突
+                storagePassword: undefined,
+                storageKey: undefined,
+                cryptoDatabasePrefix: cryptoStorePrefix
+              }
+
+              console.log('🔧 加密配置:', { deviceId, cryptoStorePrefix })
+
+              // 添加超时保护
+              const cryptoPromise = (client as any).initRustCrypto(cryptoConfig)
+              const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('加密初始化超时')), 10000)
+              })
+
+              await Promise.race([cryptoPromise, timeoutPromise])
+              console.log('✅ Rust加密引擎初始化成功（内存模式）')
+
+              // 验证加密是否可用
+              const crypto = client.getCrypto()
+              if (crypto) {
+                console.log('✅ 加密API可用')
+              } else {
+                console.warn('⚠️ 加密API不可用')
+              }
             } else {
-              console.warn('⚠️ 加密API不可用')
+              console.warn('⚠️ 客户端不支持Rust加密')
             }
-          } else {
-            console.warn('⚠️ 客户端不支持Rust加密')
-          }
-        } catch (cryptoError: any) {
-          console.warn('⚠️ 加密初始化失败，继续以非加密模式运行:', cryptoError.message)
+          } catch (cryptoError: any) {
+            console.warn('⚠️ 加密初始化失败，继续以非加密模式运行:', cryptoError.message)
 
-          // 如果是WASM相关错误，提供更详细的信息
-          if (cryptoError.message && (
-            cryptoError.message.includes('null pointer') ||
-            cryptoError.message.includes('wasm') ||
-            cryptoError.message.includes('WebAssembly')
-          )) {
-            console.warn('💡 检测到WASM相关错误，建议刷新页面或使用非加密模式')
-          }
+            // 使用设备冲突检测工具
+            const conflictInfo = deviceConflictUtils.detect(cryptoError)
+            if (conflictInfo.hasConflict) {
+              console.warn('🚨 检测到设备冲突:', conflictInfo.conflictType)
+              console.warn('📋 冲突报告:', deviceConflictUtils.generateReport(conflictInfo))
 
-          // 不要因为加密失败而阻止客户端启动
+              // 尝试自动修复
+              try {
+                const fixed = await deviceConflictUtils.autoFix(conflictInfo)
+                if (fixed) {
+                  console.log('✅ 设备冲突已自动修复，建议重新登录')
+                  error.value = '检测到设备冲突并已自动修复，请重新登录以获得最佳体验'
+                } else {
+                  console.warn('⚠️ 无法自动修复设备冲突')
+                  error.value = '检测到设备冲突，建议清理浏览器数据后重新登录'
+                }
+              } catch (fixError) {
+                console.error('❌ 修复设备冲突失败:', fixError)
+              }
+            }
+          }
+        } else {
+          console.log('💡 提示：如需启用加密，请在控制台运行：localStorage.setItem("matrix-enable-crypto", "true")')
         }
 
         await client.startClient({
@@ -1713,42 +1790,79 @@ export const useMatrixStore = defineStore('matrix', () => {
         throw new Error('找不到房间')
       }
 
-      // 获取当前时间线
-      const timeline = room.timeline || []
-      const oldestEvent = timeline[0]
-      
-      // 尝试向前加载更多消息
-      const limit = 50 // 每次加载50条
-      await room.getMessages({ limit, from: oldestEvent?.getId() })
+      // 获取当前时间线事件数量
+      const timeline = room.getLiveTimeline()
+      const currentEventCount = timeline.getEvents().length
+      console.log(`📊 当前时间线事件数量: ${currentEventCount}`)
 
-      // 获取新消息并添加到store
-      const events = room.timeline.slice(0, limit)
-      const newMessages: MatrixMessage[] = events
+      // 使用 scrollback 方法加载更多历史消息
+      const limit = 30 // 每次加载30条
+      console.log(`🔄 开始加载 ${limit} 条历史消息...`)
+
+      await matrixClient.value.scrollback(room, limit)
+
+      // 获取更新后的事件
+      const updatedEvents = timeline.getEvents()
+      const newEventCount = updatedEvents.length
+      console.log(`📊 加载后事件数量: ${newEventCount}，新增: ${newEventCount - currentEventCount}`)
+
+      // 只处理新加载的消息事件
+      const newEvents = updatedEvents.slice(0, newEventCount - currentEventCount)
+      const newMessages: MatrixMessage[] = newEvents
         .filter((event: any) => event.getType() === 'm.room.message')
-        .map((event: any) => ({
-          id: event.getId(),
-          roomId: roomId,
-          content: event.getContent().body || '',
-          sender: event.getSender(),
-          timestamp: event.getTs(),
-          type: event.getContent().msgtype || 'm.text',
-          eventId: event.getId(),
-          encrypted: room.isEncrypted(),
-          senderName: room.getMember(event.getSender())?.name,
-          status: 'sent'
-        }))
+        .map((event: any) => {
+          try {
+            const content = event.getContent()
+            return {
+              id: event.getId(),
+              roomId: roomId,
+              content: content?.body || content?.formatted_body || '',
+              sender: event.getSender(),
+              timestamp: event.getTs(),
+              type: event.getType(),
+              eventId: event.getId(),
+              encrypted: !!content?.algorithm,
+              senderName: event.getSender(), // 可以后续优化为显示名
+              status: 'sent' as const
+            }
+          } catch (eventError) {
+            console.warn('处理历史消息事件失败:', eventError, event)
+            return null
+          }
+        })
+        .filter((msg): msg is MatrixMessage => msg !== null)
 
-      // 更新消息列表
+      // 更新消息列表 - 将新消息添加到开头
       if (messages.value.has(roomId)) {
         const currentMessages = messages.value.get(roomId) || []
-        messages.value.set(roomId, [...newMessages, ...currentMessages])
+        // 避免重复消息
+        const existingIds = new Set(currentMessages.map(m => m.id))
+        const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id))
+
+        if (uniqueNewMessages.length > 0) {
+          messages.value.set(roomId, [...uniqueNewMessages, ...currentMessages])
+          console.log(`✅ 成功加载了 ${uniqueNewMessages.length} 条新的历史消息`)
+        } else {
+          console.log('📝 没有新的历史消息')
+        }
+      } else {
+        // 如果是第一次加载消息
+        messages.value.set(roomId, newMessages)
+        console.log(`✅ 首次加载了 ${newMessages.length} 条历史消息`)
       }
 
-      console.log(`✅ 成功加载了 ${newMessages.length} 条历史消息`)
       return newMessages
 
     } catch (error) {
       console.error('加载历史消息失败:', error)
+      // 提供更友好的错误信息
+      if (error instanceof Error) {
+        if (error.message.includes('scrollback')) {
+          throw new Error('无法加载更多历史消息，可能已到达消息历史的开始')
+        } else if (error.message.includes('network')) {
+          throw new Error('网络连接问题，请检查网络后重试')
+        }
+      }
       throw error
     }
   }
@@ -1800,7 +1914,8 @@ export const useMatrixStore = defineStore('matrix', () => {
     diagnoseMatrixConnection,
     startSync,
     cleanupMatrixClient,
-    
+    clearDeviceConflicts,
+
     // 辅助方法
     setCurrentRoom,
     addMatrixMessage,
