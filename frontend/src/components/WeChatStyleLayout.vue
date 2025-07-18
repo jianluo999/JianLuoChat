@@ -72,36 +72,69 @@
           <span class="username">{{ matrixStore.currentUser.displayName || matrixStore.currentUser.username }}</span>
         </div>
         <div class="header-actions">
-          <button class="action-btn" @click="startDirectMessage" title="发起聊天">
-            💬
+          <!-- 主要操作按钮 -->
+          <button class="action-btn primary" @click="startDirectMessage" title="发起聊天">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+            </svg>
           </button>
-          <button class="action-btn" @click="createGroupChat" title="创建群聊">
-            👥
+          <button class="action-btn primary" @click="createGroupChat" title="创建群聊">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M16 4c0-1.11.89-2 2-2s2 .89 2 2-.89 2-2 2-2-.89-2-2zM4 18v-1c0-2.66 5.33-4 8-4s8 1.34 8 4v1H4zM12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z"/>
+            </svg>
           </button>
-          <button class="action-btn" @click="showJoinRoomDialog" title="加入房间">
-            ➕
+          <button class="action-btn primary" @click="showJoinRoomDialog" title="加入房间">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
           </button>
-          <button class="action-btn" @click="toggleExplore" title="探索">
-            🔍
-          </button>
-          <button class="action-btn" @click="refreshRooms" title="刷新房间列表">
-            🔄
-          </button>
-          <button class="action-btn" @click="debugMatrixClient" title="调试Matrix客户端">
-            🐛
-          </button>
-          <button class="action-btn" @click="testFastMessage" title="测试快速消息">
-            ⚡
-          </button>
-          <button class="action-btn" @click="openEncryptionSettings" title="加密设置">
-            🔐
-          </button>
-          <button class="action-btn" @click="openEncryptionTest" title="加密测试">
-            🧪
-          </button>
-          <button class="action-btn" @click="openCryptoDebug" title="加密调试">
-            🔧
-          </button>
+
+          <!-- 更多操作菜单 -->
+          <div class="more-actions" ref="moreActionsRef">
+            <button
+              class="action-btn more-btn"
+              @click="toggleMoreMenu"
+              title="更多操作"
+              :class="{ active: showMoreMenu }"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+              </svg>
+            </button>
+            <div v-if="showMoreMenu" class="more-menu">
+              <button class="menu-item" @click="toggleExplore">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                </svg>
+                探索房间
+              </button>
+              <button class="menu-item" @click="refreshRooms">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                </svg>
+                刷新房间
+              </button>
+              <div class="menu-divider"></div>
+              <button class="menu-item" @click="debugMatrixClient">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20 8h-2.81c-.45-.78-1.07-1.45-1.82-1.96L17 4.41 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5c-.49 0-.96.06-1.42.17L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8z"/>
+                </svg>
+                调试工具
+              </button>
+              <button class="menu-item" @click="testFastMessage">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M7 14l5-5 5 5z"/>
+                </svg>
+                测试消息
+              </button>
+              <button class="menu-item" @click="openEncryptionSettings">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                </svg>
+                加密设置
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -181,9 +214,12 @@
           <p>从左侧选择一个聊天开始对话</p>
         </div>
       </div>
-      
-      <div v-else class="active-chat">
-        <MatrixMessageAreaSimple :room-id="currentRoomId" />
+      <div v-else class="active-chat-container">
+        <div class="message-list">
+          <MatrixMessageAreaSimple :room-id="currentRoomId" />
+        </div>
+        <!-- 预留输入区（如有输入框可放这里） -->
+        <!-- <div class="message-input"><YourInputComponent /></div> -->
       </div>
     </div>
 
@@ -294,7 +330,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMatrixStore } from '@/stores/matrix'
 import MatrixMessageAreaSimple from './MatrixMessageAreaSimple.vue'
@@ -317,6 +353,8 @@ const joinRoomInput = ref('')
 const isJoiningRoom = ref(false)
 const publicRooms = ref<any[]>([])
 const isLoadingPublicRooms = ref(false)
+const showMoreMenu = ref(false)
+const moreActionsRef = ref<HTMLElement>()
 
 
 
@@ -341,6 +379,17 @@ const filteredPublicRooms = computed(() => {
 const setActiveNav = (nav: string) => {
   activeNav.value = nav
   console.log('切换到导航:', nav)
+}
+
+const toggleMoreMenu = () => {
+  showMoreMenu.value = !showMoreMenu.value
+}
+
+// 点击外部关闭更多菜单
+const handleClickOutside = (event: Event) => {
+  if (moreActionsRef.value && !moreActionsRef.value.contains(event.target as Node)) {
+    showMoreMenu.value = false
+  }
 }
 
 const handleLogout = () => {
@@ -479,7 +528,7 @@ const refreshRooms = async () => {
           matrixStore.matrixClient?.removeListener('sync', onSync)
           console.warn('同步等待超时，继续刷新房间列表')
           resolve(true)
-        }, 15000) // 增加超时时间到15秒
+        }, 3000) // 优化：超时时间改为3秒
 
         const onSync = (state: string) => {
           console.log(`🔄 同步状态: ${state}`)
@@ -1025,12 +1074,13 @@ const initializeMatrixInBackground = async () => {
 
 /* 聊天列表头部 */
 .chat-list-header {
-  padding: 15px 20px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(45, 90, 39, 0.05);
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(10px);
 }
 
 .user-info {
@@ -1060,25 +1110,98 @@ const initializeMatrixInBackground = async () => {
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+  position: relative;
 }
 
 .action-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border: none;
-  background: rgba(45, 90, 39, 0.1);
-  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #2d5a27;
+  color: #666;
   transition: all 0.2s ease;
+  position: relative;
 }
 
 .action-btn:hover {
-  background: rgba(45, 90, 39, 0.2);
+  background: rgba(0, 0, 0, 0.08);
+  color: #333;
+  transform: translateY(-1px);
+}
+
+.action-btn.primary {
+  color: #2d5a27;
+}
+
+.action-btn.primary:hover {
+  background: rgba(45, 90, 39, 0.1);
+  color: #1e3d1a;
+}
+
+.action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.more-actions {
+  position: relative;
+}
+
+.more-btn.active {
+  background: rgba(45, 90, 39, 0.15);
+  color: #2d5a27;
+}
+
+.more-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  min-width: 180px;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.menu-item {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #333;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+}
+
+.menu-item:hover {
+  background: rgba(45, 90, 39, 0.05);
+}
+
+.menu-item svg {
+  width: 16px;
+  height: 16px;
+  color: #666;
+}
+
+.menu-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 4px 0;
 }
 
 /* 搜索框 */
@@ -1289,10 +1412,24 @@ const initializeMatrixInBackground = async () => {
   font-size: 14px;
 }
 
-.active-chat {
+.active-chat-container {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  background: #fafafa;
+  min-height: 0;
+}
+.message-input {
+  flex: 0;
+  border-top: 1px solid #ddd;
+  padding: 8px;
+  background: #fff;
 }
 
 /* 探索面板 */

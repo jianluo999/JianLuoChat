@@ -1616,6 +1616,60 @@ export const useMatrixStore = defineStore('matrix', () => {
     onlineUsers.value.clear()
   }
 
+  // 加载更多历史消息
+  const loadMoreHistoryMessages = async (roomId: string): Promise<MatrixMessage[]> => {
+    if (!matrixClient?.value) {
+      console.error('Matrix客户端未初始化')
+      return []
+    }
+
+    try {
+      console.log(`📚 加载房间 ${roomId} 的更多历史消息...`)
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('找不到房间')
+      }
+
+      // 获取当前时间线
+      const timeline = room.timeline || []
+      const oldestEvent = timeline[0]
+      
+      // 尝试向前加载更多消息
+      const limit = 50 // 每次加载50条
+      await room.getMessages({ limit, from: oldestEvent?.getId() })
+
+      // 获取新消息并添加到store
+      const events = room.timeline.slice(0, limit)
+      const newMessages: MatrixMessage[] = events
+        .filter((event: any) => event.getType() === 'm.room.message')
+        .map((event: any) => ({
+          id: event.getId(),
+          roomId: roomId,
+          content: event.getContent().body || '',
+          sender: event.getSender(),
+          timestamp: event.getTs(),
+          type: event.getContent().msgtype || 'm.text',
+          eventId: event.getId(),
+          encrypted: room.isEncrypted(),
+          senderName: room.getMember(event.getSender())?.name,
+          status: 'sent'
+        }))
+
+      // 更新消息列表
+      if (messages.value.has(roomId)) {
+        const currentMessages = messages.value.get(roomId) || []
+        messages.value.set(roomId, [...newMessages, ...currentMessages])
+      }
+
+      console.log(`✅ 成功加载了 ${newMessages.length} 条历史消息`)
+      return newMessages
+
+    } catch (error) {
+      console.error('加载历史消息失败:', error)
+      throw error
+    }
+  }
+
   return {
     // Matrix状态
     connection,
@@ -1669,6 +1723,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     markRoomAsRead,
     addRoom,
     clearError,
-    disconnect
+    disconnect,
+    loadMoreHistoryMessages
   }
 })
