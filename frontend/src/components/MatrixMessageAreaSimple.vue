@@ -217,14 +217,20 @@ const scrollToBottom = () => {
 // 加载更多历史消息
 const loadMoreMessages = async () => {
   if (!currentRoom.value || loading.value) return
-
+  
   try {
-    loading.value = true
-    console.log('📚 加载更多历史消息...')
-
-    // 记录当前滚动位置
+    // 检查是否有足够的滚动空间来加载更多
     const container = messagesContainer.value
     if (!container) return
+
+    // 如果内容高度不超过容器，或者已经没有更多消息，就不加载
+    if (container.scrollHeight <= container.clientHeight) {
+      console.log('内容未填满，暂不加载更多')
+      return
+    }
+
+    loading.value = true
+    console.log('📚 加载更多历史消息...')
 
     const oldScrollHeight = container.scrollHeight
     const oldScrollTop = container.scrollTop
@@ -248,15 +254,30 @@ const loadMoreMessages = async () => {
   }
 }
 
+// 节流定时器
+let scrollThrottleTimer: number | null = null
+let isLoadingMore = false
+
 // 处理滚动事件
 const handleScroll = (event: Event) => {
   const container = event.target as HTMLElement
-  if (!container) return
+  if (!container || loading.value || isLoadingMore) return
 
-  // 如果滚动到顶部附近（距离顶部小于100px），加载更多历史消息
-  if (container.scrollTop < 100) {
-    loadMoreMessages()
+  // 节流处理：确保滚动事件不会太频繁触发
+  if (scrollThrottleTimer) {
+    return
   }
+
+  scrollThrottleTimer = window.setTimeout(async () => {
+    scrollThrottleTimer = null
+
+    // 只有在靠近顶部且不在加载中时才加载更多
+    if (container.scrollTop < 50) {
+      isLoadingMore = true
+      await loadMoreMessages()
+      isLoadingMore = false
+    }
+  }, 500) // 500ms的节流延迟
 }
 
 const handleSendMessage = async (content: string) => {

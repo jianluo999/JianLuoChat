@@ -678,6 +678,81 @@ export const useMatrixStore = defineStore('matrix', () => {
           console.log('💡 提示：如需启用加密，请在控制台运行：localStorage.setItem("matrix-enable-crypto", "true")')
         }
 
+        // 设置Matrix事件监听器（在启动客户端之前）
+        console.log('🎧 设置Matrix事件监听器...')
+
+        // 监听同步状态变化
+        (client as any).on('sync', (state: string, prevState: string, data: any) => {
+          console.log(`🔄 Matrix同步状态变化: ${prevState} -> ${state}`, data)
+          connection.value.syncState = { isActive: state === 'SYNCING' }
+
+          // 当同步完成时，尝试获取房间
+          if (state === 'SYNCING' || state === 'PREPARED') {
+            console.log('✅ 同步状态良好，尝试获取房间...')
+            setTimeout(() => {
+              try {
+                const clientRooms = client.getRooms()
+                console.log(`📊 同步后获取到 ${clientRooms.length} 个房间`)
+                if (clientRooms.length > 0) {
+                  // 更新房间列表
+                  const convertedRooms = clientRooms.map((room: any) => ({
+                    id: room.roomId,
+                    name: room.name || room.roomId,
+                    type: 'private',
+                    isPublic: false,
+                    memberCount: room.getJoinedMemberCount(),
+                    unreadCount: 0,
+                    encrypted: false // 加密已禁用
+                  }))
+
+                  // 更新store中的房间列表
+                  rooms.value.splice(0, rooms.value.length, ...convertedRooms)
+                  saveRoomsToStorage()
+                  console.log('✅ 房间列表已通过同步事件更新')
+                }
+              } catch (roomError) {
+                console.warn('获取房间时出错:', roomError)
+              }
+            }, 1000)
+          }
+        })
+
+        // 监听房间事件
+        (client as any).on('Room', (room: any) => {
+          console.log('🏠 新房间事件:', room.roomId)
+          // 当有新房间时，立即更新房间列表
+          setTimeout(() => {
+            try {
+              const allRooms = client.getRooms()
+              console.log(`📊 房间事件后获取到 ${allRooms.length} 个房间`)
+              if (allRooms.length > 0) {
+                const convertedRooms = allRooms.map((r: any) => ({
+                  id: r.roomId,
+                  name: r.name || r.roomId,
+                  type: 'private',
+                  isPublic: false,
+                  memberCount: r.getJoinedMemberCount(),
+                  unreadCount: 0,
+                  encrypted: false
+                }))
+
+                rooms.value.splice(0, rooms.value.length, ...convertedRooms)
+                saveRoomsToStorage()
+                console.log('✅ 房间列表已通过房间事件更新')
+              }
+            } catch (roomError) {
+              console.warn('处理房间事件时出错:', roomError)
+            }
+          }, 500)
+        })
+
+        // 监听消息事件
+        client.on('Room.timeline', (event: any, room: any) => {
+          if (event.getType() === 'm.room.message') {
+            console.log('💬 新消息:', event.getContent().body)
+          }
+        })
+
         await client.startClient({
           initialSyncLimit: 10,
           lazyLoadMembers: true
@@ -1783,6 +1858,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       return []
     }
 
+    let newMessages: MatrixMessage[] = []
     try {
       console.log(`📚 加载房间 ${roomId} 的更多历史消息...`)
       const room = matrixClient.value.getRoom(roomId)
@@ -1790,80 +1866,68 @@ export const useMatrixStore = defineStore('matrix', () => {
         throw new Error('找不到房间')
       }
 
-      // 获取当前时间线事件数量
+      // 获取当前时间线
       const timeline = room.getLiveTimeline()
-      const currentEventCount = timeline.getEvents().length
-      console.log(`📊 当前时间线事件数量: ${currentEventCount}`)
+      const currentEvents = timeline.getEvents()
+      console.log(`📊 当前时间线事件数量: ${currentEvents.length}`)
+      
+      if (currentEvents.length === 0) {
+        console.warn('时间线为空，可能需要等待同步')
+        return []
+      }
 
-      // 使用 scrollback 方法加载更多历史消息
+      const oldestEvent = currentEvents[0]
+      if (!oldestEvent) {
+        console.warn('无法获取最早的事件')
+        return []
+      }
+      
+      // 记录当前消息数量
+      const currentMessageCount = (messages.value.get(roomId) || []).length
+      
+      // 使用scrollback方法加载历史消息
       const limit = 30 // 每次加载30条
-      console.log(`🔄 开始加载 ${limit} 条历史消息...`)
+      console.log(`🔄 从事件 ${oldestEvent.getId()} 开始加载最多 ${limit} 条消息`)
+      
+      await room.scrollback(limit)
 
-      await matrixClient.value.scrollback(room, limit)
+      // 重新获取时间线事件
+      const newEvents = timeline.getEvents()
+      console.log(`📨 加载后的事件数量: ${newEvents.length}`)
 
-      // 获取更新后的事件
-      const updatedEvents = timeline.getEvents()
-      const newEventCount = updatedEvents.length
-      console.log(`📊 加载后事件数量: ${newEventCount}，新增: ${newEventCount - currentEventCount}`)
-
-      // 只处理新加载的消息事件
-      const newEvents = updatedEvents.slice(0, newEventCount - currentEventCount)
-      const newMessages: MatrixMessage[] = newEvents
+      // 过滤出新加载的消息事件
+      const newMessageEvents = newEvents
+        .slice(0, newEvents.length - currentEvents.length) // 只处理新加载的事件
         .filter((event: any) => event.getType() === 'm.room.message')
-        .map((event: any) => {
-          try {
-            const content = event.getContent()
-            return {
-              id: event.getId(),
-              roomId: roomId,
-              content: content?.body || content?.formatted_body || '',
-              sender: event.getSender(),
-              timestamp: event.getTs(),
-              type: event.getType(),
-              eventId: event.getId(),
-              encrypted: !!content?.algorithm,
-              senderName: event.getSender(), // 可以后续优化为显示名
-              status: 'sent' as const
-            }
-          } catch (eventError) {
-            console.warn('处理历史消息事件失败:', eventError, event)
-            return null
-          }
-        })
-        .filter((msg): msg is MatrixMessage => msg !== null)
 
-      // 更新消息列表 - 将新消息添加到开头
-      if (messages.value.has(roomId)) {
+      // 转换为消息对象
+      newMessages = newMessageEvents.map((event: any) => ({
+        id: event.getId(),
+        roomId,
+        content: event.getContent().body || '',
+        sender: event.getSender(),
+        timestamp: event.getTs(),
+        type: event.getContent().msgtype || 'm.text',
+        eventId: event.getId(),
+        encrypted: room.isEncrypted(),
+        senderName: room.getMember(event.getSender())?.name || event.getSender(),
+        status: 'sent' as const
+      }))
+
+      // 更新消息列表
+      if (newMessages.length > 0) {
         const currentMessages = messages.value.get(roomId) || []
-        // 避免重复消息
-        const existingIds = new Set(currentMessages.map(m => m.id))
-        const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id))
-
-        if (uniqueNewMessages.length > 0) {
-          messages.value.set(roomId, [...uniqueNewMessages, ...currentMessages])
-          console.log(`✅ 成功加载了 ${uniqueNewMessages.length} 条新的历史消息`)
-        } else {
-          console.log('📝 没有新的历史消息')
-        }
+        messages.value.set(roomId, [...newMessages, ...currentMessages])
+        console.log(`✅ 成功加载并添加了 ${newMessages.length} 条新消息`)
       } else {
-        // 如果是第一次加载消息
-        messages.value.set(roomId, newMessages)
-        console.log(`✅ 首次加载了 ${newMessages.length} 条历史消息`)
+        console.log('没有更多历史消息可加载')
       }
 
       return newMessages
 
     } catch (error) {
       console.error('加载历史消息失败:', error)
-      // 提供更友好的错误信息
-      if (error instanceof Error) {
-        if (error.message.includes('scrollback')) {
-          throw new Error('无法加载更多历史消息，可能已到达消息历史的开始')
-        } else if (error.message.includes('network')) {
-          throw new Error('网络连接问题，请检查网络后重试')
-        }
-      }
-      throw error
+      return []
     }
   }
 
