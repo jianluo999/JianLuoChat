@@ -81,9 +81,32 @@
               <!-- 普通消息 -->
               <div v-else class="regular-message-content">
                 <div class="message-bubble">
+                  <!-- 文件消息 -->
+                  <div v-if="message.fileInfo" class="file-message">
+                    <!-- 图片预览 -->
+                    <div v-if="message.fileInfo.isImage && message.fileInfo.url" class="image-preview">
+                      <img :src="message.fileInfo.url" :alt="message.fileInfo.name" @click="openImagePreview(message.fileInfo)" />
+                    </div>
+                    <!-- 文件信息 -->
+                    <div class="file-info">
+                      <div class="file-icon">
+                        {{ message.fileInfo.isImage ? '🖼️' : getFileIcon(message.fileInfo.type) }}
+                      </div>
+                      <div class="file-details">
+                        <div class="file-name">{{ message.fileInfo.name }}</div>
+                        <div class="file-size">{{ formatFileSize(message.fileInfo.size) }}</div>
+                      </div>
+                      <div class="file-actions">
+                        <button @click="downloadFile(message.fileInfo)" class="download-btn">
+                          📥
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
                   <!-- 格式化消息内容 -->
                   <div
-                    v-if="message.formattedContent && message.format === 'org.matrix.custom.html'"
+                    v-else-if="message.formattedContent && message.format === 'org.matrix.custom.html'"
                     class="message-text formatted-message"
                     v-html="sanitizeHtml(message.formattedContent)"
                   ></div>
@@ -388,6 +411,69 @@ const getRoomEncryptionAlgorithm = (): string | undefined => {
   return 'm.megolm.v1.aes-sha2' // 默认算法
 }
 
+// 文件相关方法
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+const getFileIcon = (type: string): string => {
+  if (type.startsWith('image/')) return '🖼️'
+  if (type.startsWith('video/')) return '🎥'
+  if (type.startsWith('audio/')) return '🎵'
+  if (type.includes('pdf')) return '📄'
+  if (type.includes('word') || type.includes('doc')) return '📝'
+  if (type.includes('excel') || type.includes('sheet')) return '📊'
+  if (type.includes('powerpoint') || type.includes('presentation')) return '📽️'
+  if (type.includes('zip') || type.includes('rar') || type.includes('7z')) return '📦'
+  return '📎'
+}
+
+const openImagePreview = (fileInfo: any) => {
+  // 创建图片预览模态框
+  const modal = document.createElement('div')
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    cursor: pointer;
+  `
+
+  const img = document.createElement('img')
+  img.src = fileInfo.url
+  img.style.cssText = `
+    max-width: 90%;
+    max-height: 90%;
+    object-fit: contain;
+  `
+
+  modal.appendChild(img)
+  document.body.appendChild(modal)
+
+  modal.onclick = () => {
+    document.body.removeChild(modal)
+  }
+}
+
+const downloadFile = (fileInfo: any) => {
+  const link = document.createElement('a')
+  link.href = fileInfo.url
+  link.download = fileInfo.name
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
 // 监听房间变化，加载消息
 watch(() => props.roomId, async (newRoomId, oldRoomId) => {
   if (newRoomId && newRoomId !== oldRoomId) {
@@ -680,6 +766,80 @@ watch(() => messages.value, (newMessages, oldMessages) => {
 
 .formatted-message {
   /* 格式化消息的特殊样式 */
+}
+
+/* 文件消息样式 */
+.file-message {
+  max-width: 300px;
+}
+
+.image-preview {
+  margin-bottom: 8px;
+}
+
+.image-preview img {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.image-preview img:hover {
+  transform: scale(1.02);
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.file-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.file-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.file-actions {
+  flex-shrink: 0;
+}
+
+.download-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.download-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .formatted-message b,
