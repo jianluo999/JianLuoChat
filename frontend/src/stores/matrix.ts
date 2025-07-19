@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { matrixAPI, roomAPI } from '@/services/api'
-import { deviceConflictUtils } from '@/utils/deviceConflictResolver'
-import { cryptoConflictManager } from '@/utils/cryptoConflictManager'
+// 暂时禁用加密相关导入
+// import { deviceConflictUtils } from '@/utils/deviceConflictResolver'
+// import { cryptoConflictManager } from '@/utils/cryptoConflictManager'
 
 // Matrix消息接口
 export interface MatrixMessage {
@@ -423,6 +424,13 @@ export const useMatrixStore = defineStore('matrix', () => {
     console.log('Matrix login info set and persisted:', info)
   }
 
+  // 手动重试Matrix初始化
+  const retryMatrixInitialization = async () => {
+    console.log('🔄 手动重试Matrix初始化...')
+    clientInitializing.value = false // 重置初始化状态
+    return await initializeMatrix()
+  }
+
   // 初始化Matrix状态（从localStorage恢复登录信息和房间列表）
   const initializeMatrix = async () => {
     // 防止重复初始化
@@ -441,6 +449,16 @@ export const useMatrixStore = defineStore('matrix', () => {
         savedLoginInfo = localStorage.getItem('matrix_login_info') // 旧格式（下划线）
       }
 
+      // 检查是否有访问令牌但没有完整登录信息的情况
+      const accessToken = localStorage.getItem('matrix_access_token')
+
+      console.log('🔍 存储状态检查:', {
+        hasLoginInfo: !!savedLoginInfo,
+        hasAccessToken: !!accessToken,
+        loginInfoLength: savedLoginInfo?.length || 0,
+        tokenLength: accessToken?.length || 0
+      })
+
       if (savedLoginInfo) {
         const loginData = JSON.parse(savedLoginInfo)
 
@@ -455,28 +473,58 @@ export const useMatrixStore = defineStore('matrix', () => {
           // 恢复登录状态
           await setLoginInfo(loginData)
 
-          // 重新创建Matrix客户端
-          await createMatrixClient(loginData.userId, loginData.accessToken, loginData.homeserver)
-
-          // 登录成功后，刷新房间列表
+          // 尝试重新创建Matrix客户端
           try {
-            await fetchMatrixRooms()
-          } catch (error) {
-            console.warn('Failed to refresh rooms after login restore:', error)
-          }
+            await createMatrixClient(loginData.userId, loginData.accessToken, loginData.homeserver)
 
-          console.log('Matrix login restored successfully')
-          return true
+            // 登录成功后，刷新房间列表
+            try {
+              await fetchMatrixRooms()
+            } catch (error) {
+              console.warn('Failed to refresh rooms after login restore:', error)
+            }
+
+            console.log('Matrix login restored successfully')
+            return true
+          } catch (clientError) {
+            console.error('Failed to create Matrix client during restore:', clientError)
+            // 不清除登录信息，只是客户端创建失败
+            // 用户可以稍后重试或手动重新登录
+            console.warn('Matrix client creation failed, but login info preserved for retry')
+            return false
+          }
         } else {
           console.log('Saved Matrix login expired, clearing localStorage')
           localStorage.removeItem('matrix-login-info')
           localStorage.removeItem('matrix_login_info') // 清理两种格式
         }
+      } else if (accessToken) {
+        // 有访问令牌但没有完整登录信息的情况
+        console.warn('⚠️ 检测到不一致的存储状态：有访问令牌但缺少登录信息')
+        console.log('🧹 清理不一致的存储状态...')
+
+        // 清理不一致的状态
+        localStorage.removeItem('matrix_access_token')
+        localStorage.removeItem('matrix-login-info')
+        localStorage.removeItem('matrix_login_info')
+
+        console.log('✅ 已清理不一致的存储状态，请重新登录')
+        return false
+      } else {
+        console.log('💡 没有找到Matrix登录信息，需要重新登录')
+        return false
       }
     } catch (error) {
       console.error('Failed to restore Matrix login:', error)
-      localStorage.removeItem('matrix-login-info')
-      localStorage.removeItem('matrix_login_info') // 清理两种格式
+      // 只有在严重错误时才清除登录信息
+      // 比如JSON解析错误等，而不是网络或客户端创建错误
+      if (error instanceof SyntaxError) {
+        console.warn('Login data corrupted, clearing localStorage')
+        localStorage.removeItem('matrix-login-info')
+        localStorage.removeItem('matrix_login_info')
+      } else {
+        console.warn('Temporary error during login restore, keeping login info for retry')
+      }
       // 确保清理失败的状态
       await cleanupMatrixClient()
     }
@@ -539,7 +587,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
-  // 创建Matrix客户端实例
+  // 创建Matrix客户端实例 - 简化版本，专注于稳定性
   const createMatrixClient = async (userId: string, accessToken: string, homeserver: string) => {
     // 防止并发创建多个客户端
     if (clientInitializing.value) {
@@ -549,6 +597,7 @@ export const useMatrixStore = defineStore('matrix', () => {
 
     try {
       clientInitializing.value = true
+      console.log(`🚀 创建Matrix客户端: ${userId} @ ${homeserver}`)
 
       // 先清理现有客户端
       await cleanupMatrixClient()
@@ -556,69 +605,31 @@ export const useMatrixStore = defineStore('matrix', () => {
       // 动态导入matrix-js-sdk
       const { createClient } = await import('matrix-js-sdk')
 
-      console.log(`🔧 创建Matrix客户端: ${userId} @ ${homeserver}`)
-
-      // 使用冲突管理器检测和处理潜在冲突
-      console.log('🔍 检测加密冲突...')
-      const conflictResult = cryptoConflictManager.detectConflicts()
-
-      if (conflictResult.hasConflicts) {
-        console.warn('⚠️ 检测到加密冲突:', {
-          sources: conflictResult.conflictingSources,
-          riskLevel: conflictResult.riskLevel,
-          recommendations: conflictResult.recommendations
-        })
-
-        // 显示冲突警告给用户
-        const advice = cryptoConflictManager.getConflictResolutionAdvice(conflictResult)
-        console.warn('💡 冲突解决建议:', advice)
-      }
-
-      // 生成客户端特定的存储键
-      const getClientSpecificKey = (baseKey: string) => {
-        return `jianluochat-${baseKey}-${userId.split(':')[0].substring(1)}`
-      }
-
-      // 尝试从localStorage获取已保存的设备ID，如果没有则生成新的
-      const deviceIdKey = getClientSpecificKey('device-id')
+      // 生成设备ID
+      const deviceIdKey = `jianluochat-device-id-${userId.split(':')[0].substring(1)}`
       let deviceId = localStorage.getItem(deviceIdKey)
 
-      // 如果有冲突或没有保存的设备ID，则生成新的安全设备ID
-      if (conflictResult.hasConflicts || !deviceId) {
-        if (conflictResult.hasConflicts) {
-          console.warn('⚠️ 由于检测到冲突，将生成新的隔离设备ID')
-        }
-        deviceId = cryptoConflictManager.createSafeDeviceId(userId)
+      if (!deviceId) {
+        const timestamp = Date.now()
+        const random = Math.random().toString(36).substring(2, 8)
+        deviceId = `jianluochat_web_${timestamp}_${random}`
         localStorage.setItem(deviceIdKey, deviceId)
-        console.log('🆔 生成新的安全设备ID:', deviceId)
+        console.log('🆔 生成新的设备ID:', deviceId)
       } else {
         console.log('🆔 使用已保存的设备ID:', deviceId)
       }
 
+      // 创建简单的客户端配置
       const client = createClient({
         baseUrl: `https://${homeserver}`,
         accessToken: accessToken,
         userId: userId,
         deviceId: deviceId,
         timelineSupport: true,
-        // 尝试启用加密支持
-        // cryptoStore: 'indexeddb',  // 暂时注释掉，使用initRustCrypto代替
-        // cryptoCallbacks: {},
-        // verificationMethods: []
+        useAuthorizationHeader: true
       })
 
-      // 设置客户端
-      matrixClient.value = client
-      console.log('Matrix client created successfully:', client)
-
-      // 添加错误监听器
-      client.on('sync' as any, (state: string, prevState: string | null, data: any) => {
-        console.log(`🔄 Matrix同步状态变化: ${prevState} -> ${state}`, data)
-      })
-
-      client.on('error' as any, (error: any) => {
-        console.error('❌ Matrix客户端错误:', error)
-      })
+      console.log('✅ Matrix客户端创建成功')
 
       // 验证客户端配置
       console.log('🔍 验证Matrix客户端配置...')
@@ -627,168 +638,96 @@ export const useMatrixStore = defineStore('matrix', () => {
       console.log('- 设备ID:', client.getDeviceId())
       console.log('- 访问令牌:', client.getAccessToken() ? '已设置' : '未设置')
 
+      // 设置Matrix事件监听器（在启动客户端之前）
+      console.log('🎧 设置Matrix事件监听器...')
+
+      // 监听同步状态变化
+      client.on('sync' as any, (state: string, prevState: string, data: any) => {
+        try {
+          console.log(`🔄 Matrix同步状态变化: ${prevState} -> ${state}`, data)
+          connection.value.syncState = { isActive: state === 'SYNCING' }
+
+          // 当同步完成时，尝试获取房间
+          if (state === 'SYNCING' || state === 'PREPARED') {
+            console.log('✅ 同步状态良好，尝试获取房间...')
+            setTimeout(() => {
+              try {
+                const clientRooms = client.getRooms()
+                console.log(`📊 同步后获取到 ${clientRooms.length} 个房间`)
+                if (clientRooms.length > 0) {
+                  // 更新房间列表
+                  const convertedRooms = clientRooms.map((room: any) => ({
+                    id: room.roomId,
+                    name: room.name || room.roomId,
+                    type: 'private' as const,
+                    isPublic: false,
+                    memberCount: room.getJoinedMemberCount(),
+                    unreadCount: 0,
+                    encrypted: false // 加密已禁用
+                  }))
+
+                  // 更新store中的房间列表
+                  rooms.value.splice(0, rooms.value.length, ...convertedRooms)
+                  saveRoomsToStorage()
+                  console.log('✅ 房间列表已通过同步事件更新')
+                }
+              } catch (roomError) {
+                console.warn('获取房间时出错:', roomError)
+              }
+            }, 1000)
+          }
+        } catch (syncError) {
+          console.error('❌ 同步事件处理失败:', syncError)
+        }
+      })
+
+        // 监听房间事件
+      client.on('Room' as any, (room: any) => {
+        console.log('🏠 新房间事件:', room.roomId)
+        // 当有新房间时，立即更新房间列表
+        setTimeout(() => {
+          try {
+            const allRooms = client.getRooms()
+            console.log(`📊 房间事件后获取到 ${allRooms.length} 个房间`)
+            if (allRooms.length > 0) {
+              const convertedRooms = allRooms.map((r: any) => ({
+                id: r.roomId,
+                name: r.name || r.roomId,
+                type: 'private' as const,
+                isPublic: false,
+                memberCount: r.getJoinedMemberCount(),
+                unreadCount: 0,
+                encrypted: false
+              }))
+
+              rooms.value.splice(0, rooms.value.length, ...convertedRooms)
+              saveRoomsToStorage()
+              console.log('✅ 房间列表已通过房间事件更新')
+            }
+          } catch (roomError) {
+            console.warn('处理房间事件时出错:', roomError)
+          }
+        }, 500)
+      })
+
+      // 监听消息事件
+      client.on('Room.timeline' as any, (event: any, room: any) => {
+        if (event.getType() === 'm.room.message') {
+          console.log('💬 新消息:', event.getContent().body)
+        }
+      })
+
+      // 监听错误事件
+      client.on('error' as any, (error: any) => {
+        console.error('❌ Matrix客户端错误:', error)
+      })
+
+      // 设置客户端实例
+      matrixClient.value = client
+
       // 启动客户端
       console.log('🚀 启动Matrix客户端...')
       try {
-        // 先检查客户端是否已经在运行
-        if (client.clientRunning) {
-          console.log('⚠️ 客户端已经在运行，先停止')
-          client.stopClient()
-          await new Promise(resolve => setTimeout(resolve, 1000))
-        }
-
-        // 暂时完全跳过加密初始化以避免设备冲突
-        console.log('🔐 跳过端到端加密初始化（避免设备冲突）')
-        console.log('💡 当前以非加密模式运行，适合开发和测试环境')
-
-        // 可选：如果需要加密，可以通过环境变量控制
-        const enableCrypto = localStorage.getItem('matrix-enable-crypto') === 'true'
-
-        if (enableCrypto) {
-          console.log('🔧 检测到加密启用标志，尝试初始化加密...')
-          try {
-            // 检查是否支持加密
-            if (typeof (client as any).initRustCrypto === 'function') {
-              console.log('🔧 尝试初始化Rust加密引擎...')
-
-              // 使用冲突管理器生成安全的加密配置
-              const cryptoConfig = cryptoConflictManager.createSafeCryptoConfig(userId, deviceId)
-
-              console.log('🔧 加密配置:', {
-                deviceId,
-                useIndexedDB: cryptoConfig.useIndexedDB,
-                storagePrefix: cryptoConfig.cryptoDatabasePrefix,
-                hasConflicts: conflictResult.hasConflicts
-              })
-
-
-
-              // 添加超时保护
-              const cryptoPromise = (client as any).initRustCrypto(cryptoConfig)
-              const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('加密初始化超时')), 10000)
-              })
-
-              await Promise.race([cryptoPromise, timeoutPromise])
-              console.log('✅ Rust加密引擎初始化成功（内存模式）')
-
-              // 验证加密是否可用
-              const crypto = client.getCrypto()
-              if (crypto) {
-                console.log('✅ 加密API可用')
-              } else {
-                console.warn('⚠️ 加密API不可用')
-              }
-            } else {
-              console.warn('⚠️ 客户端不支持Rust加密')
-            }
-          } catch (cryptoError: any) {
-            console.warn('⚠️ 加密初始化失败，继续以非加密模式运行:', cryptoError.message)
-
-            // 使用设备冲突检测工具
-            const conflictInfo = deviceConflictUtils.detect(cryptoError)
-            if (conflictInfo.hasConflict) {
-              console.warn('🚨 检测到设备冲突:', conflictInfo.conflictType)
-              console.warn('📋 冲突报告:', deviceConflictUtils.generateReport(conflictInfo))
-
-              // 尝试自动修复
-              try {
-                const fixed = await deviceConflictUtils.autoFix(conflictInfo)
-                if (fixed) {
-                  console.log('✅ 设备冲突已自动修复，建议重新登录')
-                  error.value = '检测到设备冲突并已自动修复，请重新登录以获得最佳体验'
-                } else {
-                  console.warn('⚠️ 无法自动修复设备冲突')
-                  error.value = '检测到设备冲突，建议清理浏览器数据后重新登录'
-                }
-              } catch (fixError) {
-                console.error('❌ 修复设备冲突失败:', fixError)
-              }
-            }
-          }
-        } else {
-          console.log('💡 提示：如需启用加密，请在控制台运行：localStorage.setItem("matrix-enable-crypto", "true")')
-        }
-
-        // 设置Matrix事件监听器（在启动客户端之前）
-        console.log('🎧 设置Matrix事件监听器...')
-
-        // 监听同步状态变化
-        (client as any).on('sync', (state: string, prevState: string, data: any) => {
-          try {
-            console.log(`🔄 Matrix同步状态变化: ${prevState} -> ${state}`, data)
-            connection.value.syncState = { isActive: state === 'SYNCING' }
-
-            // 当同步完成时，尝试获取房间
-            if (state === 'SYNCING' || state === 'PREPARED') {
-              console.log('✅ 同步状态良好，尝试获取房间...')
-              setTimeout(() => {
-                try {
-                  const clientRooms = client.getRooms()
-                  console.log(`📊 同步后获取到 ${clientRooms.length} 个房间`)
-                  if (clientRooms.length > 0) {
-                    // 更新房间列表
-                    const convertedRooms = clientRooms.map((room: any) => ({
-                      id: room.roomId,
-                      name: room.name || room.roomId,
-                      type: 'private' as const,
-                      isPublic: false,
-                      memberCount: room.getJoinedMemberCount(),
-                      unreadCount: 0,
-                      encrypted: false // 加密已禁用
-                    }))
-
-                    // 更新store中的房间列表
-                    rooms.value.splice(0, rooms.value.length, ...convertedRooms)
-                    saveRoomsToStorage()
-                    console.log('✅ 房间列表已通过同步事件更新')
-                  }
-                } catch (roomError) {
-                  console.warn('获取房间时出错:', roomError)
-                }
-              }, 1000)
-            }
-          } catch (syncError) {
-            console.error('❌ 同步事件处理失败:', syncError)
-          }
-        })
-
-        // 监听房间事件
-        (client as any).on('Room', (room: any) => {
-          console.log('🏠 新房间事件:', room.roomId)
-          // 当有新房间时，立即更新房间列表
-          setTimeout(() => {
-            try {
-              const allRooms = client.getRooms()
-              console.log(`📊 房间事件后获取到 ${allRooms.length} 个房间`)
-              if (allRooms.length > 0) {
-                const convertedRooms = allRooms.map((r: any) => ({
-                  id: r.roomId,
-                  name: r.name || r.roomId,
-                  type: 'private' as const,
-                  isPublic: false,
-                  memberCount: r.getJoinedMemberCount(),
-                  unreadCount: 0,
-                  encrypted: false
-                }))
-
-                rooms.value.splice(0, rooms.value.length, ...convertedRooms)
-                saveRoomsToStorage()
-                console.log('✅ 房间列表已通过房间事件更新')
-              }
-            } catch (roomError) {
-              console.warn('处理房间事件时出错:', roomError)
-            }
-          }, 500)
-        })
-
-        // 监听消息事件
-        (client as any).on('Room.timeline', (event: any, room: any) => {
-          if (event.getType() === 'm.room.message') {
-            console.log('💬 新消息:', event.getContent().body)
-          }
-        })
-
         await client.startClient({
           initialSyncLimit: 10,
           lazyLoadMembers: true
@@ -2145,6 +2084,7 @@ export const useMatrixStore = defineStore('matrix', () => {
 
     // Matrix方法
     initializeMatrix,
+    retryMatrixInitialization,
     logout,
     loadWorldChannel,
     setClient,

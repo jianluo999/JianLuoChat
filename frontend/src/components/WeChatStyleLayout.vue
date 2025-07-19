@@ -171,6 +171,16 @@
           <div class="loading-message">正在加载聊天列表...</div>
         </div>
 
+        <!-- Matrix客户端未初始化警告 -->
+        <div v-if="!matrixStore.matrixClient && !matrixStore.loading" class="matrix-client-warning">
+          <div class="warning-icon">⚠️</div>
+          <div class="warning-message">Matrix客户端未初始化</div>
+          <div class="warning-description">请检查网络连接或尝试重新初始化</div>
+          <button @click="retryMatrixInitialization" class="retry-button" :disabled="retryingInit">
+            {{ retryingInit ? '重试中...' : '🔄 重试初始化' }}
+          </button>
+        </div>
+
         <!-- 空状态 -->
         <div v-else-if="filteredRooms.length === 0" class="empty-chat-list">
           <div class="empty-message">暂无聊天</div>
@@ -366,6 +376,7 @@ const showExplore = ref(false)
 const showJoinRoom = ref(false)
 const joinRoomInput = ref('')
 const isJoiningRoom = ref(false)
+const retryingInit = ref(false)
 const publicRooms = ref<any[]>([])
 const isLoadingPublicRooms = ref(false)
 const showMoreMenu = ref(false)
@@ -734,6 +745,30 @@ const openEncryptionSettings = () => {
 // 打开设备验证页面
 const openDeviceVerification = () => {
   router.push('/device-verification')
+}
+
+// 重试Matrix初始化
+const retryMatrixInitialization = async () => {
+  if (retryingInit.value) return
+
+  retryingInit.value = true
+  try {
+    console.log('🔄 用户手动重试Matrix初始化...')
+    const success = await matrixStore.retryMatrixInitialization()
+
+    if (success) {
+      console.log('✅ Matrix初始化重试成功')
+      // 可以显示成功消息
+    } else {
+      console.warn('⚠️ Matrix初始化重试失败')
+      alert('Matrix初始化失败，请检查网络连接或稍后重试')
+    }
+  } catch (error) {
+    console.error('Matrix初始化重试出错:', error)
+    alert('重试失败，请检查网络连接')
+  } finally {
+    retryingInit.value = false
+  }
 }
 
 // 检查加密冲突
@@ -1395,6 +1430,58 @@ onUnmounted(() => {
 .loading-message {
   font-size: 14px;
   color: #666;
+}
+
+.matrix-client-warning {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 20px;
+  margin: 20px;
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.warning-icon {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+
+.warning-message {
+  font-size: 16px;
+  font-weight: 500;
+  color: #856404;
+  margin-bottom: 8px;
+}
+
+.warning-description {
+  font-size: 14px;
+  color: #856404;
+  margin-bottom: 15px;
+  opacity: 0.8;
+}
+
+.retry-button {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.retry-button:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.retry-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
 }
 
 .empty-chat-list {
