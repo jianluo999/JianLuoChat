@@ -461,6 +461,20 @@ const selectRoom = async (roomId: string) => {
   currentRoomId.value = roomId
   matrixStore.setCurrentRoom(roomId)
 
+  // 先检查Matrix客户端是否存在房间
+  if (matrixStore.matrixClient) {
+    const room = matrixStore.matrixClient.getRoom(roomId)
+    if (!room) {
+      console.log(`🔄 房间 ${roomId} 不存在，尝试刷新房间列表...`)
+      try {
+        await matrixStore.fetchMatrixRooms()
+        console.log('✅ 房间列表刷新完成')
+      } catch (error) {
+        console.warn('房间列表刷新失败:', error)
+      }
+    }
+  }
+
   // 加载房间消息
   try {
     console.log(`🔄 选择房间: ${roomId}，开始加载消息...`)

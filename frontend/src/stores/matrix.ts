@@ -675,6 +675,17 @@ export const useMatrixStore = defineStore('matrix', () => {
                 console.warn('获取房间时出错:', roomError)
               }
             }, 1000)
+          } else if (state === 'SYNCING' && prevState !== 'SYNCING') {
+            console.log('🎯 首次同步完成，强制更新房间列表')
+            // 首次同步完成时，立即更新房间列表
+            setTimeout(async () => {
+              try {
+                await fetchMatrixRooms()
+                console.log('✅ 首次同步后房间列表更新完成')
+              } catch (error) {
+                console.warn('首次同步后房间列表更新失败:', error)
+              }
+            }, 2000)
           }
         } catch (syncError) {
           console.error('❌ 同步事件处理失败:', syncError)
@@ -1595,18 +1606,41 @@ export const useMatrixStore = defineStore('matrix', () => {
         if (!room) {
           console.log(`❌ 房间 ${roomId} 暂时不存在，等待同步...`)
 
-          // 等待一段时间让Matrix客户端同步新房间
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          // 检查同步状态
+          const syncState = matrixClient.value.getSyncState()
+          console.log(`📊 当前同步状态: ${syncState}`)
+
+          // 如果正在同步，等待同步完成
+          if (syncState === 'SYNCING' || syncState === 'PREPARED') {
+            console.log('⏳ 正在同步中，等待同步完成...')
+            await new Promise(resolve => {
+              const checkSync = () => {
+                const currentState = matrixClient.value.getSyncState()
+                if (currentState === 'SYNCING' || currentState === 'PREPARED') {
+                  setTimeout(checkSync, 500)
+                } else {
+                  resolve(true)
+                }
+              }
+              checkSync()
+              // 最多等待10秒
+              setTimeout(() => resolve(true), 10000)
+            })
+          } else {
+            // 等待一段时间让Matrix客户端同步新房间
+            await new Promise(resolve => setTimeout(resolve, 2000))
+          }
 
           // 再次尝试获取房间
           room = matrixClient.value.getRoom(roomId)
 
           if (!room) {
-            console.warn(`房间 ${roomId} 仍然不存在，可能需要手动刷新`)
+            console.warn(`房间 ${roomId} 仍然不存在，尝试刷新房间列表`)
             // 尝试刷新房间列表
             try {
               await fetchMatrixRooms()
               room = matrixClient.value.getRoom(roomId)
+              console.log(`🔄 刷新后房间状态: ${room ? '找到' : '仍未找到'}`)
             } catch (refreshError) {
               console.error('刷新房间列表失败:', refreshError)
             }
