@@ -109,7 +109,7 @@ export const useMatrixStore = defineStore('matrix', () => {
         joinRule: room.joinRule,
         historyVisibility: room.historyVisibility,
         avatarUrl: room.avatarUrl,
-        lastActivity: room.lastActivity || Date.now()
+        // lastActivity: room.lastActivity || Date.now() // 暂时注释掉，因为接口中没有这个属性
       }))
       localStorage.setItem('matrix-rooms', JSON.stringify(roomsData))
       console.log('Rooms saved to localStorage:', roomsData.length)
@@ -695,37 +695,41 @@ export const useMatrixStore = defineStore('matrix', () => {
 
         // 监听同步状态变化
         (client as any).on('sync', (state: string, prevState: string, data: any) => {
-          console.log(`🔄 Matrix同步状态变化: ${prevState} -> ${state}`, data)
-          connection.value.syncState = { isActive: state === 'SYNCING' }
+          try {
+            console.log(`🔄 Matrix同步状态变化: ${prevState} -> ${state}`, data)
+            connection.value.syncState = { isActive: state === 'SYNCING' }
 
-          // 当同步完成时，尝试获取房间
-          if (state === 'SYNCING' || state === 'PREPARED') {
-            console.log('✅ 同步状态良好，尝试获取房间...')
-            setTimeout(() => {
-              try {
-                const clientRooms = client.getRooms()
-                console.log(`📊 同步后获取到 ${clientRooms.length} 个房间`)
-                if (clientRooms.length > 0) {
-                  // 更新房间列表
-                  const convertedRooms = clientRooms.map((room: any) => ({
-                    id: room.roomId,
-                    name: room.name || room.roomId,
-                    type: 'private',
-                    isPublic: false,
-                    memberCount: room.getJoinedMemberCount(),
-                    unreadCount: 0,
-                    encrypted: false // 加密已禁用
-                  }))
+            // 当同步完成时，尝试获取房间
+            if (state === 'SYNCING' || state === 'PREPARED') {
+              console.log('✅ 同步状态良好，尝试获取房间...')
+              setTimeout(() => {
+                try {
+                  const clientRooms = client.getRooms()
+                  console.log(`📊 同步后获取到 ${clientRooms.length} 个房间`)
+                  if (clientRooms.length > 0) {
+                    // 更新房间列表
+                    const convertedRooms = clientRooms.map((room: any) => ({
+                      id: room.roomId,
+                      name: room.name || room.roomId,
+                      type: 'private' as const,
+                      isPublic: false,
+                      memberCount: room.getJoinedMemberCount(),
+                      unreadCount: 0,
+                      encrypted: false // 加密已禁用
+                    }))
 
-                  // 更新store中的房间列表
-                  rooms.value.splice(0, rooms.value.length, ...convertedRooms)
-                  saveRoomsToStorage()
-                  console.log('✅ 房间列表已通过同步事件更新')
+                    // 更新store中的房间列表
+                    rooms.value.splice(0, rooms.value.length, ...convertedRooms)
+                    saveRoomsToStorage()
+                    console.log('✅ 房间列表已通过同步事件更新')
+                  }
+                } catch (roomError) {
+                  console.warn('获取房间时出错:', roomError)
                 }
-              } catch (roomError) {
-                console.warn('获取房间时出错:', roomError)
-              }
-            }, 1000)
+              }, 1000)
+            }
+          } catch (syncError) {
+            console.error('❌ 同步事件处理失败:', syncError)
           }
         })
 
@@ -741,7 +745,7 @@ export const useMatrixStore = defineStore('matrix', () => {
                 const convertedRooms = allRooms.map((r: any) => ({
                   id: r.roomId,
                   name: r.name || r.roomId,
-                  type: 'private',
+                  type: 'private' as const,
                   isPublic: false,
                   memberCount: r.getJoinedMemberCount(),
                   unreadCount: 0,
@@ -759,7 +763,7 @@ export const useMatrixStore = defineStore('matrix', () => {
         })
 
         // 监听消息事件
-        client.on('Room.timeline', (event: any, room: any) => {
+        (client as any).on('Room.timeline', (event: any, room: any) => {
           if (event.getType() === 'm.room.message') {
             console.log('💬 新消息:', event.getContent().body)
           }
@@ -1165,11 +1169,12 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
-  // Matrix连接诊断功能
+  // 增强的Matrix连接诊断功能
   const diagnoseMatrixConnection = async () => {
     console.log('🔍 开始Matrix连接诊断...')
 
     const diagnosis = {
+      timestamp: new Date().toISOString(),
       clientExists: !!matrixClient.value,
       clientRunning: false,
       syncState: null as string | null,
@@ -1180,7 +1185,21 @@ export const useMatrixStore = defineStore('matrix', () => {
       roomCount: 0,
       networkConnectivity: false,
       authValid: false,
-      recommendations: [] as string[]
+      recommendations: [] as string[],
+      localStorage: {
+        hasToken: !!localStorage.getItem('matrix_access_token'),
+        hasLoginInfo: !!localStorage.getItem('matrix_login_info'),
+        hasRooms: !!localStorage.getItem('matrix-rooms'),
+        hasDeviceId: !!localStorage.getItem('matrix-device-id')
+      },
+      networkStatus: navigator.onLine ? '在线' : '离线',
+      performance: {
+        memoryUsage: (performance as any).memory ? {
+          used: Math.round((performance as any).memory.usedJSHeapSize / 1024 / 1024) + 'MB',
+          total: Math.round((performance as any).memory.totalJSHeapSize / 1024 / 1024) + 'MB'
+        } : '不可用'
+      },
+      connectionTest: null as any
     }
 
     if (matrixClient.value) {
@@ -1203,10 +1222,25 @@ export const useMatrixStore = defineStore('matrix', () => {
 
       // 测试认证状态
       try {
+        console.log('🧪 执行Matrix认证测试...')
+        const startTime = performance.now()
         const whoami = await matrixClient.value.whoami()
+        const endTime = performance.now()
+
         diagnosis.authValid = !!whoami.user_id
-      } catch (error) {
-        console.error('认证测试失败:', error)
+        diagnosis.connectionTest = {
+          success: true,
+          responseTime: Math.round(endTime - startTime) + 'ms',
+          result: whoami
+        }
+        console.log('✅ Matrix认证测试成功:', whoami)
+      } catch (error: any) {
+        console.error('❌ Matrix认证测试失败:', error)
+        diagnosis.connectionTest = {
+          success: false,
+          error: error.message || error.toString(),
+          errorCode: error.errcode || 'UNKNOWN'
+        }
         diagnosis.recommendations.push('访问令牌可能已过期，请重新登录')
       }
     } else {
@@ -1228,6 +1262,72 @@ export const useMatrixStore = defineStore('matrix', () => {
     return diagnosis
   }
 
+  // 调试工具：生成详细的系统报告
+  const generateDebugReport = async () => {
+    console.log('📋 生成调试报告...')
+
+    const diagnosis = await diagnoseMatrixConnection()
+
+    const report = {
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      url: window.location.href,
+      matrixDiagnosis: diagnosis,
+      storeState: {
+        roomsCount: rooms.value.length,
+        messagesCount: Array.from(messages.value.values()).reduce((total, msgs) => total + msgs.length, 0),
+        currentUser: currentUser.value,
+        loading: loading.value,
+        error: error.value
+      },
+      localStorage: {
+        matrixToken: localStorage.getItem('matrix_access_token') ? '已设置' : '未设置',
+        matrixLoginInfo: localStorage.getItem('matrix_login_info') ? '已设置' : '未设置',
+        matrixRooms: localStorage.getItem('matrix-rooms') ? '已设置' : '未设置',
+        matrixDeviceId: localStorage.getItem('matrix-device-id') ? '已设置' : '未设置'
+      },
+      recommendations: diagnosis.recommendations
+    }
+
+    console.log('📋 调试报告生成完成:', report)
+    return report
+  }
+
+  // 调试工具：清理和重置
+  const debugReset = async () => {
+    console.log('🧹 执行调试重置...')
+
+    try {
+      // 停止客户端
+      if (matrixClient.value) {
+        matrixClient.value.stopClient()
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+
+      // 清理状态
+      await cleanupMatrixClient()
+
+      // 清理localStorage
+      localStorage.removeItem('matrix_access_token')
+      localStorage.removeItem('matrix_login_info')
+      localStorage.removeItem('matrix-rooms')
+      localStorage.removeItem('matrix-device-id')
+
+      // 重置store状态
+      rooms.value.splice(0)
+      messages.value.clear()
+      currentUser.value = null
+      error.value = null
+      loading.value = false
+
+      console.log('✅ 调试重置完成')
+      return true
+    } catch (error) {
+      console.error('❌ 调试重置失败:', error)
+      return false
+    }
+  }
+
   // 改进的Matrix房间获取功能
   const fetchMatrixRooms = async () => {
     try {
@@ -1247,10 +1347,13 @@ export const useMatrixStore = defineStore('matrix', () => {
         console.log('🚀 客户端未运行，尝试启动...')
         try {
           await matrixClient.value.startClient({
-            initialSyncLimit: 10,
+            initialSyncLimit: 20, // 增加初始同步限制
             lazyLoadMembers: true
           })
           console.log('✅ 客户端启动成功')
+
+          // 等待一段时间让同步开始
+          await new Promise(resolve => setTimeout(resolve, 2000))
         } catch (startError) {
           console.error('❌ 启动客户端失败:', startError)
           // 继续尝试获取房间，可能客户端已经有缓存的数据
@@ -1268,24 +1371,57 @@ export const useMatrixStore = defineStore('matrix', () => {
       try {
         clientRooms = matrixClient.value.getRooms()
         console.log(`📊 策略1 - 从客户端直接获取到 ${clientRooms.length} 个房间`)
+
+        // 如果获取到房间，立即返回，不需要等待同步
+        if (clientRooms.length > 0) {
+          console.log('✅ 策略1成功，直接使用获取到的房间')
+        }
       } catch (error) {
         console.error('策略1失败:', error)
       }
 
-      // 策略2: 如果没有房间且同步状态不佳，尝试等待同步
-      if (clientRooms.length === 0 && (syncState === null || syncState === 'STOPPED' || syncState === 'ERROR')) {
-        console.log('⏳ 策略2 - 尝试等待同步完成...')
+      // 策略2: 如果没有房间，尝试等待同步或强制同步
+      if (clientRooms.length === 0) {
+        console.log('⏳ 策略2 - 没有房间，尝试改进同步...')
 
+        // 如果同步状态不佳，尝试重新启动同步
+        if (syncState === null || syncState === 'STOPPED' || syncState === 'ERROR') {
+          console.log('🔄 同步状态不佳，重新启动客户端...')
+          try {
+            // 停止客户端
+            if (matrixClient.value.clientRunning) {
+              matrixClient.value.stopClient()
+              await new Promise(resolve => setTimeout(resolve, 1000))
+            }
+
+            // 重新启动客户端
+            await matrixClient.value.startClient({
+              initialSyncLimit: 50, // 增加同步限制
+              lazyLoadMembers: true
+            })
+            console.log('✅ 客户端重新启动成功')
+          } catch (restartError) {
+            console.error('❌ 重新启动客户端失败:', restartError)
+          }
+        }
+
+        // 等待同步完成
+        console.log('⏳ 等待同步完成...')
         await new Promise((resolve) => {
+          let resolved = false
           const timeout = setTimeout(() => {
-            matrixClient.value?.removeListener('sync', onSync)
-            console.warn('⚠️ 同步等待超时，继续使用现有数据')
-            resolve(true)
-          }, 8000) // 减少等待时间到8秒
+            if (!resolved) {
+              resolved = true
+              matrixClient.value?.removeListener('sync', onSync)
+              console.warn('⚠️ 同步等待超时，继续使用现有数据')
+              resolve(true)
+            }
+          }, 10000) // 增加等待时间到10秒
 
           const onSync = (state: string) => {
             console.log(`🔄 等待同步状态变化: ${state}`)
-            if (state === 'PREPARED' || state === 'SYNCING') {
+            if ((state === 'PREPARED' || state === 'SYNCING') && !resolved) {
+              resolved = true
               clearTimeout(timeout)
               matrixClient.value?.removeListener('sync', onSync)
               console.log('✅ 同步状态已改善')
@@ -1305,29 +1441,31 @@ export const useMatrixStore = defineStore('matrix', () => {
         }
       }
 
-      // 策略3: 如果仍然没有房间，尝试强制重新同步
+      // 策略3: 如果仍然没有房间，尝试从localStorage恢复或提供帮助信息
       if (clientRooms.length === 0) {
-        console.log('🔄 策略3 - 尝试强制重新同步...')
+        console.log('� 策略3 - 尝试从localStorage恢复房间...')
         try {
-          // 停止并重新启动客户端
-          if (matrixClient.value.clientRunning) {
-            matrixClient.value.stopClient()
-            await new Promise(resolve => setTimeout(resolve, 1000))
+          // 尝试从localStorage恢复房间
+          const savedRooms = localStorage.getItem('matrix-rooms')
+          if (savedRooms) {
+            const parsedRooms = JSON.parse(savedRooms)
+            if (Array.isArray(parsedRooms) && parsedRooms.length > 0) {
+              console.log(`📦 从localStorage恢复了 ${parsedRooms.length} 个房间`)
+              rooms.value.splice(0, rooms.value.length, ...parsedRooms)
+              console.log('✅ 房间列表已从localStorage恢复')
+              return parsedRooms
+            }
           }
-
-          await matrixClient.value.startClient({
-            initialSyncLimit: 5,
-            lazyLoadMembers: true
-          })
-
-          // 短暂等待
-          await new Promise(resolve => setTimeout(resolve, 3000))
-
-          clientRooms = matrixClient.value.getRooms()
-          console.log(`📊 策略3 - 重新同步后获取到 ${clientRooms.length} 个房间`)
         } catch (error) {
-          console.error('策略3失败:', error)
+          console.error('从localStorage恢复房间失败:', error)
         }
+
+        // 如果还是没有房间，提供帮助信息
+        console.warn('⚠️ 没有找到任何房间，可能需要：')
+        console.warn('1. 加入一些房间')
+        console.warn('2. 检查网络连接')
+        console.warn('3. 重新登录')
+        console.warn('4. 检查Matrix服务器状态')
       }
 
       // 转换房间数据
@@ -1338,7 +1476,7 @@ export const useMatrixStore = defineStore('matrix', () => {
             name: room.name || room.roomId,
             alias: room.getCanonicalAlias(),
             topic: room.currentState?.getStateEvents('m.room.topic', '')?.getContent()?.topic || '',
-            type: room.getJoinRule() === 'public' ? 'public' : 'private',
+            type: (room.getJoinRule() === 'public' ? 'public' : 'private') as 'public' | 'private' | 'world' | 'space',
             isPublic: room.getJoinRule() === 'public',
             memberCount: room.getJoinedMemberCount() || 0,
             members: [],
@@ -1355,7 +1493,7 @@ export const useMatrixStore = defineStore('matrix', () => {
             name: room.roomId,
             alias: null,
             topic: '',
-            type: 'private',
+            type: 'private' as const,
             isPublic: false,
             memberCount: 0,
             members: [],
@@ -1897,7 +2035,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       const newEvents = updatedEvents.slice(0, newEventCount - currentEventCount)
       const newMessages: MatrixMessage[] = newEvents
         .filter((event: any) => event.getType() === 'm.room.message')
-        .map((event: any) => {
+        .map((event: any): MatrixMessage | null => {
           try {
             const content = event.getContent()
             return {
@@ -1999,6 +2137,8 @@ export const useMatrixStore = defineStore('matrix', () => {
     sendMatrixMessage,
     startMatrixSync,
     diagnoseMatrixConnection,
+    generateDebugReport,
+    debugReset,
     startSync,
     cleanupMatrixClient,
     clearDeviceConflicts,

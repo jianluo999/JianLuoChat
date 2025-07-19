@@ -520,28 +520,56 @@ const refreshRooms = async () => {
     // 显示加载状态
     matrixStore.loading = true
 
-    // 检查同步状态
+    // 首先尝试直接获取房间，不等待同步
+    console.log('🚀 尝试直接获取房间列表...')
+    await matrixStore.fetchMatrixRooms()
+
+    // 如果获取到房间，直接返回
+    if (matrixStore.rooms.length > 0) {
+      console.log(`✅ 直接获取成功，找到 ${matrixStore.rooms.length} 个房间`)
+      return
+    }
+
+    // 如果没有房间，检查同步状态并尝试改进
     const syncState = matrixStore.matrixClient.getSyncState()
     console.log(`📡 当前同步状态: ${syncState}`)
 
     // 如果客户端没有在同步，重新启动
     if (syncState === 'STOPPED' || syncState === 'ERROR' || syncState === null) {
-      console.log('🚀 重新启动Matrix客户端同步...')
-      await matrixStore.matrixClient.startClient({ initialSyncLimit: 50 })
+      console.log('🚀 同步状态不佳，重新启动Matrix客户端...')
+
+      // 停止客户端
+      if (matrixStore.matrixClient.clientRunning) {
+        matrixStore.matrixClient.stopClient()
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+
+      // 重新启动客户端
+      await matrixStore.matrixClient.startClient({
+        initialSyncLimit: 100, // 增加同步限制
+        lazyLoadMembers: true
+      })
 
       // 等待同步完成
+      console.log('⏳ 等待同步完成...')
       await new Promise((resolve) => {
+        let resolved = false
         const timeout = setTimeout(() => {
-          matrixStore.matrixClient?.removeListener('sync', onSync)
-          console.warn('同步等待超时，继续刷新房间列表')
-          resolve(true)
-        }, 3000) // 优化：超时时间改为3秒
+          if (!resolved) {
+            resolved = true
+            matrixStore.matrixClient?.removeListener('sync', onSync)
+            console.warn('同步等待超时，继续刷新房间列表')
+            resolve(true)
+          }
+        }, 8000) // 增加超时时间到8秒
 
         const onSync = (state: string) => {
-          console.log(`🔄 同步状态: ${state}`)
-          if (state === 'PREPARED' || state === 'SYNCING') {
+          console.log(`🔄 同步状态变化: ${state}`)
+          if ((state === 'PREPARED' || state === 'SYNCING') && !resolved) {
+            resolved = true
             clearTimeout(timeout)
             matrixStore.matrixClient?.removeListener('sync', onSync)
+            console.log('✅ 同步状态已改善')
             resolve(true)
           }
         }
@@ -549,14 +577,20 @@ const refreshRooms = async () => {
       })
     }
 
-    // 强制重新获取房间列表
+    // 再次尝试获取房间列表
     await matrixStore.fetchMatrixRooms()
     console.log(`✅ 房间列表刷新完成，当前房间数量: ${matrixStore.rooms.length}`)
 
     if (matrixStore.rooms.length === 0) {
-      console.warn('没有找到房间，可能需要加入一些房间')
+      console.warn('⚠️ 仍然没有找到房间，可能需要：')
+      console.warn('1. 加入一些房间')
+      console.warn('2. 检查网络连接')
+      console.warn('3. 重新登录')
+
+      // 提供用户友好的提示
+      alert('没有找到房间。请尝试：\n1. 加入一些公共房间\n2. 检查网络连接\n3. 重新登录')
     } else {
-      console.log(`成功刷新房间列表，找到 ${matrixStore.rooms.length} 个房间`)
+      console.log(`✅ 成功刷新房间列表，找到 ${matrixStore.rooms.length} 个房间`)
     }
 
   } catch (error: any) {
@@ -570,45 +604,41 @@ const refreshRooms = async () => {
 const debugMatrixClient = async () => {
   console.log('🐛 Matrix客户端调试信息:')
 
-  if (!matrixStore.matrixClient) {
-    console.error('❌ Matrix客户端未初始化')
-    alert('Matrix客户端未初始化')
-    return
-  }
-
   try {
-    // 使用新的诊断功能
-    const diagnosis = await matrixStore.diagnoseMatrixConnection()
-    console.log('📊 Matrix连接诊断结果:', diagnosis)
+    // 生成详细的调试报告
+    const report = await matrixStore.generateDebugReport()
+    console.log('📋 详细调试报告:', report)
 
-    const client = matrixStore.matrixClient
-    const debugInfo = {
-      // 基本信息
-      userId: client.getUserId(),
-      homeserver: client.getHomeserverUrl(),
-      accessToken: !!client.getAccessToken(),
-      deviceId: client.getDeviceId(),
-
-      // 同步状态
-      syncState: client.getSyncState(),
-      isStarted: typeof client.isStarted === 'function' ? client.isStarted() : 'unknown',
-
-      // 房间信息
-      totalRooms: client.getRooms().length,
-      joinedRooms: client.getRooms().filter((r: any) => r.getMyMembership() === 'join').length,
-      invitedRooms: client.getRooms().filter((r: any) => r.getMyMembership() === 'invite').length,
-
-      // 存储状态
-      localRoomsCount: matrixStore.rooms.length,
-
-      // 连接状态
-      connectionState: matrixStore.connection,
-
-      // 诊断结果
-      diagnosis: diagnosis
+    // 显示用户友好的摘要
+    const summary = {
+      客户端状态: report.matrixDiagnosis.clientExists ? '已初始化' : '未初始化',
+      运行状态: report.matrixDiagnosis.clientRunning ? '运行中' : '已停止',
+      同步状态: report.matrixDiagnosis.syncState || '未知',
+      用户ID: report.matrixDiagnosis.userId || '未设置',
+      房间数量: `客户端: ${report.matrixDiagnosis.roomCount}, 本地: ${report.storeState.roomsCount}`,
+      网络状态: report.matrixDiagnosis.networkStatus,
+      认证状态: report.matrixDiagnosis.authValid ? '有效' : '无效',
+      建议: report.recommendations
     }
 
-    console.log('📊 调试信息:', debugInfo)
+    console.log('📊 状态摘要:', summary)
+
+    // 显示给用户的信息
+    const userMessage = `
+Matrix客户端调试信息：
+• 客户端状态: ${summary.客户端状态}
+• 运行状态: ${summary.运行状态}
+• 同步状态: ${summary.同步状态}
+• 房间数量: ${summary.房间数量}
+• 网络状态: ${summary.网络状态}
+• 认证状态: ${summary.认证状态}
+
+${report.recommendations.length > 0 ? '\n建议:\n' + report.recommendations.map(r => '• ' + r).join('\n') : ''}
+
+详细信息已输出到控制台。
+    `.trim()
+
+    alert(userMessage)
 
     // 显示房间详情
     const rooms = client.getRooms()
@@ -863,26 +893,38 @@ onMounted(async () => {
   // 设置性能优化的滚动监听器
   setupScrollOptimization()
 
-  // 检查是否已经有Matrix客户端在运行，避免重复初始化
-  if (matrixStore.matrixClient && matrixStore.isConnected) {
-    console.log('✅ Matrix客户端已存在且已连接，跳过初始化')
+  // 检查是否已经有Matrix客户端在运行且有房间数据
+  if (matrixStore.matrixClient && matrixStore.isConnected && matrixStore.rooms.length > 0) {
+    console.log('✅ Matrix客户端已存在且已连接，且有房间数据，跳过初始化')
     return
   }
 
   // 首先尝试初始化Matrix状态（包括恢复房间列表）
   try {
+    console.log('🔄 开始初始化Matrix状态...')
     const initialized = await matrixStore.initializeMatrix()
     console.log('📊 Matrix初始化结果:', initialized)
 
-    if (initialized) {
-      console.log('✅ Matrix已初始化，房间数量:', matrixStore.rooms.length)
-      return // 如果初始化成功，就不需要检查token了
+    if (initialized && matrixStore.rooms.length > 0) {
+      console.log('✅ Matrix已初始化且有房间数据，房间数量:', matrixStore.rooms.length)
+      return
+    } else if (initialized && matrixStore.rooms.length === 0) {
+      console.log('⚠️ Matrix已初始化但没有房间数据，尝试获取房间...')
+      try {
+        await matrixStore.fetchMatrixRooms()
+        if (matrixStore.rooms.length > 0) {
+          console.log('✅ 成功获取房间数据，房间数量:', matrixStore.rooms.length)
+          return
+        }
+      } catch (fetchError) {
+        console.warn('获取房间失败:', fetchError)
+      }
     }
   } catch (error) {
     console.error('❌ Matrix初始化失败:', error)
   }
 
-  // 如果Matrix初始化失败，检查存储的登录信息
+  // 如果Matrix初始化失败或没有房间，检查存储的登录信息
   const storedToken = localStorage.getItem('matrix_access_token')
   const storedLoginInfo = localStorage.getItem('matrix_login_info')
 
@@ -895,8 +937,16 @@ onMounted(async () => {
   })
 
   if (storedToken && storedLoginInfo) {
-    console.log('✅ 发现存储的登录信息，界面可以显示')
-    // 注意：不再调用 initializeMatrixInBackground，避免重复初始化
+    console.log('✅ 发现存储的登录信息，但可能需要重新同步')
+    // 如果有登录信息但没有房间，尝试重新获取
+    if (matrixStore.rooms.length === 0) {
+      console.log('🔄 有登录信息但无房间，尝试重新获取...')
+      try {
+        await refreshRooms()
+      } catch (refreshError) {
+        console.warn('重新获取房间失败:', refreshError)
+      }
+    }
   } else if (matrixStore.rooms.length === 0) {
     // 只有在没有房间列表的情况下才跳转到登录页面
     console.log('❌ 没有找到存储的登录信息且无房间列表，跳转到登录页面')
