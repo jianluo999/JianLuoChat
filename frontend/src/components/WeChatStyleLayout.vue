@@ -121,6 +121,18 @@
                 </svg>
                 调试工具
               </button>
+              <button class="menu-item" @click="forceCreateFileTransfer">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                </svg>
+                强制创建文件助手
+              </button>
+              <button class="menu-item" @click="forceSync">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12,18A6,6 0 0,1 6,12C6,11 6.25,10.03 6.7,9.2L5.24,7.74C4.46,8.97 4,10.43 4,12A8,8 0 0,0 12,20V23L16,19L12,15M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12C18,13 17.75,13.97 17.3,14.8L18.76,16.26C19.54,15.03 20,13.57 20,12A8,8 0 0,0 12,4Z"/>
+                </svg>
+                强制同步
+              </button>
               <button class="menu-item" @click="testFastMessage">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M7 14l5-5 5 5z"/>
@@ -540,6 +552,34 @@ const handleJoinRoom = async () => {
   }
 }
 
+const forceCreateFileTransfer = async () => {
+  console.log('🔧 强制创建文件传输助手...')
+
+  if (!matrixStore.matrixClient) {
+    console.error('❌ Matrix客户端未初始化')
+    alert('Matrix客户端未初始化，无法创建文件传输助手')
+    return
+  }
+
+  try {
+    matrixStore.loading = true
+
+    // 强制创建文件传输助手
+    const fileTransferRoom = matrixStore.ensureFileTransferRoom()
+    console.log('✅ 文件传输助手创建完成:', fileTransferRoom)
+
+    // 刷新房间列表
+    await matrixStore.fetchMatrixRooms()
+
+    alert('文件传输助手创建成功！')
+  } catch (error: any) {
+    console.error('❌ 创建文件传输助手失败:', error)
+    alert('创建文件传输助手失败: ' + (error?.message || '未知错误'))
+  } finally {
+    matrixStore.loading = false
+  }
+}
+
 const refreshRooms = async () => {
   console.log('🔄 手动刷新房间列表...')
 
@@ -678,12 +718,38 @@ ${report.recommendations.length > 0 ? '\n建议:\n' + report.recommendations.map
     alert(userMessage)
 
     // 显示房间详情
-    const rooms = client.getRooms()
+    const rooms = matrixStore.matrixClient?.getRooms() || []
     console.log('🏠 所有房间详情:')
+
+    // 检查文件传输助手
+    const fileTransferRooms = rooms.filter((room: any) => {
+      const roomName = room.name || room.getName()
+      return roomName === '文件传输助手' ||
+             room.roomId.includes('file-transfer') ||
+             room.getCanonicalAlias()?.includes('file-transfer')
+    })
+    console.log('📁 文件传输助手房间:', fileTransferRooms.map((room: any) => ({
+      id: room.roomId,
+      name: room.name || room.getName(),
+      alias: room.getCanonicalAlias()
+    })))
+
+    // 检查本地房间列表中的文件传输助手
+    const localFileTransferRooms = matrixStore.rooms.filter(r => r.isFileTransferRoom)
+    console.log('💾 本地文件传输助手房间:', localFileTransferRooms)
+
+    // 检查过滤后的房间
+    console.log('🔍 过滤后的房间数量:', filteredRooms.value.length)
+    console.log('🔍 过滤后的前5个房间:', filteredRooms.value.slice(0, 5).map(r => ({
+      id: r.id,
+      name: r.name,
+      isFileTransferRoom: r.isFileTransferRoom
+    })))
+
     rooms.forEach((room: any, index: number) => {
       console.log(`房间 ${index + 1}:`, {
         id: room.roomId,
-        name: room.name || '无名称',
+        name: room.name || room.getName() || '无名称',
         alias: room.getCanonicalAlias() || '无别名',
         membership: room.getMyMembership(),
         memberCount: room.getJoinedMemberCount(),

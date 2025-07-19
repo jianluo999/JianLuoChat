@@ -45,6 +45,28 @@
       </div>
     </div>
 
+    <!-- 开发者工具 -->
+    <div class="dev-tools-section" v-if="showDevTools">
+      <div class="section-header">
+        <span class="section-title">🛠️ 开发者工具</span>
+      </div>
+      <div class="dev-tools-buttons">
+        <button @click="cleanupFileTransferRooms" class="dev-btn">
+          🧹 清理重复文件传输助手
+        </button>
+        <button @click="resetAllData" class="dev-btn danger">
+          🗑️ 重置所有数据
+        </button>
+      </div>
+    </div>
+
+    <!-- 显示/隐藏开发者工具按钮 -->
+    <div class="dev-toggle">
+      <button @click="showDevTools = !showDevTools" class="toggle-dev-btn">
+        {{ showDevTools ? '隐藏' : '显示' }} 开发者工具
+      </button>
+    </div>
+
     <!-- Matrix Spaces -->
     <div class="spaces-section">
       <div class="section-header">
@@ -313,6 +335,7 @@ const matrixStore = useMatrixStore()
 const expandedSpaces = ref<string[]>([])
 const activeFilter = ref('all')
 const searchQuery = ref('')
+const showDevTools = ref(false)
 
 // 房间过滤器
 const roomFilters = computed(() => [
@@ -496,6 +519,100 @@ const filterRooms = () => {
 
 const clearSearch = () => {
   searchQuery.value = ''
+}
+
+// 开发者工具方法
+const cleanupFileTransferRooms = async () => {
+  if (confirm('确定要清理重复的文件传输助手吗？这将删除所有重复项并重新创建一个。')) {
+    try {
+      // 调用store中的清理方法
+      const fileTransferRooms = matrixStore.rooms.filter(r =>
+        r.isFileTransferRoom ||
+        r.id === 'file-transfer-assistant' ||
+        r.name === '文件传输助手'
+      )
+
+      console.log(`🔍 发现 ${fileTransferRooms.length} 个文件传输助手相关房间`)
+
+      if (fileTransferRooms.length > 1) {
+        // 删除所有文件传输助手
+        matrixStore.rooms = matrixStore.rooms.filter(r =>
+          !r.isFileTransferRoom &&
+          r.id !== 'file-transfer-assistant' &&
+          r.name !== '文件传输助手'
+        )
+
+        // 重新创建一个
+        const fileTransferRoom = {
+          id: 'file-transfer-assistant',
+          name: '文件传输助手',
+          alias: '',
+          topic: '发送文件、图片和消息的个人助手',
+          type: 'private' as const,
+          isPublic: false,
+          memberCount: 1,
+          members: [],
+          unreadCount: 0,
+          encrypted: false,
+          isFileTransferRoom: true,
+          joinRule: 'invite',
+          historyVisibility: 'shared'
+        }
+
+        matrixStore.rooms.unshift(fileTransferRoom)
+
+        // 保存到localStorage
+        localStorage.setItem('matrix-rooms', JSON.stringify(matrixStore.rooms.map(room => ({
+          id: room.id,
+          name: room.name,
+          alias: room.alias,
+          topic: room.topic,
+          type: room.type,
+          isPublic: room.isPublic,
+          memberCount: room.memberCount,
+          encrypted: room.encrypted,
+          joinRule: room.joinRule,
+          historyVisibility: room.historyVisibility,
+          avatarUrl: room.avatarUrl,
+          isFileTransferRoom: room.isFileTransferRoom
+        }))))
+
+        alert(`✅ 已清理 ${fileTransferRooms.length} 个重复的文件传输助手，重新创建了一个新的。`)
+      } else {
+        alert('✅ 没有发现重复的文件传输助手。')
+      }
+    } catch (error) {
+      console.error('清理失败:', error)
+      alert('❌ 清理失败，请查看控制台了解详情。')
+    }
+  }
+}
+
+const resetAllData = () => {
+  if (confirm('⚠️ 警告：这将删除所有本地数据（房间、消息、登录信息）！确定要继续吗？')) {
+    if (confirm('🚨 最后确认：这个操作不可撤销！确定要重置所有数据吗？')) {
+      try {
+        // 清除所有localStorage数据
+        localStorage.removeItem('matrix-rooms')
+        localStorage.removeItem('matrix_messages')
+        localStorage.removeItem('matrix-login-info')
+        localStorage.removeItem('matrix_login_info')
+
+        // 重置store状态
+        matrixStore.rooms = []
+        matrixStore.messages.clear()
+        matrixStore.currentUser = null
+        matrixStore.isLoggedIn = false
+        matrixStore.isConnected = false
+
+        alert('✅ 所有数据已重置，页面将刷新。')
+        window.location.reload()
+      } catch (error) {
+        console.error('重置失败:', error)
+        alert('❌ 重置失败，请查看控制台了解详情。')
+      }
+    }
+  }
 }
 
 // 生命周期
@@ -1045,5 +1162,68 @@ onMounted(async () => {
 @keyframes blink {
   0%, 50% { opacity: 1; }
   51%, 100% { opacity: 0.3; }
+}
+
+/* 开发者工具样式 */
+.dev-tools-section {
+  padding: 12px 16px;
+  background: rgba(255, 0, 0, 0.05);
+  border: 1px solid rgba(255, 0, 0, 0.2);
+  margin: 8px;
+  border-radius: 8px;
+}
+
+.dev-tools-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.dev-btn {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #666;
+  color: #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.dev-btn:hover {
+  background: rgba(0, 0, 0, 0.5);
+  border-color: #999;
+}
+
+.dev-btn.danger {
+  border-color: #ff4444;
+  color: #ff6666;
+}
+
+.dev-btn.danger:hover {
+  background: rgba(255, 68, 68, 0.1);
+  border-color: #ff6666;
+}
+
+.dev-toggle {
+  padding: 8px 16px;
+  text-align: center;
+}
+
+.toggle-dev-btn {
+  background: none;
+  border: 1px solid #444;
+  color: #888;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggle-dev-btn:hover {
+  border-color: #666;
+  color: #aaa;
 }
 </style>

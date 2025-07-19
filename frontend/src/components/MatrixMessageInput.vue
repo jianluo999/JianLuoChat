@@ -150,15 +150,23 @@
         v-for="file in uploadingFiles"
         :key="file.id"
         class="file-preview"
+        :class="{ 'upload-failed': file.progress === -1, 'upload-complete': file.progress === 100 }"
       >
         <div class="file-info">
-          <div class="file-icon">📄</div>
+          <div class="file-icon">
+            {{ getFileIcon(file) }}
+          </div>
           <div class="file-details">
             <div class="file-name">{{ file.name }}</div>
             <div class="file-size">{{ formatFileSize(file.size) }}</div>
+            <div class="file-status">
+              <span v-if="file.progress === -1" class="status-failed">❌ 上传失败</span>
+              <span v-else-if="file.progress === 100" class="status-success">✅ 上传成功</span>
+              <span v-else class="status-uploading">📤 上传中... {{ file.progress }}%</span>
+            </div>
           </div>
         </div>
-        <div class="file-progress">
+        <div v-if="file.progress >= 0 && file.progress < 100" class="file-progress">
           <div class="progress-bar" :style="{ width: file.progress + '%' }"></div>
         </div>
         <button @click="removeFile(file.id)" class="remove-file">×</button>
@@ -169,6 +177,9 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { useMatrixStore } from '@/stores/matrix'
+
+const matrixStore = useMatrixStore()
 
 const props = defineProps<{
   roomId: string
@@ -357,7 +368,7 @@ const attachFile = () => {
   input.click()
 }
 
-const uploadFile = (file: File) => {
+const uploadFile = async (file: File) => {
   const fileObj = {
     id: Date.now() + Math.random(),
     name: file.name,
@@ -365,17 +376,44 @@ const uploadFile = (file: File) => {
     progress: 0,
     file
   }
-  
+
   uploadingFiles.value.push(fileObj)
-  
-  // 模拟文件上传进度
-  const interval = setInterval(() => {
-    fileObj.progress += 10
-    if (fileObj.progress >= 100) {
-      clearInterval(interval)
-      // 这里应该调用实际的文件上传API
+
+  try {
+    // 显示上传进度
+    fileObj.progress = 10
+
+    // 上传文件到Matrix
+    const contentUri = await matrixStore.uploadFileToMatrix(file)
+    fileObj.progress = 80
+
+    if (contentUri) {
+      // 发送文件消息
+      await matrixStore.sendFileMessage(props.roomId, file, contentUri)
+      fileObj.progress = 100
+
+      // 移除上传完成的文件
+      setTimeout(() => {
+        const index = uploadingFiles.value.findIndex(f => f.id === fileObj.id)
+        if (index > -1) {
+          uploadingFiles.value.splice(index, 1)
+        }
+      }, 1000)
+
+      console.log(`✅ 文件 ${file.name} 上传并发送成功`)
     }
-  }, 200)
+  } catch (error) {
+    console.error('❌ 文件上传失败:', error)
+    fileObj.progress = -1 // 标记为失败
+
+    // 3秒后移除失败的文件
+    setTimeout(() => {
+      const index = uploadingFiles.value.findIndex(f => f.id === fileObj.id)
+      if (index > -1) {
+        uploadingFiles.value.splice(index, 1)
+      }
+    }, 3000)
+  }
 }
 
 const removeFile = (fileId: number) => {
@@ -391,6 +429,19 @@ const formatFileSize = (bytes: number) => {
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+const getFileIcon = (file: any) => {
+  const type = file.file.type
+  if (type.startsWith('image/')) return '🖼️'
+  if (type.startsWith('video/')) return '🎥'
+  if (type.startsWith('audio/')) return '🎵'
+  if (type.includes('pdf')) return '📄'
+  if (type.includes('word') || type.includes('doc')) return '📝'
+  if (type.includes('excel') || type.includes('sheet')) return '📊'
+  if (type.includes('powerpoint') || type.includes('presentation')) return '📽️'
+  if (type.includes('zip') || type.includes('rar') || type.includes('7z')) return '📦'
+  return '📄'
 }
 
 // 生命周期
@@ -702,6 +753,17 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
   margin-bottom: 8px;
+  transition: all 0.3s ease;
+}
+
+.file-preview.upload-failed {
+  background: rgba(255, 59, 48, 0.1);
+  border: 1px solid rgba(255, 59, 48, 0.3);
+}
+
+.file-preview.upload-complete {
+  background: rgba(52, 199, 89, 0.1);
+  border: 1px solid rgba(52, 199, 89, 0.3);
 }
 
 .file-info {
@@ -727,6 +789,23 @@ onUnmounted(() => {
 .file-size {
   font-size: 0.8rem;
   color: #b0bec5;
+}
+
+.file-status {
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
+.status-uploading {
+  color: #64b5f6;
+}
+
+.status-success {
+  color: #4caf50;
+}
+
+.status-failed {
+  color: #f44336;
 }
 
 .file-progress {

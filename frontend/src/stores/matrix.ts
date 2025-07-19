@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { matrixAPI, roomAPI } from '@/services/api'
 // 暂时禁用加密相关导入
 // import { deviceConflictUtils } from '@/utils/deviceConflictResolver'
@@ -20,6 +20,13 @@ export interface MatrixMessage {
   senderAvatar?: string
   edited?: boolean
   status?: 'sending' | 'sent' | 'delivered' | 'failed'
+  fileInfo?: {
+    name: string
+    size: number
+    type: string
+    url: string
+    isImage: boolean
+  }
 }
 
 // Matrix房间接口
@@ -45,6 +52,8 @@ export interface MatrixRoom {
   childRooms?: MatrixRoom[]
   encryptionInfo?: any
   deviceInfo?: any
+  // 文件传输助手标记
+  isFileTransferRoom?: boolean
 }
 
 // Matrix用户接口
@@ -96,6 +105,11 @@ export const useMatrixStore = defineStore('matrix', () => {
   const currentRoomId = ref<string | null>(null)
   const messages = ref<Map<string, MatrixMessage[]>>(new Map())
 
+  // 文件传输助手相关 - 纯客户端功能
+  const FILE_TRANSFER_ROOM_ID = 'file-transfer-assistant'
+  const FILE_TRANSFER_ROOM_NAME = '文件传输助手'
+  const FILE_TRANSFER_ROOM_TOPIC = '发送文件、图片和消息的个人助手'
+
   // 房间持久化存储
   const saveRoomsToStorage = () => {
     try {
@@ -120,6 +134,20 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
+  // 消息持久化存储
+  const saveMessagesToStorage = () => {
+    try {
+      const messagesData: { [key: string]: MatrixMessage[] } = {}
+      messages.value.forEach((msgs, roomId) => {
+        messagesData[roomId] = msgs
+      })
+      localStorage.setItem('matrix_messages', JSON.stringify(messagesData))
+      console.log('💾 消息数据已保存到localStorage')
+    } catch (error) {
+      console.error('保存消息数据失败:', error)
+    }
+  }
+
   const loadRoomsFromStorage = () => {
     try {
       const savedRooms = localStorage.getItem('matrix-rooms')
@@ -138,6 +166,22 @@ export const useMatrixStore = defineStore('matrix', () => {
       console.error('Failed to load rooms from localStorage:', error)
     }
     return false
+  }
+
+  // 从localStorage加载消息
+  const loadMessagesFromStorage = () => {
+    try {
+      const savedMessages = localStorage.getItem('matrix_messages')
+      if (savedMessages) {
+        const messagesData = JSON.parse(savedMessages)
+        Object.entries(messagesData).forEach(([roomId, msgs]) => {
+          messages.value.set(roomId, msgs as MatrixMessage[])
+        })
+        console.log('💾 消息数据已从localStorage加载')
+      }
+    } catch (error) {
+      console.error('加载消息数据失败:', error)
+    }
   }
 
   // 用户状态
@@ -440,8 +484,9 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
 
     try {
-      // 首先加载房间列表（即使未登录也可以显示之前的房间）
+      // 首先加载房间列表和消息（即使未登录也可以显示之前的数据）
       loadRoomsFromStorage()
+      loadMessagesFromStorage()
 
       // 尝试两种可能的localStorage key（兼容性处理）
       let savedLoginInfo = localStorage.getItem('matrix-login-info') // 新格式（连字符）
@@ -637,6 +682,29 @@ export const useMatrixStore = defineStore('matrix', () => {
       console.log('- 服务器URL:', client.getHomeserverUrl())
       console.log('- 设备ID:', client.getDeviceId())
       console.log('- 访问令牌:', client.getAccessToken() ? '已设置' : '未设置')
+
+      // 立即创建文件传输助手（不等待同步）
+      console.log('📁 检查文件传输助手...')
+
+      // 首先清理重复的文件传输助手
+      const wasCleanedUp = cleanupDuplicateFileTransferRooms()
+
+      // 检查是否已经存在文件传输助手
+      const hasFileTransfer = rooms.value.some(r =>
+        r.isFileTransferRoom ||
+        r.id === FILE_TRANSFER_ROOM_ID
+      )
+      if (!hasFileTransfer || wasCleanedUp) {
+        console.log('� 创建文件传输助手...')
+        const fileTransferRoom = ensureFileTransferRoom()
+
+        // 添加到房间列表开头
+        rooms.value.unshift(fileTransferRoom)
+        saveRoomsToStorage()
+        console.log('✅ 文件传输助手已添加到房间列表')
+      } else {
+        console.log('✅ 文件传输助手已存在，跳过创建')
+      }
 
       // 设置Matrix事件监听器（在启动客户端之前）
       console.log('🎧 设置Matrix事件监听器...')
@@ -933,6 +1001,21 @@ export const useMatrixStore = defineStore('matrix', () => {
 
       // 10秒后停止监控
       setTimeout(() => clearInterval(monitor), 10000)
+
+      // 在客户端创建成功后，异步创建文件传输助手
+      setTimeout(async () => {
+        try {
+          console.log('🔄 创建文件传输助手...')
+          const fileTransferRoom = ensureFileTransferRoom()
+          if (fileTransferRoom) {
+            console.log('✅ 文件传输助手创建完成，更新房间列表')
+            // 立即更新房间列表以包含文件传输助手
+            await fetchMatrixRooms()
+          }
+        } catch (error) {
+          console.warn('⚠️ 文件传输助手创建失败:', error)
+        }
+      }, 3000) // 等待3秒让同步稳定
 
       return client
     } catch (error) {
@@ -1298,6 +1381,61 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
+  // 清理重复的文件传输助手
+  const cleanupDuplicateFileTransferRooms = () => {
+    console.log('🧹 清理重复的文件传输助手...')
+
+    const fileTransferRooms = rooms.value.filter(r =>
+      r.isFileTransferRoom ||
+      r.id === FILE_TRANSFER_ROOM_ID ||
+      r.name === FILE_TRANSFER_ROOM_NAME
+    )
+
+    console.log(`🔍 发现 ${fileTransferRooms.length} 个文件传输助手相关房间`)
+
+    if (fileTransferRooms.length > 1) {
+      console.log('🗑️ 删除所有重复的文件传输助手')
+
+      // 删除所有文件传输助手
+      rooms.value = rooms.value.filter(r =>
+        !r.isFileTransferRoom &&
+        r.id !== FILE_TRANSFER_ROOM_ID &&
+        r.name !== FILE_TRANSFER_ROOM_NAME
+      )
+
+      saveRoomsToStorage()
+      console.log('✅ 所有重复的文件传输助手已清理完成')
+      return true // 表示进行了清理
+    } else {
+      console.log('✅ 没有发现重复的文件传输助手')
+      return false
+    }
+  }
+
+  // 创建文件传输助手（纯客户端功能）
+  const ensureFileTransferRoom = (): MatrixRoom => {
+    console.log('� 创建文件传输助手（客户端功能）')
+
+    const fileTransferRoom = {
+      id: FILE_TRANSFER_ROOM_ID,
+      name: FILE_TRANSFER_ROOM_NAME,
+      alias: '',
+      topic: FILE_TRANSFER_ROOM_TOPIC,
+      type: 'private' as const,
+      isPublic: false,
+      memberCount: 1,
+      members: [],
+      unreadCount: 0,
+      encrypted: false,
+      isFileTransferRoom: true,
+      joinRule: 'invite',
+      historyVisibility: 'shared'
+    }
+
+    console.log('📋 文件传输助手数据:', fileTransferRoom)
+    return fileTransferRoom
+  }
+
   // 改进的Matrix房间获取功能
   const fetchMatrixRooms = async () => {
     try {
@@ -1476,10 +1614,45 @@ export const useMatrixStore = defineStore('matrix', () => {
         }
       })
 
-      // 更新房间列表
-      rooms.value.splice(0, rooms.value.length, ...fetchedRooms)
+      // 确保文件传输助手存在并置顶
+      console.log('🔍 确保文件传输助手存在...')
+      const fileTransferRoom = ensureFileTransferRoom()
+
+      // 更新房间列表，文件传输助手置顶
+      const finalRooms = []
+      if (fileTransferRoom) {
+        finalRooms.push(fileTransferRoom)
+        console.log('✅ 文件传输助手已置顶')
+      } else {
+        console.warn('⚠️ 文件传输助手创建失败或未找到')
+      }
+
+      // 添加其他房间（排除已存在的文件传输助手）
+      const otherRooms = fetchedRooms.filter((room: any) =>
+        room.name !== FILE_TRANSFER_ROOM_NAME &&
+        !room.id.includes('file-transfer') &&
+        room.id !== fileTransferRoom?.id
+      )
+      finalRooms.push(...otherRooms)
+
+      // 强制更新房间列表
+      console.log('🔄 强制更新房间列表...')
+      console.log('📋 更新前房间数量:', rooms.value.length)
+      console.log('📋 即将设置的房间数量:', finalRooms.length)
+
+      rooms.value.splice(0, rooms.value.length, ...finalRooms)
+
+      // 强制触发响应式更新
+      await nextTick()
+
       saveRoomsToStorage()
-      console.log(`✅ 房间列表已更新，共 ${fetchedRooms.length} 个房间`)
+      console.log(`✅ 房间列表已更新，共 ${finalRooms.length} 个房间（包含文件传输助手）`)
+      console.log('📋 更新后房间数量:', rooms.value.length)
+      console.log('📋 房间列表预览:', finalRooms.slice(0, 5).map(r => ({ name: r.name, id: r.id, isFileTransferRoom: r.isFileTransferRoom })))
+
+      // 验证文件传输助手是否在列表中
+      const hasFileTransfer = rooms.value.some(r => r.isFileTransferRoom)
+      console.log('🔍 文件传输助手是否在列表中:', hasFileTransfer)
 
       // 如果仍然没有房间，提供建议
       if (fetchedRooms.length === 0) {
@@ -1559,6 +1732,32 @@ export const useMatrixStore = defineStore('matrix', () => {
       console.log(`🔄 开始加载房间消息: ${roomId}`)
 
       let roomMessages: MatrixMessage[] = []
+
+      // 特殊处理文件传输助手
+      if (roomId === FILE_TRANSFER_ROOM_ID) {
+        console.log('📁 加载文件传输助手消息')
+
+        // 检查是否已有消息
+        if (messages.value.has(roomId)) {
+          console.log('📋 返回已缓存的文件传输助手消息')
+          return messages.value.get(roomId) || []
+        }
+
+        // 创建欢迎消息
+        const welcomeMessage: MatrixMessage = {
+          id: 'welcome-msg-' + Date.now(),
+          sender: 'system',
+          content: '欢迎使用文件传输助手！\n\n您可以在这里：\n• 发送文件和图片\n• 保存重要消息\n• 进行文件管理\n\n开始发送您的第一个文件吧！',
+          timestamp: Date.now(),
+          roomId: roomId,
+          type: 'm.room.message'
+        }
+
+        const welcomeMessages = [welcomeMessage]
+        messages.value.set(roomId, welcomeMessages)
+        console.log('✅ 文件传输助手欢迎消息已创建')
+        return welcomeMessages
+      }
 
       if (roomId === 'world') {
         // 世界频道消息从后端API获取
@@ -1736,10 +1935,160 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
+  // 上传文件到Matrix
+  const uploadFileToMatrix = async (file: File): Promise<string | null> => {
+    if (!matrixClient.value) {
+      throw new Error('Matrix客户端未初始化')
+    }
+
+    try {
+      console.log(`📤 开始上传文件: ${file.name} (${file.size} bytes)`)
+
+      // 上传文件到Matrix媒体仓库
+      const response = await matrixClient.value.uploadContent(file, {
+        name: file.name,
+        type: file.type,
+        rawResponse: false,
+        onlyContentUri: true
+      })
+
+      console.log('✅ 文件上传成功:', response)
+      return response as string
+    } catch (error) {
+      console.error('❌ 文件上传失败:', error)
+      throw error
+    }
+  }
+
+  // 格式化文件大小
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  // 将文件转换为base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // 发送文件消息到Matrix房间
+  const sendFileMessage = async (roomId: string, file: File, contentUri: string): Promise<void> => {
+    // 特殊处理文件传输助手
+    if (roomId === FILE_TRANSFER_ROOM_ID) {
+      console.log('📁 发送文件到文件传输助手')
+
+      const isImage = file.type.startsWith('image/')
+      let fileUrl = ''
+
+      try {
+        // 对于图片，转换为base64以便持久化存储
+        if (isImage) {
+          fileUrl = await fileToBase64(file)
+        } else {
+          // 对于非图片文件，创建临时URL
+          fileUrl = URL.createObjectURL(file)
+        }
+      } catch (error) {
+        console.error('文件处理失败:', error)
+        fileUrl = ''
+      }
+
+      const fileMessage: MatrixMessage = {
+        id: 'file-' + Date.now(),
+        roomId,
+        content: `${isImage ? '🖼️' : '📎'} ${file.name} (${formatFileSize(file.size)})`,
+        sender: currentUser.value?.id || 'user',
+        senderName: currentUser.value?.displayName || currentUser.value?.username || 'User',
+        timestamp: Date.now(),
+        type: 'm.room.message',
+        fileInfo: {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          url: fileUrl,
+          isImage
+        }
+      }
+
+      // 添加到消息列表
+      const currentMessages = messages.value.get(roomId) || []
+      messages.value.set(roomId, [...currentMessages, fileMessage])
+
+      // 保存到localStorage
+      saveMessagesToStorage()
+
+      console.log('✅ 文件已保存到文件传输助手')
+      return
+    }
+
+    if (!matrixClient.value) {
+      throw new Error('Matrix客户端未初始化')
+    }
+
+    try {
+      const isImage = file.type.startsWith('image/')
+      const msgType = isImage ? 'm.image' : 'm.file'
+
+      const content: any = {
+        msgtype: msgType,
+        body: file.name,
+        filename: file.name,
+        info: {
+          size: file.size,
+          mimetype: file.type
+        },
+        url: contentUri
+      }
+
+      // 如果是图片，添加图片特定信息
+      if (isImage) {
+        // 可以在这里添加图片尺寸等信息
+        content.info.w = undefined // 宽度
+        content.info.h = undefined // 高度
+      }
+
+      await matrixClient.value.sendEvent(roomId, 'm.room.message', content)
+      console.log(`✅ 文件消息发送成功: ${file.name}`)
+    } catch (error) {
+      console.error('❌ 发送文件消息失败:', error)
+      throw error
+    }
+  }
+
   const sendMatrixMessage = async (roomId: string, content: string) => {
     try {
       if (!currentUser.value) {
         throw new Error('User not logged in')
+      }
+
+      // 特殊处理文件传输助手
+      if (roomId === FILE_TRANSFER_ROOM_ID) {
+        console.log('📁 发送消息到文件传输助手')
+
+        const newMessage: MatrixMessage = {
+          id: 'msg-' + Date.now(),
+          roomId,
+          content,
+          sender: currentUser.value.id,
+          senderName: currentUser.value.displayName || currentUser.value.username,
+          timestamp: Date.now(),
+          type: 'm.room.message'
+        }
+
+        // 添加到消息列表
+        const currentMessages = messages.value.get(roomId) || []
+        messages.value.set(roomId, [...currentMessages, newMessage])
+
+        console.log('✅ 文件传输助手消息已保存')
+        return newMessage
       }
 
       // 如果是测试用户，直接添加到本地消息
@@ -2129,6 +2478,8 @@ export const useMatrixStore = defineStore('matrix', () => {
     createMatrixRoom,
     fetchMatrixMessages,
     sendMatrixMessage,
+    uploadFileToMatrix,
+    sendFileMessage,
     startMatrixSync,
     diagnoseMatrixConnection,
     generateDebugReport,
