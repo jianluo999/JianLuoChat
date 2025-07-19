@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug LocalStorage</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+        .key {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .value {
+            margin-top: 5px;
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 5px;
+            border-radius: 3px;
+            word-break: break-all;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .clear-btn {
+            background: #dc3545;
+        }
+        .clear-btn:hover {
+            background: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 LocalStorage 调试工具</h1>
+        <p>检查Matrix相关的localStorage数据</p>
+        
+        <button onclick="refreshData()">🔄 刷新数据</button>
+        <button onclick="clearMatrixData()" class="clear-btn">🗑️ 清除Matrix数据</button>
+        
+        <div id="data-container">
+            <!-- 数据将在这里显示 -->
+        </div>
+    </div>
+
+    <script>
+        function refreshData() {
+            const container = document.getElementById('data-container');
+            container.innerHTML = '';
+            
+            // 检查Matrix相关的localStorage项
+            const matrixKeys = [
+                'matrix-login-info',
+                'matrix_login_info', 
+                'matrix_access_token',
+                'matrix-device-id',
+                'matrix-rooms'
+            ];
+            
+            let foundAny = false;
+            
+            matrixKeys.forEach(key => {
+                const value = localStorage.getItem(key);
+                if (value !== null) {
+                    foundAny = true;
+                    const item = document.createElement('div');
+                    item.className = 'item';
+                    
+                    let displayValue = value;
+                    try {
+                        // 尝试格式化JSON
+                        const parsed = JSON.parse(value);
+                        displayValue = JSON.stringify(parsed, null, 2);
+                    } catch (e) {
+                        // 不是JSON，保持原样
+                    }
+                    
+                    item.innerHTML = `
+                        <div class="key">${key}</div>
+                        <div class="value">${displayValue}</div>
+                    `;
+                    container.appendChild(item);
+                }
+            });
+            
+            if (!foundAny) {
+                container.innerHTML = '<p style="color: #6c757d; font-style: italic;">没有找到Matrix相关的localStorage数据</p>';
+            }
+            
+            // 显示所有localStorage项的数量
+            const totalItems = localStorage.length;
+            const info = document.createElement('div');
+            info.style.marginTop = '20px';
+            info.style.padding = '10px';
+            info.style.background = '#e7f3ff';
+            info.style.borderRadius = '4px';
+            info.innerHTML = `<strong>总计:</strong> localStorage中共有 ${totalItems} 个项目`;
+            container.appendChild(info);
+        }
+        
+        function clearMatrixData() {
+            if (confirm('确定要清除所有Matrix相关的localStorage数据吗？')) {
+                const matrixKeys = [
+                    'matrix-login-info',
+                    'matrix_login_info', 
+                    'matrix_access_token',
+                    'matrix-device-id',
+                    'matrix-rooms'
+                ];
+                
+                matrixKeys.forEach(key => {
+                    localStorage.removeItem(key);
+                });
+                
+                alert('Matrix数据已清除');
+                refreshData();
+            }
+        }
+        
+        // 页面加载时自动刷新数据
+        window.onload = refreshData;
+    </script>
+</body>
+</html>

@@ -1,4 +1,6 @@
 import axios from 'axios'
+import { errorHandler } from '@/utils/errorHandler'
+import { safeNetworkRequest } from '@/utils/networkInterceptor'
 
 // Create axios instance with base configuration
 const api = axios.create({
@@ -29,12 +31,79 @@ api.interceptors.response.use(
     return response
   },
   (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid
-      localStorage.removeItem('token')
-      // 不重定向，只是清除token，让应用自然处理未认证状态
-      console.log('JWT token expired or invalid, cleared from localStorage')
+    // 处理网络错误
+    const url = error.config?.url || 'unknown'
+    const method = error.config?.method?.toUpperCase() || 'GET'
+    
+    // 检查是否是APM相关错误，如果是则静默处理
+    if (url.includes('apm-volcano') || url.includes('monitor_web')) {
+      console.debug('🔇 APM request error silenced:', url)
+      return Promise.reject(error)
     }
+
+    // 处理认证错误
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      console.log('JWT token expired or invalid, cleared from localStorage')
+      
+      errorHandler.handleAuthError({
+        message: 'Authentication token expired or invalid',
+        operation: 'validation',
+        isTokenExpired: true,
+        shouldRedirect: true,
+        redirectPath: '/login',
+        context: { url, method, status: 401 }
+      })
+    }
+    // 处理其他HTTP错误
+    else if (error.response) {
+      errorHandler.handleNetworkError({
+        url,
+        status: error.response.status,
+        statusText: error.response.statusText,
+        method,
+        message: `HTTP ${error.response.status}: ${error.response.statusText}`,
+        retryCount: 0,
+        isTimeout: false,
+        context: {
+          responseData: error.response.data,
+          requestData: error.config?.data
+        }
+      })
+    }
+    // 处理网络连接错误
+    else if (error.request) {
+      errorHandler.handleNetworkError({
+        url,
+        status: 0,
+        statusText: 'Network Error',
+        method,
+        message: error.message || 'Network request failed',
+        retryCount: 0,
+        isTimeout: error.code === 'ECONNABORTED' || error.message.includes('timeout'),
+        context: {
+          errorCode: error.code,
+          requestData: error.config?.data
+        }
+      })
+    }
+    // 处理其他错误
+    else {
+      errorHandler.handleNetworkError({
+        url,
+        status: 0,
+        statusText: 'Unknown Error',
+        method,
+        message: error.message || 'Unknown network error',
+        retryCount: 0,
+        isTimeout: false,
+        context: {
+          errorType: 'unknown',
+          originalError: error
+        }
+      })
+    }
+
     return Promise.reject(error)
   }
 )

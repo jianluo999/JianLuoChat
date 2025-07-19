@@ -336,9 +336,12 @@ import { useMatrixStore } from '@/stores/matrix'
 import MatrixMessageAreaSimple from './MatrixMessageAreaSimple.vue'
 import StartDirectMessageDialog from './StartDirectMessageDialog.vue'
 import CreateGroupChatDialog from './CreateGroupChatDialog.vue'
+import { passiveEventManager } from '@/utils/passiveEventManager'
+import { useErrorHandler } from '@/utils/errorSetup'
 
 const matrixStore = useMatrixStore()
 const router = useRouter()
+const { handleError, handleMatrixError, handlePerformanceError } = useErrorHandler()
 
 // 响应式数据
 const currentRoomId = ref<string>('')
@@ -505,7 +508,11 @@ const refreshRooms = async () => {
 
   if (!matrixStore.matrixClient) {
     console.error('❌ Matrix客户端未初始化')
-    alert('Matrix客户端未初始化，无法刷新房间')
+    handleMatrixError({
+      message: 'Matrix客户端未初始化，无法刷新房间',
+      operation: 'sync',
+      isRecoverable: true
+    })
     return
   }
 
@@ -853,6 +860,9 @@ const joinPublicRoom = async (roomId: string) => {
 onMounted(async () => {
   console.log('🚀 WeChatStyleLayout 组件挂载开始')
 
+  // 设置性能优化的滚动监听器
+  setupScrollOptimization()
+
   // 检查是否已经有Matrix客户端在运行，避免重复初始化
   if (matrixStore.matrixClient && matrixStore.isConnected) {
     console.log('✅ Matrix客户端已存在且已连接，跳过初始化')
@@ -894,6 +904,88 @@ onMounted(async () => {
   } else {
     console.log('📚 虽然没有登录信息，但有房间列表，允许界面显示')
   }
+})
+
+// 滚动优化设置
+const scrollCleanupFunctions: (() => void)[] = []
+
+const setupScrollOptimization = () => {
+  console.log('🎯 设置滚动性能优化...')
+  
+  nextTick(() => {
+    try {
+      // 优化聊天列表滚动
+      const chatList = document.querySelector('.chat-list')
+      if (chatList) {
+        const cleanup1 = passiveEventManager.createOptimizedScrollListener(
+          chatList,
+          (scrollInfo) => {
+            // 监控滚动性能
+            if (scrollInfo.velocityY && Math.abs(scrollInfo.velocityY) > 2) {
+              handlePerformanceError({
+                message: 'Fast scrolling detected in chat list',
+                metric: 'scroll_jank',
+                value: Math.abs(scrollInfo.velocityY),
+                threshold: 2,
+                componentName: 'WeChatStyleLayout',
+                context: { scrollInfo }
+              })
+            }
+          },
+          { throttleDelay: 16, includeVelocity: true }
+        )
+        scrollCleanupFunctions.push(cleanup1)
+      }
+
+      // 优化消息列表滚动
+      const messageList = document.querySelector('.message-list')
+      if (messageList) {
+        const cleanup2 = passiveEventManager.createOptimizedScrollListener(
+          messageList,
+          (scrollInfo) => {
+            // 可以在这里添加消息列表滚动的特殊处理
+          },
+          { throttleDelay: 16 }
+        )
+        scrollCleanupFunctions.push(cleanup2)
+      }
+
+      // 优化公共房间列表滚动
+      const publicRoomsList = document.querySelector('.public-rooms-list')
+      if (publicRoomsList) {
+        const cleanup3 = passiveEventManager.createOptimizedScrollListener(
+          publicRoomsList,
+          (scrollInfo) => {
+            // 可以在这里添加公共房间列表滚动的特殊处理
+          },
+          { throttleDelay: 16 }
+        )
+        scrollCleanupFunctions.push(cleanup3)
+      }
+
+      console.log('✅ 滚动性能优化设置完成')
+    } catch (error) {
+      console.error('❌ 滚动优化设置失败:', error)
+      handleError(error as Error, { context: 'scroll_optimization_setup' })
+    }
+  })
+}
+
+// 组件卸载时清理
+onUnmounted(() => {
+  console.log('🧹 清理WeChatStyleLayout组件...')
+  
+  // 清理滚动监听器
+  scrollCleanupFunctions.forEach(cleanup => {
+    try {
+      cleanup()
+    } catch (error) {
+      console.error('清理滚动监听器失败:', error)
+    }
+  })
+  scrollCleanupFunctions.length = 0
+  
+  console.log('✅ WeChatStyleLayout组件清理完成')
 })
 
 // 注释：已移除 initializeMatrixInBackground 函数以避免重复初始化
@@ -1183,6 +1275,11 @@ onMounted(async () => {
 .chat-list {
   flex: 1;
   overflow-y: auto;
+  /* 性能优化 */
+  will-change: scroll-position;
+  transform: translateZ(0);
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 
 .loading-chat-list {
@@ -1365,6 +1462,11 @@ onMounted(async () => {
   padding: 16px;
   background: #fafafa;
   min-height: 0;
+  /* 性能优化 */
+  will-change: scroll-position;
+  transform: translateZ(0);
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 .message-input {
   flex: 0;
@@ -1439,6 +1541,11 @@ onMounted(async () => {
   flex: 1;
   overflow-y: auto;
   padding: 10px 0;
+  /* 性能优化 */
+  will-change: scroll-position;
+  transform: translateZ(0);
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 
 .public-room-item {

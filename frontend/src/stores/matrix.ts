@@ -407,7 +407,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       presence: 'online'
     }
 
-    // 持久化保存登录信息到localStorage
+    // 持久化保存登录信息到localStorage（保存两种格式以保持兼容性）
     const persistentData = {
       userId: info.userId,
       accessToken: info.accessToken,
@@ -415,7 +415,9 @@ export const useMatrixStore = defineStore('matrix', () => {
       homeserver: info.homeserver,
       loginTime: Date.now()
     }
-    localStorage.setItem('matrix-login-info', JSON.stringify(persistentData))
+    localStorage.setItem('matrix-login-info', JSON.stringify(persistentData)) // 新格式（连字符）
+    localStorage.setItem('matrix_login_info', JSON.stringify(persistentData)) // 旧格式（下划线）
+    localStorage.setItem('matrix_access_token', info.accessToken) // 单独保存访问令牌
 
     console.log('Matrix login info set and persisted:', info)
   }
@@ -432,15 +434,21 @@ export const useMatrixStore = defineStore('matrix', () => {
       // 首先加载房间列表（即使未登录也可以显示之前的房间）
       loadRoomsFromStorage()
 
-      const savedLoginInfo = localStorage.getItem('matrix-login-info')
+      // 尝试两种可能的localStorage key（兼容性处理）
+      let savedLoginInfo = localStorage.getItem('matrix-login-info') // 新格式（连字符）
+      if (!savedLoginInfo) {
+        savedLoginInfo = localStorage.getItem('matrix_login_info') // 旧格式（下划线）
+      }
+
       if (savedLoginInfo) {
         const loginData = JSON.parse(savedLoginInfo)
 
         // 检查登录信息是否过期（24小时）
-        const loginAge = Date.now() - loginData.loginTime
+        const loginAge = loginData.loginTime ? (Date.now() - loginData.loginTime) : 0
         const maxAge = 24 * 60 * 60 * 1000 // 24小时
 
-        if (loginAge < maxAge) {
+        // 如果没有loginTime字段，认为是有效的（向后兼容）
+        if (!loginData.loginTime || loginAge < maxAge) {
           console.log('Restoring Matrix login from localStorage:', loginData)
 
           // 恢复登录状态
@@ -461,11 +469,13 @@ export const useMatrixStore = defineStore('matrix', () => {
         } else {
           console.log('Saved Matrix login expired, clearing localStorage')
           localStorage.removeItem('matrix-login-info')
+          localStorage.removeItem('matrix_login_info') // 清理两种格式
         }
       }
     } catch (error) {
       console.error('Failed to restore Matrix login:', error)
       localStorage.removeItem('matrix-login-info')
+      localStorage.removeItem('matrix_login_info') // 清理两种格式
       // 确保清理失败的状态
       await cleanupMatrixClient()
     }
@@ -487,8 +497,10 @@ export const useMatrixStore = defineStore('matrix', () => {
     loginInfo.value = null
     clientInitializing.value = false
 
-    // 清除localStorage，包括设备ID
+    // 清除localStorage，包括设备ID（清理两种格式）
     localStorage.removeItem('matrix-login-info')
+    localStorage.removeItem('matrix_login_info') // 清理旧格式
+    localStorage.removeItem('matrix_access_token') // 清理访问令牌
     localStorage.removeItem('matrix-device-id')
 
     console.log('Matrix logout completed')
@@ -1858,7 +1870,6 @@ export const useMatrixStore = defineStore('matrix', () => {
       return []
     }
 
-    let newMessages: MatrixMessage[] = []
     try {
       console.log(`📚 加载房间 ${roomId} 的更多历史消息...`)
       const room = matrixClient.value.getRoom(roomId)
@@ -1866,68 +1877,80 @@ export const useMatrixStore = defineStore('matrix', () => {
         throw new Error('找不到房间')
       }
 
-      // 获取当前时间线
+      // 获取当前时间线事件数量
       const timeline = room.getLiveTimeline()
-      const currentEvents = timeline.getEvents()
-      console.log(`📊 当前时间线事件数量: ${currentEvents.length}`)
-      
-      if (currentEvents.length === 0) {
-        console.warn('时间线为空，可能需要等待同步')
-        return []
-      }
+      const currentEventCount = timeline.getEvents().length
+      console.log(`📊 当前时间线事件数量: ${currentEventCount}`)
 
-      const oldestEvent = currentEvents[0]
-      if (!oldestEvent) {
-        console.warn('无法获取最早的事件')
-        return []
-      }
-      
-      // 记录当前消息数量
-      const currentMessageCount = (messages.value.get(roomId) || []).length
-      
-      // 使用scrollback方法加载历史消息
+      // 使用 scrollback 方法加载更多历史消息
       const limit = 30 // 每次加载30条
-      console.log(`🔄 从事件 ${oldestEvent.getId()} 开始加载最多 ${limit} 条消息`)
-      
-      await room.scrollback(limit)
+      console.log(`🔄 开始加载 ${limit} 条历史消息...`)
 
-      // 重新获取时间线事件
-      const newEvents = timeline.getEvents()
-      console.log(`📨 加载后的事件数量: ${newEvents.length}`)
+      await matrixClient.value.scrollback(room, limit)
 
-      // 过滤出新加载的消息事件
-      const newMessageEvents = newEvents
-        .slice(0, newEvents.length - currentEvents.length) // 只处理新加载的事件
+      // 获取更新后的事件
+      const updatedEvents = timeline.getEvents()
+      const newEventCount = updatedEvents.length
+      console.log(`📊 加载后事件数量: ${newEventCount}，新增: ${newEventCount - currentEventCount}`)
+
+      // 只处理新加载的消息事件
+      const newEvents = updatedEvents.slice(0, newEventCount - currentEventCount)
+      const newMessages: MatrixMessage[] = newEvents
         .filter((event: any) => event.getType() === 'm.room.message')
+        .map((event: any) => {
+          try {
+            const content = event.getContent()
+            return {
+              id: event.getId(),
+              roomId: roomId,
+              content: content?.body || content?.formatted_body || '',
+              sender: event.getSender(),
+              timestamp: event.getTs(),
+              type: event.getType(),
+              eventId: event.getId(),
+              encrypted: !!content?.algorithm,
+              senderName: event.getSender(), // 可以后续优化为显示名
+              status: 'sent' as const
+            }
+          } catch (eventError) {
+            console.warn('处理历史消息事件失败:', eventError, event)
+            return null
+          }
+        })
+        .filter((msg): msg is MatrixMessage => msg !== null)
 
-      // 转换为消息对象
-      newMessages = newMessageEvents.map((event: any) => ({
-        id: event.getId(),
-        roomId,
-        content: event.getContent().body || '',
-        sender: event.getSender(),
-        timestamp: event.getTs(),
-        type: event.getContent().msgtype || 'm.text',
-        eventId: event.getId(),
-        encrypted: room.isEncrypted(),
-        senderName: room.getMember(event.getSender())?.name || event.getSender(),
-        status: 'sent' as const
-      }))
-
-      // 更新消息列表
-      if (newMessages.length > 0) {
+      // 更新消息列表 - 将新消息添加到开头
+      if (messages.value.has(roomId)) {
         const currentMessages = messages.value.get(roomId) || []
-        messages.value.set(roomId, [...newMessages, ...currentMessages])
-        console.log(`✅ 成功加载并添加了 ${newMessages.length} 条新消息`)
+        // 避免重复消息
+        const existingIds = new Set(currentMessages.map(m => m.id))
+        const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id))
+
+        if (uniqueNewMessages.length > 0) {
+          messages.value.set(roomId, [...uniqueNewMessages, ...currentMessages])
+          console.log(`✅ 成功加载了 ${uniqueNewMessages.length} 条新的历史消息`)
+        } else {
+          console.log('📝 没有新的历史消息')
+        }
       } else {
-        console.log('没有更多历史消息可加载')
+        // 如果是第一次加载消息
+        messages.value.set(roomId, newMessages)
+        console.log(`✅ 首次加载了 ${newMessages.length} 条历史消息`)
       }
 
       return newMessages
 
     } catch (error) {
       console.error('加载历史消息失败:', error)
-      return []
+      // 提供更友好的错误信息
+      if (error instanceof Error) {
+        if (error.message.includes('scrollback')) {
+          throw new Error('无法加载更多历史消息，可能已到达消息历史的开始')
+        } else if (error.message.includes('network')) {
+          throw new Error('网络连接问题，请检查网络后重试')
+        }
+      }
+      throw error
     }
   }
 
