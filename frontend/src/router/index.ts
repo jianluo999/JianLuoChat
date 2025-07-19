@@ -24,6 +24,11 @@ const router = createRouter({
       component: () => import('@/pages/EncryptionSettings.vue')
     },
     {
+      path: '/device-verification',
+      name: 'device-verification',
+      component: () => import('@/pages/DeviceVerificationPage.vue')
+    },
+    {
       path: '/encryption-test',
       name: 'encryption-test',
       component: () => import('@/pages/EncryptionTest.vue')
@@ -68,7 +73,7 @@ router.beforeEach(async (to, from, next) => {
     } else {
       next()
     }
-  } else if (to.path === '/chat' || to.path === '/encryption-settings' || to.path === '/encryption-test' || to.path === '/crypto-debug') {
+  } else if (to.path === '/chat' || to.path === '/encryption-settings' || to.path === '/device-verification' || to.path === '/encryption-test' || to.path === '/crypto-debug') {
     // 如果没有登录，重定向到登录页面
     if (!hasTokenAfterDelay || !hasLoginInfoAfterDelay) {
       console.log('Not logged in, redirecting to login')

@@ -133,6 +133,18 @@
                 </svg>
                 加密设置
               </button>
+              <button class="menu-item" @click="openDeviceVerification">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1M10,17L6,13L7.41,11.59L10,14.17L16.59,7.58L18,9L10,17Z"/>
+                </svg>
+                设备验证
+              </button>
+              <button class="menu-item" @click="checkCryptoConflicts">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/>
+                </svg>
+                检查冲突
+              </button>
             </div>
           </div>
         </div>
@@ -717,6 +729,30 @@ const testFastMessage = async () => {
 // 打开加密设置页面
 const openEncryptionSettings = () => {
   router.push('/encryption-settings')
+}
+
+// 打开设备验证页面
+const openDeviceVerification = () => {
+  router.push('/device-verification')
+}
+
+// 检查加密冲突
+const checkCryptoConflicts = async () => {
+  try {
+    const { cryptoConflictManager } = await import('@/utils/cryptoConflictManager')
+    const conflicts = cryptoConflictManager.detectConflicts()
+
+    if (conflicts.hasConflicts) {
+      const advice = cryptoConflictManager.getConflictResolutionAdvice(conflicts)
+      const message = `检测到加密冲突:\n\n冲突源: ${conflicts.conflictingSources.join(', ')}\n风险级别: ${conflicts.riskLevel}\n\n建议:\n${advice.join('\n')}`
+      alert(message)
+    } else {
+      alert('✅ 未检测到加密冲突，您的加密环境是安全的。')
+    }
+  } catch (error) {
+    console.error('检查加密冲突失败:', error)
+    alert('检查加密冲突失败')
+  }
 }
 
 // 打开加密测试页面

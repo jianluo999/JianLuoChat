@@ -7,6 +7,13 @@
       </p>
     </div>
 
+    <!-- 加密冲突警告 -->
+    <CryptoConflictWarning
+      ref="conflictWarningRef"
+      @conflict-detected="handleConflictDetected"
+      @conflict-resolved="handleConflictResolved"
+    />
+
     <!-- 全局加密状态 -->
     <el-card class="status-card">
       <template #header>
@@ -267,6 +274,7 @@ import { useMatrixStore } from '@/stores/matrix'
 import EncryptionIndicator from '@/components/EncryptionIndicator.vue'
 import DeviceVerification from '@/components/DeviceVerification.vue'
 import KeyManagement from '@/components/KeyManagement.vue'
+import CryptoConflictWarning from '@/components/CryptoConflictWarning.vue'
 
 // Store
 const matrixStore = useMatrixStore()
@@ -274,6 +282,7 @@ const matrixStore = useMatrixStore()
 // Refs
 const deviceVerificationRef = ref()
 const keyManagementRef = ref()
+const conflictWarningRef = ref()
 
 // 响应式数据
 const enablingCrypto = ref(false)
@@ -460,6 +469,16 @@ const scrollToSection = (sectionId: string) => {
   if (element) {
     element.scrollIntoView({ behavior: 'smooth' })
   }
+}
+
+const handleConflictDetected = (conflictResult: any) => {
+  console.warn('检测到加密冲突:', conflictResult)
+  // 可以在这里添加额外的处理逻辑
+}
+
+const handleConflictResolved = () => {
+  console.log('加密冲突已解决')
+  ElMessage.success('加密冲突已解决，建议刷新页面')
 }
 
 // 生命周期

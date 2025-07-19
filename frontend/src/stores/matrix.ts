@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { matrixAPI, roomAPI } from '@/services/api'
 import { deviceConflictUtils } from '@/utils/deviceConflictResolver'
+import { cryptoConflictManager } from '@/utils/cryptoConflictManager'
 
 // Matrix消息接口
 export interface MatrixMessage {
@@ -557,19 +558,39 @@ export const useMatrixStore = defineStore('matrix', () => {
 
       console.log(`🔧 创建Matrix客户端: ${userId} @ ${homeserver}`)
 
-      // 生成唯一的设备ID，避免多个客户端实例冲突
-      const generateUniqueDeviceId = () => {
-        const timestamp = Date.now()
-        const random = Math.random().toString(36).substring(2, 8)
-        return `jianluochat_web_${timestamp}_${random}`
+      // 使用冲突管理器检测和处理潜在冲突
+      console.log('🔍 检测加密冲突...')
+      const conflictResult = cryptoConflictManager.detectConflicts()
+
+      if (conflictResult.hasConflicts) {
+        console.warn('⚠️ 检测到加密冲突:', {
+          sources: conflictResult.conflictingSources,
+          riskLevel: conflictResult.riskLevel,
+          recommendations: conflictResult.recommendations
+        })
+
+        // 显示冲突警告给用户
+        const advice = cryptoConflictManager.getConflictResolutionAdvice(conflictResult)
+        console.warn('💡 冲突解决建议:', advice)
+      }
+
+      // 生成客户端特定的存储键
+      const getClientSpecificKey = (baseKey: string) => {
+        return `jianluochat-${baseKey}-${userId.split(':')[0].substring(1)}`
       }
 
       // 尝试从localStorage获取已保存的设备ID，如果没有则生成新的
-      let deviceId = localStorage.getItem('matrix-device-id')
-      if (!deviceId) {
-        deviceId = generateUniqueDeviceId()
-        localStorage.setItem('matrix-device-id', deviceId)
-        console.log('🆔 生成新的设备ID:', deviceId)
+      const deviceIdKey = getClientSpecificKey('device-id')
+      let deviceId = localStorage.getItem(deviceIdKey)
+
+      // 如果有冲突或没有保存的设备ID，则生成新的安全设备ID
+      if (conflictResult.hasConflicts || !deviceId) {
+        if (conflictResult.hasConflicts) {
+          console.warn('⚠️ 由于检测到冲突，将生成新的隔离设备ID')
+        }
+        deviceId = cryptoConflictManager.createSafeDeviceId(userId)
+        localStorage.setItem(deviceIdKey, deviceId)
+        console.log('🆔 生成新的安全设备ID:', deviceId)
       } else {
         console.log('🆔 使用已保存的设备ID:', deviceId)
       }
@@ -630,18 +651,17 @@ export const useMatrixStore = defineStore('matrix', () => {
             if (typeof (client as any).initRustCrypto === 'function') {
               console.log('🔧 尝试初始化Rust加密引擎...')
 
-              // 为每个设备使用唯一的加密存储前缀，避免冲突
-              const cryptoStorePrefix = `jianluochat-crypto-${deviceId}-${Date.now()}`
+              // 使用冲突管理器生成安全的加密配置
+              const cryptoConfig = cryptoConflictManager.createSafeCryptoConfig(userId, deviceId)
 
-              // 使用更安全的加密配置
-              const cryptoConfig = {
-                useIndexedDB: false, // 使用内存存储避免WASM问题和设备冲突
-                storagePassword: undefined,
-                storageKey: undefined,
-                cryptoDatabasePrefix: cryptoStorePrefix
-              }
+              console.log('🔧 加密配置:', {
+                deviceId,
+                useIndexedDB: cryptoConfig.useIndexedDB,
+                storagePrefix: cryptoConfig.cryptoDatabasePrefix,
+                hasConflicts: conflictResult.hasConflicts
+              })
 
-              console.log('🔧 加密配置:', { deviceId, cryptoStorePrefix })
+
 
               // 添加超时保护
               const cryptoPromise = (client as any).initRustCrypto(cryptoConfig)
