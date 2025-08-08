@@ -808,7 +808,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       console.log('🚀 启动Matrix客户端...')
       try {
         await client.startClient({
-          initialSyncLimit: 10,
+          initialSyncLimit: 200, // 增加到200条历史消息
           lazyLoadMembers: true
         })
         console.log('✅ Matrix客户端启动命令已发送')
@@ -858,7 +858,7 @@ export const useMatrixStore = defineStore('matrix', () => {
                 syncEventReceived = true
               } else if (finalState === null) {
                 console.log('🔄 同步状态为null，尝试最后一次重启...')
-                client.startClient({ initialSyncLimit: 3 }).catch((err: any) => {
+                client.startClient({ initialSyncLimit: 100 }).catch((err: any) => {
                   console.error('最后重启尝试失败:', err)
                 })
               }
@@ -956,7 +956,18 @@ export const useMatrixStore = defineStore('matrix', () => {
         if (event.getType() === 'm.room.message') {
           console.log('📨 收到新消息事件:', event.getId(), 'in room:', room.roomId)
 
-          const content = event.getContent()?.body || event.getContent()?.formatted_body || ''
+          const eventContent = event.getContent()
+          console.log('🔍 消息内容详情:', {
+            msgtype: eventContent?.msgtype,
+            body: eventContent?.body,
+            url: eventContent?.url,
+            filename: eventContent?.filename,
+            info: eventContent?.info,
+            fullContent: eventContent
+          })
+
+          const content = eventContent?.body || eventContent?.formatted_body || ''
+
           const newMessage: MatrixMessage = {
             id: event.getId(),
             roomId: room.roomId,
@@ -966,8 +977,76 @@ export const useMatrixStore = defineStore('matrix', () => {
             timestamp: event.getTs(),
             type: event.getType(),
             eventId: event.getId(),
-            encrypted: !!event.getContent()?.algorithm,
+            encrypted: !!eventContent?.algorithm,
             status: 'sent' as const
+          }
+
+          // 处理文件消息
+          if (eventContent?.msgtype === 'm.image' || eventContent?.msgtype === 'm.file') {
+            const isImage = eventContent.msgtype === 'm.image'
+            // 处理不同的URL格式
+            let mxcUrl = eventContent.url
+            console.log('🔍 URL提取前:', { originalUrl: mxcUrl, type: typeof mxcUrl })
+            if (typeof mxcUrl === 'object' && mxcUrl?.content_uri) {
+              mxcUrl = mxcUrl.content_uri
+              console.log('✅ 从对象中提取URL:', mxcUrl)
+            }
+            // 尝试多种URL格式
+            let fileUrl = null
+            if (mxcUrl && matrixClient.value) {
+              console.log('🔍 开始URL转换，MXC URL:', mxcUrl)
+
+              // 首先尝试不需要认证的URL
+              const unauthUrl = matrixClient.value.mxcUrlToHttp(mxcUrl, undefined, undefined, undefined, false, true, false)
+              console.log('🔗 未认证URL结果:', unauthUrl)
+
+              // 然后尝试认证URL
+              const authUrl = matrixClient.value.mxcUrlToHttp(mxcUrl, undefined, undefined, undefined, false, true, true)
+              console.log('🔗 认证URL结果:', authUrl)
+
+              // 优先使用未认证URL，如果不可用则使用认证URL
+              fileUrl = unauthUrl || authUrl
+              console.log('🎯 最终选择的URL:', fileUrl)
+
+              // 如果选择了认证URL，标记需要特殊处理
+              if (fileUrl === authUrl && authUrl) {
+                console.log('⚠️ 使用认证URL，可能需要特殊处理')
+              }
+            }
+            console.log('🔗 URL转换结果:', { mxcUrl, fileUrl })
+
+            console.log('🖼️ 处理文件消息:', {
+              msgtype: eventContent.msgtype,
+              originalUrl: eventContent.url,
+              extractedMxcUrl: mxcUrl,
+              convertedUrl: fileUrl,
+              filename: eventContent.filename,
+              body: eventContent.body,
+              isImage,
+              clientExists: !!matrixClient.value,
+              mxcUrlToHttpExists: !!(matrixClient.value?.mxcUrlToHttp)
+            })
+
+            if (fileUrl) {
+              newMessage.fileInfo = {
+                name: eventContent.filename || eventContent.body || 'Unknown file',
+                size: eventContent.info?.size || 0,
+                type: eventContent.info?.mimetype || 'application/octet-stream',
+                url: fileUrl,
+                isImage,
+                mxcUrl: mxcUrl // 保存原始MXC URL用于重试
+              } as any
+
+              // 更新消息内容显示
+              newMessage.content = `${isImage ? '🖼️' : '📎'} ${newMessage.fileInfo.name}`
+              if (newMessage.fileInfo.size > 0) {
+                newMessage.content += ` (${formatFileSize(newMessage.fileInfo.size)})`
+              }
+
+              console.log('✅ 文件信息已设置:', newMessage.fileInfo)
+            } else {
+              console.warn('❌ 无法转换文件URL:', eventContent.url)
+            }
           }
 
           // 添加到消息列表
@@ -1025,6 +1104,56 @@ export const useMatrixStore = defineStore('matrix', () => {
       throw error
     } finally {
       clientInitializing.value = false
+    }
+  }
+
+  // 强制重新连接Matrix客户端
+  const forceReconnect = async (): Promise<boolean> => {
+    console.log('🔄 开始强制重新连接Matrix客户端...')
+
+    try {
+      // 停止当前客户端
+      if (matrixClient.value) {
+        console.log('⏹️ 停止当前Matrix客户端...')
+        matrixClient.value.stopClient()
+        matrixClient.value = null
+        await new Promise(resolve => setTimeout(resolve, 2000)) // 等待2秒确保完全停止
+      }
+
+      // 重置所有状态
+      connection.value = {
+        connected: false,
+        homeserver: '',
+        userId: '',
+        syncState: { isActive: false }
+      }
+
+      // 清除初始化标志
+      clientInitializing.value = false
+
+      // 重新初始化
+      console.log('🚀 重新初始化Matrix客户端...')
+      const success = await initializeMatrix()
+
+      if (success) {
+        console.log('✅ 强制重新连接成功')
+        // 等待一下再获取房间
+        setTimeout(async () => {
+          try {
+            await fetchRooms()
+            console.log('✅ 房间列表已刷新')
+          } catch (error) {
+            console.error('刷新房间列表失败:', error)
+          }
+        }, 3000)
+        return true
+      } else {
+        console.error('❌ 强制重新连接失败')
+        return false
+      }
+    } catch (error) {
+      console.error('❌ 强制重新连接过程中出错:', error)
+      return false
     }
   }
 
@@ -1455,7 +1584,7 @@ export const useMatrixStore = defineStore('matrix', () => {
         console.log('🚀 客户端未运行，尝试启动...')
         try {
           await matrixClient.value.startClient({
-            initialSyncLimit: 20, // 增加初始同步限制
+            initialSyncLimit: 200, // 增加初始同步限制到200条
             lazyLoadMembers: true
           })
           console.log('✅ 客户端启动成功')
@@ -1504,7 +1633,7 @@ export const useMatrixStore = defineStore('matrix', () => {
 
             // 重新启动客户端
             await matrixClient.value.startClient({
-              initialSyncLimit: 50, // 增加同步限制
+              initialSyncLimit: 200, // 增加同步限制到200条
               lazyLoadMembers: true
             })
             console.log('✅ 客户端重新启动成功')
@@ -1722,7 +1851,7 @@ export const useMatrixStore = defineStore('matrix', () => {
   }
 
   // Matrix消息管理
-  const fetchMatrixMessages = async (roomId: string, limit = 50) => {
+  const fetchMatrixMessages = async (roomId: string, limit = 200) => {
     try {
       if (!matrixClient.value) {
         console.error('Matrix客户端未初始化')
@@ -1897,16 +2026,22 @@ export const useMatrixStore = defineStore('matrix', () => {
 
           roomMessages = messageEvents
             .map((event: any) => {
-              const content = event.getContent()?.body || event.getContent()?.formatted_body || ''
+              const eventContent = event.getContent()
+              let content = eventContent?.body || eventContent?.formatted_body || ''
+
               console.log(`📝 处理消息事件:`, {
                 id: event.getId(),
                 type: event.getType(),
+                msgtype: eventContent?.msgtype,
                 sender: event.getSender(),
                 content: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
-                timestamp: new Date(event.getTs()).toLocaleString()
+                timestamp: new Date(event.getTs()).toLocaleString(),
+                hasUrl: !!eventContent?.url,
+                url: eventContent?.url,
+                filename: eventContent?.filename
               })
 
-              return {
+              const message: MatrixMessage = {
                 id: event.getId(),
                 roomId,
                 content,
@@ -1915,9 +2050,42 @@ export const useMatrixStore = defineStore('matrix', () => {
                 timestamp: event.getTs(),
                 type: event.getType(),
                 eventId: event.getId(),
-                encrypted: !!event.getContent()?.algorithm,
+                encrypted: !!eventContent?.algorithm,
                 status: 'sent' as const
               }
+
+              // 处理文件消息
+              if (eventContent?.msgtype === 'm.image' || eventContent?.msgtype === 'm.file') {
+                const isImage = eventContent.msgtype === 'm.image'
+                const fileUrl = eventContent.url ? matrixClient.value?.mxcUrlToHttp(eventContent.url) : null
+
+                console.log(`📎 处理文件消息:`, {
+                  msgtype: eventContent.msgtype,
+                  filename: eventContent.filename,
+                  body: eventContent.body,
+                  url: eventContent.url,
+                  httpUrl: fileUrl,
+                  info: eventContent.info
+                })
+
+                if (fileUrl) {
+                  message.fileInfo = {
+                    name: eventContent.filename || eventContent.body || 'Unknown file',
+                    size: eventContent.info?.size || 0,
+                    type: eventContent.info?.mimetype || 'application/octet-stream',
+                    url: fileUrl,
+                    isImage
+                  }
+
+                  // 更新消息内容显示
+                  message.content = `${isImage ? '🖼️' : '📎'} ${message.fileInfo.name}`
+                  if (message.fileInfo.size > 0) {
+                    message.content += ` (${formatFileSize(message.fileInfo.size)})`
+                  }
+                }
+              }
+
+              return message
             })
             .slice(-limit) // 只取最后的limit条消息
         }
@@ -1957,6 +2125,46 @@ export const useMatrixStore = defineStore('matrix', () => {
     } catch (error) {
       console.error('❌ 文件上传失败:', error)
       throw error
+    }
+  }
+
+  // 创建认证的图片URL
+  const createAuthenticatedImageUrl = async (mxcUrl: string): Promise<string | null> => {
+    if (!matrixClient.value) return null
+
+    try {
+      console.log('🔐 尝试创建认证图片URL:', mxcUrl)
+
+      // 获取认证的URL
+      const authUrl = matrixClient.value.mxcUrlToHttp(mxcUrl, undefined, undefined, undefined, false, true, true)
+      if (!authUrl) {
+        console.log('❌ 无法生成认证URL')
+        return null
+      }
+
+      console.log('🌐 使用认证URL获取图片:', authUrl)
+
+      // 使用fetch获取图片数据，带上认证头
+      const response = await fetch(authUrl, {
+        headers: {
+          'Authorization': `Bearer ${matrixClient.value.getAccessToken()}`
+        }
+      })
+
+      if (!response.ok) {
+        console.log('❌ 图片获取失败:', response.status, response.statusText)
+        return null
+      }
+
+      // 创建blob URL
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      console.log('✅ 创建blob URL成功:', blobUrl)
+
+      return blobUrl
+    } catch (error) {
+      console.error('❌ 创建认证图片URL失败:', error)
+      return null
     }
   }
 
@@ -2363,7 +2571,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       console.log(`📊 当前时间线事件数量: ${currentEventCount}`)
 
       // 使用 scrollback 方法加载更多历史消息
-      const limit = 30 // 每次加载30条
+      const limit = 100 // 每次加载100条
       console.log(`🔄 开始加载 ${limit} 条历史消息...`)
 
       await matrixClient.value.scrollback(room, limit)
@@ -2379,25 +2587,71 @@ export const useMatrixStore = defineStore('matrix', () => {
         .filter((event: any) => event.getType() === 'm.room.message')
         .map((event: any): MatrixMessage | null => {
           try {
-            const content = event.getContent()
-            return {
+            const eventContent = event.getContent()
+            const message: MatrixMessage = {
               id: event.getId(),
               roomId: roomId,
-              content: content?.body || content?.formatted_body || '',
+              content: eventContent?.body || eventContent?.formatted_body || '',
               sender: event.getSender(),
               timestamp: event.getTs(),
               type: event.getType(),
               eventId: event.getId(),
-              encrypted: !!content?.algorithm,
+              encrypted: !!eventContent?.algorithm,
               senderName: event.getSender(), // 可以后续优化为显示名
               status: 'sent' as const
             }
+
+            // 处理文件消息
+            if (eventContent?.msgtype === 'm.image' || eventContent?.msgtype === 'm.file') {
+              const isImage = eventContent.msgtype === 'm.image'
+              // 处理不同的URL格式
+              let mxcUrl = eventContent.url
+              if (typeof mxcUrl === 'object' && mxcUrl?.content_uri) {
+                mxcUrl = mxcUrl.content_uri
+              }
+              // 尝试多种URL格式
+              let fileUrl = null
+              if (mxcUrl && matrixClient.value) {
+                console.log('🔍 [历史消息] 开始URL转换，MXC URL:', mxcUrl)
+
+                // 首先尝试不需要认证的URL
+                const unauthUrl = matrixClient.value.mxcUrlToHttp(mxcUrl, undefined, undefined, undefined, false, true, false)
+                console.log('🔗 [历史消息] 未认证URL结果:', unauthUrl)
+
+                // 然后尝试认证URL
+                const authUrl = matrixClient.value.mxcUrlToHttp(mxcUrl, undefined, undefined, undefined, false, true, true)
+                console.log('🔗 [历史消息] 认证URL结果:', authUrl)
+
+                // 优先使用未认证URL，如果不可用则使用认证URL
+                fileUrl = unauthUrl || authUrl
+                console.log('🎯 [历史消息] 最终选择的URL:', fileUrl)
+              }
+
+              if (fileUrl) {
+                message.fileInfo = {
+                  name: eventContent.filename || eventContent.body || 'Unknown file',
+                  size: eventContent.info?.size || 0,
+                  type: eventContent.info?.mimetype || 'application/octet-stream',
+                  url: fileUrl,
+                  isImage,
+                  mxcUrl: mxcUrl // 保存原始MXC URL用于重试
+                } as any
+
+                // 更新消息内容显示
+                message.content = `${isImage ? '🖼️' : '📎'} ${message.fileInfo.name}`
+                if (message.fileInfo.size > 0) {
+                  message.content += ` (${formatFileSize(message.fileInfo.size)})`
+                }
+              }
+            }
+
+            return message
           } catch (eventError) {
             console.warn('处理历史消息事件失败:', eventError, event)
             return null
           }
         })
-        .filter((msg): msg is MatrixMessage => msg !== null)
+        .filter((msg: MatrixMessage | null): msg is MatrixMessage => msg !== null)
 
       // 更新消息列表 - 将新消息添加到开头
       if (messages.value.has(roomId)) {
@@ -2467,6 +2721,7 @@ export const useMatrixStore = defineStore('matrix', () => {
 
     // Matrix方法
     initializeMatrix,
+    forceReconnect,
     retryMatrixInitialization,
     logout,
     loadWorldChannel,

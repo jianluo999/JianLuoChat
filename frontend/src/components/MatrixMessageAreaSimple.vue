@@ -765,7 +765,8 @@ watch(() => messages.value, (newMessages, oldMessages) => {
 }
 
 .formatted-message {
-  /* 格式化消息的特殊样式 */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 /* 文件消息样式 */
@@ -840,6 +841,36 @@ watch(() => messages.value, (newMessages, oldMessages) => {
 
 .download-btn:hover {
   background: rgba(255, 255, 255, 0.1);
+}
+
+/* 自定义滚动条样式 - 融入聊天框背景 */
+.messages-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.messages-container::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Firefox 滚动条样式 */
+.messages-container {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
 }
 
 .formatted-message b,

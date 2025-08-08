@@ -1,0 +1,17 @@
+🎯 JianluoChat APK 拖拽安装指南
+
+1. 找到APK文件：
+   frontend\android\app\build\outputs\apk\debug\app-debug.apk
+
+2. 拖拽安装步骤：
+   a) 在Windows文件管理器中找到上述APK文件
+   b) 直接将APK文件拖拽到模拟器屏幕上
+   c) 模拟器会自动弹出安装对话框
+   d) 点击"安装"按钮
+   e) 等待安装完成
+
+3. 安装完成后：
+   - 在模拟器的应用抽屉中查找"JianluoChat"
+   - 点击图标启动应用
+
+注意：拖拽安装不需要ADB授权，是最可靠的方法！

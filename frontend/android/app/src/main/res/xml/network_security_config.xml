@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+            <certificates src="user"/>
+        </trust-anchors>
+    </base-config>
+    
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">192.168.1.1</domain>
+        <domain includeSubdomains="true">matrix.org</domain>
+        <domain includeSubdomains="true">matrix-client.matrix.org</domain>
+        <domain includeSubdomains="true">matrix-federation.matrix.org</domain>
+        <domain includeSubdomains="true">vector.im</domain>
+        <domain includeSubdomains="true">element.io</domain>
+        <domain includeSubdomains="true">chat.mozilla.org</domain>
+        <domain includeSubdomains="true">mozilla.modular.im</domain>
+        <domain includeSubdomains="true">t2bot.io</domain>
+    </domain-config>
+</network-security-config>

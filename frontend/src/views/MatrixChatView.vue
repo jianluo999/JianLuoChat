@@ -455,12 +455,11 @@ onMounted(async () => {
     // 加载邀请和房间信息
     await loadPendingInvitations()
 
-      // 选择默认房间
-      const rooms = matrixStore.rooms
-      if (rooms.length > 0) {
-        const worldChannel = rooms.find(room => room.name?.includes('world') || room.name?.includes('世界'))
-        selectedRoom.value = worldChannel?.id || rooms[0].id
-      }
+    // 选择默认房间
+    const rooms = matrixStore.rooms
+    if (rooms.length > 0) {
+      const worldChannel = rooms.find(room => room.name?.includes('world') || room.name?.includes('世界'))
+      selectedRoom.value = worldChannel?.id || rooms[0].id
     }
   } catch (error) {
     console.error('Failed to restore Matrix login:', error)

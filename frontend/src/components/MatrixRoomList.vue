@@ -51,6 +51,9 @@
         <span class="section-title">🛠️ 开发者工具</span>
       </div>
       <div class="dev-tools-buttons">
+        <button @click="forceReconnect" class="dev-btn">
+          🔄 强制重新连接
+        </button>
         <button @click="cleanupFileTransferRooms" class="dev-btn">
           🧹 清理重复文件传输助手
         </button>
@@ -522,6 +525,22 @@ const clearSearch = () => {
 }
 
 // 开发者工具方法
+const forceReconnect = async () => {
+  if (confirm('确定要强制重新连接Matrix吗？这将重新启动客户端。')) {
+    try {
+      const success = await matrixStore.forceReconnect()
+      if (success) {
+        alert('✅ 重新连接成功！')
+      } else {
+        alert('❌ 重新连接失败，请查看控制台了解详情。')
+      }
+    } catch (error) {
+      console.error('强制重新连接失败:', error)
+      alert('❌ 重新连接失败，请查看控制台了解详情。')
+    }
+  }
+}
+
 const cleanupFileTransferRooms = async () => {
   if (confirm('确定要清理重复的文件传输助手吗？这将删除所有重复项并重新创建一个。')) {
     try {

@@ -11,6 +11,14 @@
     "type-check": "vue-tsc --build"
   },
   "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/app": "^6.0.1",
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/keyboard": "^6.0.2",
+    "@capacitor/network": "^6.0.2",
+    "@capacitor/splash-screen": "^6.0.2",
+    "@capacitor/status-bar": "^6.0.1",
     "@element-plus/icons-vue": "^2.0.0",
     "axios": "^1.0.0",
     "element-plus": "^2.0.0",

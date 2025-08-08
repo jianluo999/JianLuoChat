@@ -150,7 +150,13 @@
                     <div v-if="message.fileInfo" class="file-message">
                       <!-- 图片预览 -->
                       <div v-if="message.fileInfo.isImage && message.fileInfo.url" class="image-preview">
-                        <img :src="message.fileInfo.url" :alt="message.fileInfo.name" @click="openImagePreview(message.fileInfo)" />
+                        <img
+                          :src="message.fileInfo.url"
+                          :alt="message.fileInfo.name"
+                          @click="openImagePreview(message.fileInfo)"
+                          @load="handleImageLoad(message.fileInfo)"
+                          @error="handleImageError(message, $event)"
+                        />
                       </div>
                       <!-- 文件信息 -->
                       <div class="file-info">
@@ -612,6 +618,70 @@ const downloadFile = (fileInfo: any) => {
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
+}
+
+const handleImageLoad = (fileInfo: any) => {
+  console.log('✅ 图片加载成功:', fileInfo.url)
+}
+
+const handleImageError = async (message: any, event: Event) => {
+  console.log('❌ 图片加载失败:', message.fileInfo.url)
+
+  // 尝试使用认证方式重新加载图片
+  if (message.fileInfo && message.fileInfo.mxcUrl) {
+    console.log('🔄 尝试使用认证方式重新加载图片')
+
+    try {
+      const matrixClient = matrixStore.matrixClient
+      if (!matrixClient) {
+        console.log('❌ Matrix客户端不可用')
+        return
+      }
+
+      // 获取认证URL
+      const authUrl = matrixClient.mxcUrlToHttp(
+        message.fileInfo.mxcUrl,
+        undefined, undefined, undefined,
+        false, true, true
+      )
+
+      if (!authUrl) {
+        console.log('❌ 无法生成认证URL')
+        return
+      }
+
+      console.log('🌐 使用认证URL获取图片:', authUrl)
+
+      // 使用fetch获取图片数据
+      const response = await fetch(authUrl, {
+        headers: {
+          'Authorization': `Bearer ${matrixClient.getAccessToken()}`
+        }
+      })
+
+      if (!response.ok) {
+        console.log('❌ 认证图片获取失败:', response.status, response.statusText)
+        return
+      }
+
+      // 创建blob URL并更新图片源
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      console.log('✅ 创建认证blob URL成功:', blobUrl)
+
+      // 更新消息中的URL
+      message.fileInfo.url = blobUrl
+
+      // 强制重新渲染图片
+      const imgElement = event.target as HTMLImageElement
+      if (imgElement) {
+        imgElement.src = blobUrl
+      }
+
+    } catch (error) {
+      console.error('❌ 认证图片加载失败:', error)
+    }
+  }
 }
 </script>
 
@@ -1177,5 +1247,35 @@ const downloadFile = (fileInfo: any) => {
 @keyframes blink {
   0%, 50% { opacity: 1; }
   51%, 100% { opacity: 0.3; }
+}
+
+/* 自定义滚动条样式 - 融入聊天框背景 */
+.messages-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.messages-container::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Firefox 滚动条样式 */
+.messages-container {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
 }
 </style>
