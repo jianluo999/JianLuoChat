@@ -223,7 +223,6 @@
       @typing-start="handleTypingStart"
       @typing-stop="handleTypingStop"
     />
-  </div>
 </template>
 
 <script setup lang="ts">
@@ -931,7 +930,7 @@ const handleImageError = async (message: any, event: Event) => {
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
-  color: #666;
+  color: #ffffff;
   text-align: center;
 }
 
@@ -945,7 +944,7 @@ const handleImageError = async (message: any, event: Event) => {
   font-size: 18px;
   font-weight: bold;
   margin-bottom: 8px;
-  color: #00ff00;
+  color: #ffffff;
 }
 
 .empty-desc {
@@ -981,12 +980,12 @@ const handleImageError = async (message: any, event: Event) => {
 }
 
 .sender-icon {
-  color: #00cccc;
+  color: #000000;
   font-size: 12px;
 }
 
 .sender-name {
-  color: #00ff00;
+  color: #000000;
   font-weight: bold;
   font-size: 13px;
 }
@@ -997,12 +996,18 @@ const handleImageError = async (message: any, event: Event) => {
   gap: 8px;
 }
 
+.message-time {
+  color: #000000;
+  font-size: 11px;
+}
+
 .message-timestamp {
-  color: #666;
+  color: #000000;
   font-size: 11px;
 }
 
 .encryption-indicator, .message-type {
+  color: #000000;
   font-size: 12px;
 }
 
@@ -1011,7 +1016,7 @@ const handleImageError = async (message: any, event: Event) => {
 }
 
 .message-text {
-  color: #ccc;
+  color: #000000;
   font-size: 14px;
   line-height: 1.4;
   margin-bottom: 4px;
@@ -1061,7 +1066,7 @@ const handleImageError = async (message: any, event: Event) => {
 .file-name {
   font-weight: 500;
   font-size: 14px;
-  color: #ffffff;
+  color: #000000;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

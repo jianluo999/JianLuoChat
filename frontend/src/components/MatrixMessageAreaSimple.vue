@@ -374,13 +374,13 @@ onMounted(() => {
 
 .sender-name {
   font-weight: 500;
-  color: #333;
+  color: #000000;
   font-size: 14px;
 }
 
 .message-time {
   font-size: 12px;
-  color: #999;
+  color: #000000;
 }
 
 .message-body {
@@ -399,6 +399,7 @@ onMounted(() => {
 .text-message {
   line-height: 1.4;
   white-space: pre-wrap;
+  color: #000000;
 }
 
 .file-message {

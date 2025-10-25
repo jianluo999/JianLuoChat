@@ -449,6 +449,7 @@ const previewImage = (message: MatrixMessage) => {
   padding: 8px 12px;
   border-radius: 18px;
   position: relative;
+  color: #000000;
 }
 
 .own-message .message-content {

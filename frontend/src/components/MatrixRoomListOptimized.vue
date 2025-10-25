@@ -958,7 +958,7 @@ onUnmounted(() => {
 }
 
 .message-content {
-  color: #90a4ae;
+  color: #000000;
 }
 
 .room-topic {

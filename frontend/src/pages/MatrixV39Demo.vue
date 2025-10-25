@@ -657,6 +657,7 @@ onMounted(() => {
 
 .message-content {
   margin-bottom: 12px;
+  color: #000000;
 }
 
 .message-reactions {

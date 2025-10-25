@@ -925,7 +925,7 @@ onMounted(async () => {
 .matrix-client {
   height: 100vh;
   background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
-  color: #e0e6ed;
+  color: #000000;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
@@ -940,7 +940,7 @@ onMounted(async () => {
 
 .loading-container {
   text-align: center;
-  color: #e0e6ed;
+  color: #000000;
 }
 
 .loading-spinner {

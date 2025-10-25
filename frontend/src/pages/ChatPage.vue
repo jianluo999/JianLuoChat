@@ -167,6 +167,7 @@ onMounted(() => {
   max-width: 70%;
   word-wrap: break-word;
   box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  color: #000000;
 }
 
 .message.own .message-content {

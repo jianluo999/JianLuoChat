@@ -913,7 +913,8 @@ export const useMatrixStore = defineStore('matrix', () => {
       ;(client as any).lazyLoadMembers = true
       ;(client as any).relationsLimit = 5
       ;(client as any).timelineLimit = 50
-      ;(client as any).encryptionEnabled = false // 禁用加密以提高性能
+      // 启用加密支持
+      ;(client as any).encryptionEnabled = true
 
       console.log('✅ Matrix客户端创建成功')
 
@@ -1103,6 +1104,19 @@ export const useMatrixStore = defineStore('matrix', () => {
 
       // 设置客户端实例
       matrixClient.value = client
+
+      // 初始化加密功能
+      console.log('🔐 初始化加密功能...')
+      try {
+        const encryptionInitialized = await initializeEncryption(client)
+        if (encryptionInitialized) {
+          console.log('✅ 加密功能初始化成功')
+        } else {
+          console.log('⚠️ 加密功能初始化失败，将以非加密模式运行')
+        }
+      } catch (encryptionError) {
+        console.warn('⚠️ 加密初始化出错:', encryptionError)
+      }
 
       // 启动客户端
       console.log('🚀 启动Matrix客户端...')
@@ -2695,10 +2709,36 @@ export const useMatrixStore = defineStore('matrix', () => {
 
         if (isEncrypted) {
           console.log('🔐 检测到加密房间，检查加密支持...')
-          const crypto = matrixClient.value.getCrypto()
+          let crypto = matrixClient.value.getCrypto()
+          
           if (!crypto) {
-            console.warn('⚠️ 房间需要加密但客户端不支持加密')
-            throw new Error('🔐 此房间启用了端到端加密，当前版本暂不支持。\n\n💡 建议：\n• 选择非加密房间进行聊天\n• 或在Element等客户端中关闭房间加密\n• 加密功能正在开发中，敬请期待！')
+            console.log('⚠️ 加密API不可用，尝试初始化加密...')
+            
+            // 尝试初始化加密
+            try {
+              if (typeof matrixClient.value.initRustCrypto === 'function') {
+                console.log('🚀 初始化Rust加密引擎...')
+                await matrixClient.value.initRustCrypto({
+                  useIndexedDB: true,
+                  storagePrefix: 'jianluochat-crypto-emergency',
+                  pickleKey: undefined
+                })
+                crypto = matrixClient.value.getCrypto()
+                console.log('✅ Rust加密引擎初始化成功')
+              } else if (typeof matrixClient.value.initCrypto === 'function') {
+                console.log('🚀 初始化传统加密引擎...')
+                await matrixClient.value.initCrypto()
+                crypto = matrixClient.value.getCrypto()
+                console.log('✅ 传统加密引擎初始化成功')
+              }
+            } catch (cryptoError) {
+              console.warn('⚠️ 加密初始化失败:', cryptoError)
+            }
+          }
+          
+          if (!crypto) {
+            console.warn('⚠️ 房间需要加密但无法初始化加密功能')
+            throw new Error('🔐 此房间启用了端到端加密，但加密功能初始化失败。\n\n💡 解决方案：\n• 刷新页面重试\n• 清理浏览器缓存后重新登录\n• 或选择非加密房间进行聊天\n• 如果问题持续，请联系管理员')
           } else {
             console.log('✅ 客户端支持加密，准备发送加密消息')
 

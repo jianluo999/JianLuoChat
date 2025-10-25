@@ -604,6 +604,7 @@ watch(() => currentMessages.value.length, () => {
   padding: 8px 12px;
   border-radius: 8px;
   word-break: break-word;
+  color: #000000;
 }
 
 .own-message .message-content {

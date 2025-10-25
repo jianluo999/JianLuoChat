@@ -1087,7 +1087,7 @@ onMounted(async () => {
 }
 
 .message-content {
-  color: #999;
+  color: #000000;
 }
 
 .channel-meta, .room-meta {

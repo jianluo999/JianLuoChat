@@ -635,7 +635,7 @@ onUnmounted(() => {
 .edit-to {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #64b5f6;
+  color: #000000;
 }
 
 .cancel-reply,
@@ -657,7 +657,7 @@ onUnmounted(() => {
 .reply-text,
 .thread-text {
   font-size: 0.8rem;
-  color: #b0bec5;
+  color: #000000;
   opacity: 0.8;
   max-width: 300px;
   overflow: hidden;
@@ -785,7 +785,7 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 18px;
-  color: #e0e6ed;
+  color: #000000;
   font-size: 0.95rem;
   line-height: 1.4;
   resize: none;
@@ -1031,7 +1031,7 @@ onUnmounted(() => {
 
 .file-name {
   font-size: 0.8rem;
-  color: #e0e6ed;
+  color: #000000;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

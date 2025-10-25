@@ -590,16 +590,16 @@ onUnmounted(() => {
 
 .sender-name {
   font-weight: 600;
-  color: #64b5f6;
+  color: #000000;
 }
 
 .message-time {
-  color: #b0bec5;
+  color: #000000;
   font-size: 0.75rem;
 }
 
 .message-time-own {
-  color: rgba(15, 15, 35, 0.7);
+  color: #000000;
   font-size: 0.75rem;
   margin-top: 4px;
   text-align: right;
@@ -650,11 +650,11 @@ onUnmounted(() => {
 }
 
 .text-content {
-  color: #e0e6ed;
+  color: #000000;
 }
 
 .message-wrapper.own-message .text-content {
-  color: #0f0f23;
+  color: #000000;
 }
 
 .edited-indicator {
