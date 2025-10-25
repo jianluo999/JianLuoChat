@@ -2178,8 +2178,8 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
-  // Matrix消息管理
-  const fetchMatrixMessages = async (roomId: string, limit = 200, autoLoadMore = true) => {
+  // Matrix消息管理 - 优化版本
+  const fetchMatrixMessages = async (roomId: string, limit = 50, autoLoadMore = true) => {
     try {
       if (!matrixClient.value) {
         console.error('Matrix客户端未初始化')
@@ -3482,227 +3482,8 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
-  // 优化的fetchMatrixMessages函数
-  const fetchMatrixMessagesOptimized = async (roomId: string, limit = 200, autoLoadMore = true) => {
-    try {
-      if (!matrixClient.value) {
-        console.error('Matrix客户端未初始化')
-        return []
-      }
-
-      console.log(`🚀 优化版开始加载房间消息: ${roomId}`)
-
-      let roomMessages: MatrixMessage[] = []
-
-      // 特殊处理文件传输助手
-      if (roomId === FILE_TRANSFER_ROOM_ID) {
-        console.log('📁 加载文件传输助手消息')
-        if (messages.value.has(roomId)) {
-          return messages.value.get(roomId) || []
-        }
-
-        const welcomeMessage: MatrixMessage = {
-          id: 'welcome-msg-' + Date.now(),
-          sender: 'system',
-          content: '欢迎使用文件传输助手！\n\n您可以在这里：\n• 发送文件和图片\n• 保存重要消息\n• 进行文件管理\n\n开始发送您的第一个文件吧！',
-          timestamp: Date.now(),
-          roomId: roomId,
-          type: 'm.room.message'
-        }
-
-        const welcomeMessages = [welcomeMessage]
-        messages.value.set(roomId, welcomeMessages)
-        return welcomeMessages
-      }
-
-      if (roomId === 'world') {
-        // 世界频道消息从后端API获取
-        try {
-          const response = await matrixAPI.getWorldChannelMessages()
-          if (response.data && Array.isArray(response.data)) {
-            roomMessages = response.data.map((msg: any) => ({
-              id: msg.id,
-              roomId: 'world',
-              content: msg.content,
-              sender: msg.sender,
-              senderName: msg.sender,
-              timestamp: msg.timestamp,
-              type: 'm.room.message',
-              eventId: msg.id,
-              encrypted: false,
-              status: 'sent' as const
-            }))
-          } else if (response.data && response.data.messages) {
-            roomMessages = response.data.messages.map((msg: any) => ({
-              id: msg.id,
-              roomId: 'world',
-              content: msg.content,
-              sender: msg.sender,
-              senderName: msg.sender,
-              timestamp: msg.timestamp,
-              type: 'm.room.message',
-              eventId: msg.id,
-              encrypted: false,
-              status: 'sent' as const
-            }))
-          }
-        } catch (error) {
-          console.error('Failed to fetch world channel messages:', error)
-          roomMessages = []
-        }
-      } else {
-        let room = matrixClient.value.getRoom(roomId)
-
-        // 如果房间不存在，可能是刚创建的房间，等待同步
-        if (!room) {
-          console.log(`❌ 房间 ${roomId} 暂时不存在，等待同步...`)
-          const syncState = matrixClient.value.getSyncState()
-          console.log(`📊 当前同步状态: ${syncState}`)
-
-          if (syncState === 'SYNCING' || syncState === 'PREPARED') {
-            console.log('⏳ 正在同步中，等待同步完成...')
-            await new Promise(resolve => {
-              const checkSync = () => {
-                const currentState = matrixClient.value.getSyncState()
-                if (currentState === 'SYNCING' || currentState === 'PREPARED') {
-                  setTimeout(checkSync, 500)
-                } else {
-                  resolve(true)
-                }
-              }
-              checkSync()
-              setTimeout(() => resolve(true), 10000)
-            })
-          }
-
-          // 再次尝试获取房间
-          room = matrixClient.value.getRoom(roomId)
-          if (!room) {
-            console.warn(`房间 ${roomId} 仍然不存在，尝试刷新房间列表`)
-            try {
-              await fetchMatrixRooms()
-              room = matrixClient.value.getRoom(roomId)
-            } catch (refreshError) {
-              console.error('刷新房间列表失败:', refreshError)
-            }
-          }
-
-          if (!room) {
-            console.warn(`❌ 房间 ${roomId} 最终未找到`)
-            return []
-          }
-        }
-
-        // 检查房间权限和状态
-        console.log(`🏠 房间信息:`, {
-          roomId,
-          name: room.name,
-          myMembership: room.getMyMembership(),
-          canSendMessage: room.maySendMessage(),
-          memberCount: room.getJoinedMemberCount()
-        })
-
-        // 获取房间的时间线事件
-        const timeline = room.getLiveTimeline()
-        let events = timeline.getEvents()
-
-        // 如果事件很少，尝试加载更多历史消息
-        if (events.length < 20) {
-          console.log(`📚 当前事件较少(${events.length}条)，启动智能加载...`)
-          try {
-            // 先尝试加载500条
-            await matrixClient.value.scrollback(room, 500)
-            events = timeline.getEvents()
-            console.log(`📚 加载历史消息后，共有 ${events.length} 条事件`)
-            
-            // 如果仍然很少，继续加载更多
-            if (events.length < 50) {
-              console.log(`📚 事件仍然较少(${events.length}条)，继续加载更多历史消息...`)
-              try {
-                await matrixClient.value.scrollback(room, 1000)
-                events = timeline.getEvents()
-                console.log(`📚 再次加载历史消息后，共有 ${events.length} 条事件`)
-              } catch (scrollError2) {
-                console.warn('第二次加载历史消息失败:', scrollError2)
-              }
-            }
-          } catch (scrollError) {
-            console.warn('加载历史消息失败:', scrollError)
-          }
-        }
-
-        if (events && events.length > 0) {
-          console.log(`📨 获取到 ${events.length} 条事件`)
-          const messageEvents = events.filter((event: any) => event.getType() === 'm.room.message')
-          console.log(`💬 消息事件数量: ${messageEvents.length}`)
-
-          roomMessages = messageEvents
-            .map((event: any) => {
-              const eventContent = event.getContent()
-              const content = eventContent?.body || eventContent?.formatted_body || ''
-
-              const message: MatrixMessage = {
-                id: event.getId(),
-                roomId,
-                content,
-                sender: event.getSender(),
-                senderName: event.getSender(),
-                timestamp: event.getTs(),
-                type: event.getType(),
-                eventId: event.getId(),
-                encrypted: !!eventContent?.algorithm,
-                status: 'sent' as const
-              }
-
-              // 处理文件消息
-              if (eventContent?.msgtype === 'm.image' || eventContent?.msgtype === 'm.file') {
-                const isImage = eventContent.msgtype === 'm.image'
-                const fileUrl = eventContent.url ? matrixClient.value?.mxcUrlToHttp(eventContent.url) : null
-
-                if (fileUrl) {
-                  message.fileInfo = {
-                    name: eventContent.filename || eventContent.body || 'Unknown file',
-                    size: eventContent.info?.size || 0,
-                    type: eventContent.info?.mimetype || 'application/octet-stream',
-                    url: fileUrl,
-                    isImage
-                  }
-
-                  message.content = `${isImage ? '🖼️' : '📎'} ${message.fileInfo.name}`
-                  if (message.fileInfo.size > 0) {
-                    message.content += ` (${formatFileSize(message.fileInfo.size)})`
-                  }
-                }
-              }
-
-              return message
-            })
-            .slice(-limit)
-        }
-      }
-
-      messages.value.set(roomId, roomMessages)
-      console.log(`✅ 房间 ${roomId} 消息加载完成，共 ${roomMessages.length} 条`)
-
-      // 如果启用了自动加载更多，且消息数量较少，启动智能自动加载
-      if (autoLoadMore && roomMessages.length < 100) {
-        console.log(`🔄 检测到消息数量较少(${roomMessages.length}条)，启动智能自动加载...`)
-        try {
-          await smartAutoLoadHistory(roomId)
-          const updatedMessages = messages.value.get(roomId) || []
-          console.log(`✅ 智能自动加载后，房间 ${roomId} 共有 ${updatedMessages.length} 条消息`)
-        } catch (error) {
-          console.warn('⚠️ 智能自动加载失败:', error)
-        }
-      }
-
-      return roomMessages
-    } catch (err: any) {
-      error.value = 'Failed to fetch Matrix messages'
-      console.error('Error fetching Matrix messages:', err)
-      messages.value.set(roomId, [])
-      return []
-    }
+  // 优化的fetchMatrixMessages函数（已整合到主函数中）
+  const fetchMatrixMessagesOptimized = fetchMatrixMessages
   }
 
   return {
@@ -3750,7 +3531,6 @@ export const useMatrixStore = defineStore('matrix', () => {
     joinRoomAndSync,
     createMatrixRoom,
     fetchMatrixMessages,
-    fetchMatrixMessagesOptimized, // 新增优化版函数
     sendMatrixMessage,
     uploadFileToMatrix,
     sendFileMessage,
