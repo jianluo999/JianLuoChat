@@ -16,7 +16,7 @@ const router = createRouter({
     {
       path: '/chat',
       name: 'chat',
-      component: () => import('@/views/MatrixChatView.vue')
+      component: () => import('@/components/WeChatStyleLayout.vue')
     },
     {
       path: '/wechat-layout',

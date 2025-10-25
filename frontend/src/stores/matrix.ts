@@ -713,7 +713,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     return await initializeMatrix()
   }
 
-  // 初始化Matrix状态（从localStorage恢复登录信息和房间列表）
+  // 优化的Matrix初始化函数 - 专注于性能和稳定性
   const initializeMatrix = async () => {
     // 防止重复初始化
     if (clientInitializing.value) {
@@ -722,96 +722,90 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
 
     try {
-      // 首先加载房间列表和消息（即使未登录也可以显示之前的数据）
-      loadRoomsFromStorage()
-      loadMessagesFromStorage()
+      const startTime = Date.now()
+      console.log('🚀 开始Matrix初始化...')
 
-      // 尝试两种可能的localStorage key（兼容性处理）
-      let savedLoginInfo = localStorage.getItem('matrix-login-info') // 新格式（连字符）
-      if (!savedLoginInfo) {
-        savedLoginInfo = localStorage.getItem('matrix_login_info') // 旧格式（下划线）
-      }
+      // 1. 立即加载本地数据（异步，不阻塞后续操作）
+      Promise.all([
+        loadRoomsFromStorage(),
+        loadMessagesFromStorage()
+      ]).catch(err => console.warn('加载本地数据失败:', err))
 
-      // 检查是否有访问令牌但没有完整登录信息的情况
+      // 2. 检查存储状态（快速检查，避免复杂逻辑）
+      let savedLoginInfo = localStorage.getItem('matrix-login-info') ||
+                          localStorage.getItem('matrix_login_info')
       const accessToken = localStorage.getItem('matrix_access_token')
 
-      console.log('🔍 存储状态检查:', {
+      console.log('🔍 快速存储检查:', {
         hasLoginInfo: !!savedLoginInfo,
         hasAccessToken: !!accessToken,
-        loginInfoLength: savedLoginInfo?.length || 0,
-        tokenLength: accessToken?.length || 0
+        loginInfoLength: savedLoginInfo?.length || 0
       })
 
       if (savedLoginInfo) {
-        const loginData = JSON.parse(savedLoginInfo)
+        try {
+          const loginData = JSON.parse(savedLoginInfo)
+          
+          // 快速验证登录数据有效性（只检查必要字段）
+          if (loginData.userId && loginData.accessToken && loginData.homeserver) {
+            console.log('✅ 找到有效的登录信息，开始恢复登录...')
 
-        // 检查登录信息是否过期（24小时）
-        const loginAge = loginData.loginTime ? (Date.now() - loginData.loginTime) : 0
-        const maxAge = 24 * 60 * 60 * 1000 // 24小时
+            // 恢复登录状态（异步，不等待）
+            setLoginInfo(loginData).catch(err => {
+              console.warn('恢复登录状态失败:', err)
+            })
 
-        // 如果没有loginTime字段，认为是有效的（向后兼容）
-        if (!loginData.loginTime || loginAge < maxAge) {
-          console.log('Restoring Matrix login from localStorage:', loginData)
+            // 3. 异步创建客户端（不阻塞初始化完成）
+            const clientPromise = createMatrixClient(
+              loginData.userId,
+              loginData.accessToken,
+              loginData.homeserver
+            ).catch(clientError => {
+              console.warn('创建Matrix客户端失败:', clientError)
+              return null
+            })
 
-          // 恢复登录状态
-          await setLoginInfo(loginData)
+            // 4. 异步刷新房间列表
+            const roomsPromise = clientPromise.then(client => {
+              if (client) {
+                return fetchMatrixRooms().catch(roomsError => {
+                  console.warn('刷新房间列表失败:', roomsError)
+                })
+              }
+            })
 
-          // 尝试重新创建Matrix客户端
-          try {
-            await createMatrixClient(loginData.userId, loginData.accessToken, loginData.homeserver)
+            // 等待客户端创建完成（但不等待房间刷新）
+            await clientPromise
 
-            // 登录成功后，刷新房间列表
-            try {
-              await fetchMatrixRooms()
-            } catch (error) {
-              console.warn('Failed to refresh rooms after login restore:', error)
-            }
-
-            console.log('Matrix login restored successfully')
+            const duration = Date.now() - startTime
+            console.log(`🎉 Matrix初始化完成（${duration}ms），客户端创建成功`)
             return true
-          } catch (clientError) {
-            console.error('Failed to create Matrix client during restore:', clientError)
-            // 不清除登录信息，只是客户端创建失败
-            // 用户可以稍后重试或手动重新登录
-            console.warn('Matrix client creation failed, but login info preserved for retry')
-            return false
+
+          } else {
+            console.warn('⚠️ 登录信息不完整，清理无效数据')
+            localStorage.removeItem('matrix-login-info')
+            localStorage.removeItem('matrix_login_info')
           }
-        } else {
-          console.log('Saved Matrix login expired, clearing localStorage')
+        } catch (parseError) {
+          console.warn('解析登录信息失败:', parseError)
           localStorage.removeItem('matrix-login-info')
-          localStorage.removeItem('matrix_login_info') // 清理两种格式
+          localStorage.removeItem('matrix_login_info')
         }
       } else if (accessToken) {
-        // 有访问令牌但没有完整登录信息的情况
-        console.warn('⚠️ 检测到不一致的存储状态：有访问令牌但缺少登录信息')
-        console.log('🧹 清理不一致的存储状态...')
-
-        // 清理不一致的状态
+        console.warn('⚠️ 清理不一致的存储状态')
         localStorage.removeItem('matrix_access_token')
         localStorage.removeItem('matrix-login-info')
         localStorage.removeItem('matrix_login_info')
+      }
 
-        console.log('✅ 已清理不一致的存储状态，请重新登录')
-        return false
-      } else {
-        console.log('💡 没有找到Matrix登录信息，需要重新登录')
-        return false
-      }
+      console.log('💡 没有找到有效登录信息')
+      return false
+
     } catch (error) {
-      console.error('Failed to restore Matrix login:', error)
-      // 只有在严重错误时才清除登录信息
-      // 比如JSON解析错误等，而不是网络或客户端创建错误
-      if (error instanceof SyntaxError) {
-        console.warn('Login data corrupted, clearing localStorage')
-        localStorage.removeItem('matrix-login-info')
-        localStorage.removeItem('matrix_login_info')
-      } else {
-        console.warn('Temporary error during login restore, keeping login info for retry')
-      }
-      // 确保清理失败的状态
+      console.error('Matrix初始化失败:', error)
       await cleanupMatrixClient()
+      return false
     }
-    return false
   }
 
   // 登出函数
@@ -902,7 +896,7 @@ export const useMatrixStore = defineStore('matrix', () => {
         console.log('🆔 使用已保存的设备ID:', deviceId)
       }
 
-      // 创建简单的客户端配置
+      // 创建优化的客户端配置 - 极简配置以提高性能
       const client = createClient({
         baseUrl: `https://${homeserver}`,
         accessToken: accessToken,
@@ -911,6 +905,15 @@ export const useMatrixStore = defineStore('matrix', () => {
         timelineSupport: true,
         useAuthorizationHeader: true
       })
+      
+      // 设置性能优化配置
+      ;(client as any).initialSyncLimit = 30 // 极简初始同步限制
+      ;(client as any).pollTimeout = 20000 // 减少轮询超时时间
+      ;(client as any).pollSinceTimeout = 20000
+      ;(client as any).lazyLoadMembers = true
+      ;(client as any).relationsLimit = 5
+      ;(client as any).timelineLimit = 50
+      ;(client as any).encryptionEnabled = false // 禁用加密以提高性能
 
       console.log('✅ Matrix客户端创建成功')
 
@@ -1105,9 +1108,14 @@ export const useMatrixStore = defineStore('matrix', () => {
       console.log('🚀 启动Matrix客户端...')
       try {
         await client.startClient({
-          initialSyncLimit: 2000, // 增加到2000条历史消息
-          lazyLoadMembers: true
+          initialSyncLimit: 30, // 极简初始同步限制以提高性能
+          lazyLoadMembers: true,
+          pollTimeout: 20000
         })
+        
+        // 设置客户端配置以提高性能
+        ;(client as any).pollSinceTimeout = 20000
+        ;(client as any).syncCheckTimeout = 500
         console.log('✅ Matrix客户端启动命令已发送')
 
         // 立即检查同步状态

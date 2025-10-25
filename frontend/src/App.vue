@@ -52,8 +52,9 @@ onMounted(() => {
   // 初始化认证状态
   authStore.initializeAuth()
 
-  // 如果在Matrix路由，初始化Matrix连接
-  if (route.path === '/matrix') {
+  // 如果在聊天相关路由，初始化Matrix连接
+  if (route.path === '/chat' || route.path === '/wechat-layout') {
+    console.log('Initializing Matrix for chat route:', route.path)
     matrixStore.initializeMatrix().catch(error => {
       console.error('Failed to initialize Matrix:', error)
     })

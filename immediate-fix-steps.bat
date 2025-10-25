@@ -1,50 +1,35 @@
 @echo off
-echo 🚀 JianluoChat 性能和网络问题修复
-echo.
-
-echo 1. 重新构建前端项目...
-cd frontend
-call npm run build-only
-if %errorlevel% neq 0 (
-    echo ❌ 前端构建失败！
-    pause
-    exit /b 1
-)
+echo 🚀 立即修复卡顿和界面问题...
 
 echo.
-echo 2. 同步到Android平台...
-call npx cap sync android
-if %errorlevel% neq 0 (
-    echo ❌ 同步失败！
-    pause
-    exit /b 1
-)
+echo 1. 清理浏览器缓存和存储...
+echo 请在浏览器中按 F12 打开开发者工具，然后：
+echo - 右键点击刷新按钮，选择"清空缓存并硬性重新加载"
+echo - 或者在 Application/Storage 标签中清理 Local Storage 和 IndexedDB
 
 echo.
-echo 3. 清理并重新构建APK...
-cd android
-call ./gradlew clean
-call ./gradlew assembleDebug
-if %errorlevel% neq 0 (
-    echo ❌ APK构建失败！
-    pause
-    exit /b 1
-)
+echo 2. 运行快速修复脚本...
+echo 在浏览器控制台中运行以下代码：
 
 echo.
-echo ✅ 修复完成！
+echo // 快速清理性能阻塞数据
+echo localStorage.clear();
 echo.
-echo 📱 新APK位置: frontend\android\app\build\outputs\apk\debug\app-debug.apk
+echo // 清理 IndexedDB
+echo const dbNames = ['matrix-js-sdk::matrix-sdk-crypto', 'matrix-js-sdk::crypto', 'jianluochat-matrix-v39-store'];
+echo dbNames.forEach(name => indexedDB.deleteDatabase(name));
 echo.
-echo 🔧 修复内容:
-echo - 禁用IPv6，强制使用IPv4
-echo - 启用硬件加速
-echo - 优化网络安全配置
-echo - 减少Matrix同步消息数量
+echo // 重新加载页面
+echo setTimeout(() => window.location.reload(), 1000);
+
 echo.
-echo 📊 预期改善:
-echo - 网络连接更稳定
-echo - FPS性能提升
-echo - 减少长任务阻塞
+echo 3. 如果问题仍然存在，请：
+echo - 重启浏览器
+echo - 清理浏览器所有数据
+echo - 重新登录
+
 echo.
+echo 4. 访问微信风格界面：
+echo 登录后访问：http://localhost:5173/wechat-layout
+
 pause

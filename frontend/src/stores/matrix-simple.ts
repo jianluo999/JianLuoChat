@@ -1,386 +1,382 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, shallowRef } from 'vue'
 
-// 简化的Matrix客户端存储 - 基于Element Web的最佳实践
+// 简化的类型定义
+interface SimpleMessage {
+  id: string
+  roomId: string
+  content: string
+  sender: string
+  senderName?: string
+  timestamp: number
+  type: string
+}
+
+interface SimpleRoom {
+  id: string
+  name: string
+  lastMessage?: string
+  unreadCount: number
+  lastEventTimestamp?: number
+}
+
+interface SimpleUser {
+  id: string
+  username: string
+  displayName?: string
+}
+
+// 简化的Matrix Store
 export const useMatrixSimpleStore = defineStore('matrix-simple', () => {
-  // 状态
-  const matrixClient = ref<any>(null)
-  const isInitializing = ref(false)
+  // 基础状态
+  const matrixClient = shallowRef<any>(null)
+  const currentUser = ref<SimpleUser | null>(null)
+  const rooms = ref<SimpleRoom[]>([])
+  const messages = ref(new Map<string, SimpleMessage[]>())
+  const currentRoomId = ref<string>('')
+  const loading = ref(false)
   const error = ref<string | null>(null)
-  const rooms = ref<any[]>([])
-  const currentRoomId = ref<string | null>(null)
 
   // 计算属性
-  const isConnected = computed(() => !!matrixClient.value)
-  const currentRoom = computed(() => {
-    return rooms.value.find(room => room.roomId === currentRoomId.value)
-  })
+  const isLoggedIn = computed(() => !!currentUser.value)
+  const currentRoom = computed(() => 
+    rooms.value.find(room => room.id === currentRoomId.value) || null
+  )
+  const currentMessages = computed(() => 
+    currentRoomId.value ? messages.value.get(currentRoomId.value) || [] : []
+  )
 
-  // 清理客户端
-  const cleanup = async () => {
-    if (matrixClient.value) {
-      try {
-        matrixClient.value.stopClient()
-        matrixClient.value = null
-      } catch (error) {
-        console.warn('清理客户端时出错:', error)
-      }
-    }
-    error.value = null
-    rooms.value = []
-    currentRoomId.value = null
-  }
-
-  // 创建Matrix客户端 - 按照Element Web的最佳实践
-  const createClient = async (userId: string, accessToken: string, homeserver: string) => {
-    if (isInitializing.value) {
-      console.log('⚠️ 客户端正在初始化中')
-      return false
-    }
-
+  // 初始化Matrix
+  const initializeMatrix = async (): Promise<boolean> => {
     try {
-      isInitializing.value = true
-      error.value = null
-
-      console.log(`🚀 创建Matrix客户端: ${userId} @ ${homeserver}`)
-
-      // 清理现有客户端
-      await cleanup()
-
-      // 动态导入matrix-js-sdk
-      const { createClient, MemoryStore, IndexedDBStore } = await import('matrix-js-sdk')
-
-      // 生成设备ID
-      const deviceIdKey = `jianluochat-device-${userId.split(':')[0].substring(1)}`
-      let deviceId = localStorage.getItem(deviceIdKey)
+      console.log('🚀 初始化简化Matrix客户端...')
       
-      if (!deviceId) {
-        const timestamp = Date.now()
-        const random = Math.random().toString(36).substring(2, 10)
-        deviceId = `JIANLUOCHAT_${timestamp}_${random}`
-        localStorage.setItem(deviceIdKey, deviceId)
-        console.log('🆔 生成设备ID:', deviceId)
+      const savedLoginInfo = localStorage.getItem('matrix-v39-login-info')
+      if (!savedLoginInfo) {
+        console.log('没有保存的登录信息')
+        return false
       }
 
-      // 设置存储选项（参考Element）
-      const storeOpts: any = {
-        useAuthorizationHeader: true,
-      }
+      const loginData = JSON.parse(savedLoginInfo)
+      console.log('恢复登录状态:', loginData.userId)
 
-      // 优先使用IndexedDB，回退到Memory
-      try {
-        if (window.indexedDB && localStorage) {
-          storeOpts.store = new IndexedDBStore({
-            indexedDB: window.indexedDB,
-            dbName: `jianluochat-${userId.split(':')[0].substring(1)}`,
-            localStorage: localStorage,
-          })
-          console.log('📦 使用IndexedDB存储')
-        } else {
-          storeOpts.store = new MemoryStore({ localStorage })
-          console.log('📦 使用Memory存储')
-        }
-      } catch (storeError) {
-        console.warn('存储设置失败，使用默认:', storeError)
-        storeOpts.store = new MemoryStore({ localStorage })
-      }
-
-      // 创建客户端
-      const client = createClient({
-        baseUrl: `https://${homeserver}`,
-        accessToken: accessToken,
-        userId: userId,
-        deviceId: deviceId,
-        timelineSupport: true,
-        ...storeOpts
+      // 动态导入Matrix SDK
+      const sdk = await import('matrix-js-sdk')
+      
+      // 创建简化的客户端配置
+      const client = sdk.createClient({
+        baseUrl: loginData.homeserver,
+        accessToken: loginData.accessToken,
+        userId: loginData.userId,
+        deviceId: loginData.deviceId,
+        timelineSupport: false, // 禁用时间线支持以提高性能
+        useAuthorizationHeader: true
       })
 
-      // 初始化存储
-      console.log('📦 初始化存储...')
-      try {
-        await client.store.startup()
-        console.log('✅ 存储初始化成功')
-      } catch (storeError: any) {
-        console.warn('存储初始化失败，使用内存存储:', storeError.message)
-        client.store = new MemoryStore({ localStorage })
-        await client.store.startup()
-      }
-
-      // 设置事件监听器
-      client.on('sync', (state: string, prevState: string | null, data: any) => {
-        console.log(`🔄 同步状态: ${prevState} -> ${state}`)
+      // 设置基本事件监听
+      client.on('sync', (state: string) => {
+        console.log('同步状态:', state)
         if (state === 'PREPARED' || state === 'SYNCING') {
-          console.log('✅ 同步就绪，加载房间...')
-          setTimeout(() => loadRooms(), 1000) // 延迟一秒确保数据就绪
-        } else if (state === 'ERROR') {
-          console.error('❌ 同步错误:', data)
-          error.value = '同步失败，请检查网络连接'
+          updateRoomsFromClient(client)
         }
       })
 
       client.on('Room.timeline', (event: any, room: any) => {
         if (event.getType() === 'm.room.message') {
-          console.log('💬 新消息:', event.getContent().body)
-          // 刷新房间列表以更新最后消息
-          loadRooms()
+          addMessageFromEvent(event, room)
         }
       })
-
-      client.on('error', (error: any) => {
-        console.error('❌ 客户端错误:', error)
-        if (error.message) {
-          error.value = `客户端错误: ${error.message}`
-        }
-      })
-
-      // 设置客户端
-      matrixClient.value = client
-      console.log('✅ Matrix客户端创建成功')
 
       // 启动客户端
-      console.log('🚀 启动客户端...')
       await client.startClient({
-        initialSyncLimit: 10,
+        initialSyncLimit: 20, // 限制初始同步
         lazyLoadMembers: true
       })
 
-      console.log('✅ 客户端启动成功')
-      return true
-
-    } catch (error: any) {
-      console.error('❌ 创建客户端失败:', error)
-      error.value = `创建客户端失败: ${error.message}`
-      return false
-    } finally {
-      isInitializing.value = false
-    }
-  }
-
-  // 加载房间列表
-  const loadRooms = () => {
-    if (!matrixClient.value) {
-      console.warn('⚠️ 客户端未初始化，无法加载房间')
-      return
-    }
-
-    try {
-      const clientRooms = matrixClient.value.getRooms()
-      console.log(`📊 获取到 ${clientRooms.length} 个房间`)
-
-      if (clientRooms.length === 0) {
-        console.log('📭 暂无房间数据')
-        rooms.value = []
-        return
+      matrixClient.value = client
+      currentUser.value = {
+        id: loginData.userId,
+        username: loginData.userId.split(':')[0].substring(1),
+        displayName: loginData.displayName || loginData.userId.split(':')[0].substring(1)
       }
 
-      rooms.value = clientRooms.map((room: any) => {
-        try {
-          return {
-            roomId: room.roomId,
-            name: room.name || room.roomId || '未命名房间',
-            topic: getTopicSafely(room),
-            memberCount: getMemberCountSafely(room),
-            unreadCount: getUnreadCountSafely(room),
-            lastMessage: getLastMessage(room)
-          }
-        } catch (roomError) {
-          console.warn('⚠️ 处理房间数据失败:', room.roomId, roomError)
-          return {
-            roomId: room.roomId,
-            name: room.roomId || '未命名房间',
-            topic: '',
-            memberCount: 0,
-            unreadCount: 0,
-            lastMessage: null
-          }
+      console.log('✅ 简化Matrix客户端初始化成功')
+      return true
+
+    } catch (error) {
+      console.error('❌ 初始化失败:', error)
+      return false
+    }
+  }
+
+  // 登录
+  const login = async (username: string, password: string, homeserver?: string) => {
+    try {
+      loading.value = true
+      error.value = null
+      
+      const serverUrl = homeserver || 'matrix.jianluochat.com'
+      console.log(`🔐 简化登录: ${username} @ ${serverUrl}`)
+
+      const sdk = await import('matrix-js-sdk')
+      const tempClient = sdk.createClient({
+        baseUrl: serverUrl.startsWith('http') ? serverUrl : `https://${serverUrl}`
+      })
+
+      const loginResponse = await tempClient.login('m.login.password', {
+        user: username,
+        password: password,
+        initial_device_display_name: 'JianLuo Chat Web Simple'
+      })
+
+      // 保存登录信息
+      const loginData = {
+        userId: loginResponse.user_id,
+        accessToken: loginResponse.access_token,
+        deviceId: loginResponse.device_id,
+        homeserver: serverUrl,
+        loginTime: Date.now(),
+        displayName: username
+      }
+      localStorage.setItem('matrix-v39-login-info', JSON.stringify(loginData))
+      localStorage.setItem('matrix_access_token', loginResponse.access_token)
+
+      // 初始化客户端
+      await initializeMatrix()
+
+      console.log('✅ 简化登录成功')
+      return { success: true, user: currentUser.value }
+
+    } catch (err: any) {
+      error.value = err.message || '登录失败'
+      console.error('❌ 登录失败:', err)
+      return { success: false, error: error.value }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 更新房间列表
+  const updateRoomsFromClient = (client: any) => {
+    try {
+      const clientRooms = client.getRooms()
+      const simpleRooms: SimpleRoom[] = []
+
+      clientRooms.forEach((room: any) => {
+        const simpleRoom: SimpleRoom = {
+          id: room.roomId,
+          name: room.name || room.roomId,
+          unreadCount: room.getUnreadNotificationCount() || 0,
+          lastEventTimestamp: room.getLastActiveTimestamp?.() || Date.now()
         }
-      }).filter(room => room !== null)
 
-      console.log(`✅ 房间列表更新完成，共 ${rooms.value.length} 个房间`)
+        // 获取最后一条消息
+        const timeline = room.getLiveTimeline()
+        const events = timeline.getEvents()
+        const lastMessageEvent = events.reverse().find((event: any) => 
+          event.getType() === 'm.room.message'
+        )
+        
+        if (lastMessageEvent) {
+          const content = lastMessageEvent.getContent()
+          simpleRoom.lastMessage = content.body || '新消息'
+        }
+
+        simpleRooms.push(simpleRoom)
+      })
+
+      // 按最后活动时间排序
+      simpleRooms.sort((a, b) => (b.lastEventTimestamp || 0) - (a.lastEventTimestamp || 0))
+      
+      rooms.value = simpleRooms
+      console.log(`✅ 更新房间列表: ${simpleRooms.length} 个房间`)
+
     } catch (error) {
-      console.error('❌ 加载房间失败:', error)
-      error.value = `加载房间失败: ${error}`
+      console.error('❌ 更新房间列表失败:', error)
     }
   }
 
-  // 安全获取房间主题
-  const getTopicSafely = (room: any) => {
+  // 从事件添加消息
+  const addMessageFromEvent = (event: any, room: any) => {
     try {
-      const topicEvent = room.currentState?.getStateEvents('m.room.topic', '')
-      return topicEvent?.getContent()?.topic || ''
+      const content = event.getContent()
+      const message: SimpleMessage = {
+        id: event.getId(),
+        roomId: room.roomId,
+        content: content.body || '',
+        sender: event.getSender(),
+        senderName: event.getSender()?.split(':')[0]?.substring(1) || '未知',
+        timestamp: event.getTs(),
+        type: event.getType()
+      }
+
+      const roomMessages = messages.value.get(room.roomId) || []
+      roomMessages.push(message)
+      
+      // 限制消息数量
+      if (roomMessages.length > 100) {
+        roomMessages.splice(0, roomMessages.length - 100)
+      }
+      
+      messages.value.set(room.roomId, roomMessages)
+
+      // 更新房间最后消息
+      const roomIndex = rooms.value.findIndex(r => r.id === room.roomId)
+      if (roomIndex >= 0) {
+        rooms.value[roomIndex].lastMessage = message.content
+        rooms.value[roomIndex].lastEventTimestamp = message.timestamp
+      }
+
     } catch (error) {
-      return ''
+      console.error('❌ 添加消息失败:', error)
     }
   }
 
-  // 安全获取成员数量
-  const getMemberCountSafely = (room: any) => {
+  // 获取房间消息
+  const fetchMessages = async (roomId: string) => {
     try {
-      return room.getJoinedMemberCount() || 0
-    } catch (error) {
-      return 0
-    }
-  }
+      if (!matrixClient.value) return []
 
-  // 安全获取未读数量
-  const getUnreadCountSafely = (room: any) => {
-    try {
-      return room.getUnreadNotificationCount() || 0
-    } catch (error) {
-      return 0
-    }
-  }
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) return []
 
-  // 获取房间最后一条消息
-  const getLastMessage = (room: any) => {
-    try {
       const timeline = room.getLiveTimeline()
       const events = timeline.getEvents()
       
-      for (let i = events.length - 1; i >= 0; i--) {
-        const event = events[i]
+      const roomMessages: SimpleMessage[] = []
+      events.forEach((event: any) => {
         if (event.getType() === 'm.room.message') {
-          return {
-            body: event.getContent().body || '',
+          const content = event.getContent()
+          roomMessages.push({
+            id: event.getId(),
+            roomId: roomId,
+            content: content.body || '',
             sender: event.getSender(),
-            timestamp: event.getTs()
-          }
+            senderName: event.getSender()?.split(':')[0]?.substring(1) || '未知',
+            timestamp: event.getTs(),
+            type: event.getType()
+          })
         }
-      }
-      return null
+      })
+
+      // 按时间排序并限制数量
+      roomMessages.sort((a, b) => a.timestamp - b.timestamp)
+      const limitedMessages = roomMessages.slice(-50) // 只保留最近50条
+
+      messages.value.set(roomId, limitedMessages)
+      return limitedMessages
+
     } catch (error) {
-      console.warn('获取最后消息失败:', error)
-      return null
+      console.error('❌ 获取消息失败:', error)
+      return []
     }
   }
 
   // 发送消息
-  const sendMessage = async (roomId: string, message: string) => {
-    if (!matrixClient.value) {
-      throw new Error('客户端未初始化')
-    }
-
+  const sendMessage = async (roomId: string, content: string) => {
     try {
-      const content = {
-        body: message,
-        msgtype: 'm.text'
+      if (!matrixClient.value) throw new Error('客户端未初始化')
+
+      const messageContent = {
+        msgtype: 'm.text',
+        body: content
       }
 
-      await matrixClient.value.sendEvent(roomId, 'm.room.message', content)
-      console.log('✅ 消息发送成功')
+      const response = await matrixClient.value.sendEvent(roomId, 'm.room.message', messageContent)
+      
+      // 添加到本地消息列表
+      const message: SimpleMessage = {
+        id: response.event_id,
+        roomId,
+        content,
+        sender: matrixClient.value.getUserId(),
+        senderName: currentUser.value?.displayName || '我',
+        timestamp: Date.now(),
+        type: 'm.room.message'
+      }
+
+      const roomMessages = messages.value.get(roomId) || []
+      roomMessages.push(message)
+      messages.value.set(roomId, roomMessages)
+
+      return message
+
     } catch (error) {
       console.error('❌ 发送消息失败:', error)
       throw error
     }
   }
 
-  // 选择房间
-  const selectRoom = (roomId: string) => {
-    currentRoomId.value = roomId
-    console.log('📍 选择房间:', roomId)
-  }
-
-  // 清理所有存储数据
-  const clearAllStorage = () => {
-    console.log('🧹 清理所有Matrix相关存储数据...')
-
-    // 清理localStorage中的Matrix相关数据
-    const keysToRemove = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (key && (
-        key.includes('matrix') ||
-        key.includes('jianluochat') ||
-        key.includes('Matrix') ||
-        key.startsWith('mx_')
-      )) {
-        keysToRemove.push(key)
-      }
-    }
-
-    keysToRemove.forEach(key => {
-      localStorage.removeItem(key)
-      console.log(`🗑️ 已清理: ${key}`)
-    })
-
-    // 清理IndexedDB（如果可能）
-    if (window.indexedDB) {
-      try {
-        // 尝试删除可能的数据库
-        const dbNames = ['jianluochat-sync', 'jianluochat-crypto', 'matrix-js-sdk:crypto']
-        dbNames.forEach(dbName => {
-          const deleteReq = window.indexedDB.deleteDatabase(dbName)
-          deleteReq.onsuccess = () => console.log(`🗑️ 已清理数据库: ${dbName}`)
-          deleteReq.onerror = () => console.log(`⚠️ 清理数据库失败: ${dbName}`)
-        })
-      } catch (error) {
-        console.warn('清理IndexedDB时出错:', error)
-      }
-    }
-
-    console.log('✅ 存储清理完成')
-  }
-
-  // 重试初始化
-  const retryInitialization = async () => {
-    console.log('🔄 开始重试初始化...')
-
-    // 首先检查存储状态
-    const loginInfo = localStorage.getItem('matrix-login-info')
-    const accessToken = localStorage.getItem('matrix_access_token')
-
-    console.log('📋 存储状态检查:', {
-      hasLoginInfo: !!loginInfo,
-      hasAccessToken: !!accessToken
-    })
-
-    // 如果状态不一致，清理并要求重新登录
-    if (accessToken && !loginInfo) {
-      console.warn('⚠️ 检测到存储状态不一致，建议清理后重新登录')
-      error.value = '存储状态不一致，请清理后重新登录'
-      return false
-    }
-
-    if (!loginInfo) {
-      error.value = '没有找到登录信息，请重新登录'
-      return false
-    }
-
+  // 发送文件
+  const sendFileMessage = async (roomId: string, file: File) => {
     try {
-      const info = JSON.parse(loginInfo)
-      console.log('📋 尝试使用登录信息:', {
-        userId: info.userId,
-        homeserver: info.homeserver,
-        hasAccessToken: !!info.accessToken
-      })
+      if (!matrixClient.value) throw new Error('客户端未初始化')
 
-      return await createClient(info.userId, info.accessToken, info.homeserver)
-    } catch (error: any) {
-      console.error('重试初始化失败:', error)
-      error.value = `重试失败: ${error.message}`
-      return false
+      // 上传文件
+      const uploadResponse = await matrixClient.value.uploadContent(file)
+
+      // 发送文件消息
+      const messageContent = {
+        msgtype: 'm.file',
+        body: file.name,
+        filename: file.name,
+        info: {
+          size: file.size,
+          mimetype: file.type
+        },
+        url: uploadResponse.content_uri
+      }
+
+      const response = await matrixClient.value.sendEvent(roomId, 'm.room.message', messageContent)
+      return response
+
+    } catch (error) {
+      console.error('❌ 发送文件失败:', error)
+      throw error
     }
+  }
+
+  // 设置当前房间
+  const setCurrentRoom = (roomId: string | null) => {
+    currentRoomId.value = roomId || ''
+    if (roomId && !messages.value.has(roomId)) {
+      fetchMessages(roomId)
+    }
+  }
+
+  // 登出
+  const logout = () => {
+    matrixClient.value = null
+    currentUser.value = null
+    rooms.value = []
+    messages.value.clear()
+    currentRoomId.value = ''
+    localStorage.removeItem('matrix-v39-login-info')
+    localStorage.removeItem('matrix_access_token')
   }
 
   return {
     // 状态
     matrixClient,
-    isInitializing,
-    error,
+    currentUser,
     rooms,
+    messages,
     currentRoomId,
+    loading,
+    error,
 
     // 计算属性
-    isConnected,
+    isLoggedIn,
     currentRoom,
+    currentMessages,
 
     // 方法
-    createClient,
-    cleanup,
-    loadRooms,
+    initializeMatrix,
+    login,
+    fetchMessages,
     sendMessage,
-    selectRoom,
-    retryInitialization,
-    clearAllStorage
+    sendFileMessage,
+    setCurrentRoom,
+    logout
   }
 })
