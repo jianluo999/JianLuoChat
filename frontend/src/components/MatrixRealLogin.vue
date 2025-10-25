@@ -95,17 +95,16 @@
 
 <script>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { useMatrixStore } from '@/stores/matrix'
+import { useMatrixV39Store } from '@/stores/matrix-v39-clean'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import * as sdk from 'matrix-js-sdk'
 
 export default {
   name: 'MatrixRealLogin',
   emits: ['login-success'],
   setup(props, { emit }) {
     const { t } = useI18n()
-    const matrixStore = useMatrixStore()
+    const matrixStore = useMatrixV39Store()
     const router = useRouter()
     
     const username = ref('')
@@ -142,55 +141,21 @@ export default {
       error.value = ''
 
       try {
-        const baseUrl = `https://${homeserver.value}`
+        // 使用新的 matrix-v39-clean store 的 matrixLogin 方法
+        const result = await matrixStore.matrixLogin(username.value, password.value, homeserver.value)
         
-        // 创建Matrix客户端
-        const client = sdk.createClient({
-          baseUrl: baseUrl,
-          userId: fullMatrixId.value
-        })
+        if (result.success) {
+          emit('login-success', {
+            userId: result.user?.id,
+            homeserver: homeserver.value
+          })
 
-        // 尝试登录
-        const loginResponse = await client.login('m.login.password', {
-          user: username.value,
-          password: password.value,
-          initial_device_display_name: 'JianLuoChat Matrix Client'
-        })
-
-        // 立即保存登录信息到localStorage，确保路由守卫能检测到
-        localStorage.setItem('matrix_access_token', loginResponse.access_token)
-        localStorage.setItem('matrix_login_info', JSON.stringify({
-          userId: loginResponse.user_id,
-          accessToken: loginResponse.access_token,
-          deviceId: loginResponse.device_id,
-          homeserver: homeserver.value
-        }))
-
-        // 保存到store
-        await matrixStore.setClient(client)
-        await matrixStore.setLoginInfo({
-          userId: loginResponse.user_id,
-          accessToken: loginResponse.access_token,
-          deviceId: loginResponse.device_id,
-          homeserver: homeserver.value
-        })
-
-        emit('login-success', {
-          userId: loginResponse.user_id,
-          homeserver: homeserver.value
-        })
-
-        // 立即跳转到聊天页面
-        console.log('登录成功，立即跳转到聊天页面...')
-        router.push('/chat')
-
-        // 在后台异步启动客户端
-        console.log('在后台启动Matrix客户端...')
-        client.startClient().then(() => {
-          console.log('Matrix客户端已在后台启动完成')
-        }).catch((error) => {
-          console.error('后台启动Matrix客户端失败:', error)
-        })
+          // 立即跳转到聊天页面
+          console.log('登录成功，立即跳转到聊天页面...')
+          router.push('/chat')
+        } else {
+          error.value = result.error || '登录失败'
+        }
 
       } catch (err) {
         console.error('Matrix login failed:', err)

@@ -269,12 +269,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useMatrixStore } from '@/stores/matrix'
+import { useMatrixV39Store } from '@/stores/matrix-v39-clean'
 import MatrixRealLogin from './MatrixRealLogin.vue'
 import MatrixMessageAreaSimple from './MatrixMessageAreaSimple.vue'
 import PublicRoomsExplorer from './PublicRoomsExplorer.vue'
 
-const matrixStore = useMatrixStore()
+const matrixStore = useMatrixV39Store()
 
 // 状态管理
 const activeTab = ref('home')
@@ -311,7 +311,7 @@ const handleLoginSuccess = async (loginInfo: { userId: string; homeserver: strin
   try {
     // Matrix客户端已经在MatrixRealLogin组件中启动
     // 这里只需要等待同步完成并获取房间列表
-    await matrixStore.startSync()
+    await matrixStore.fetchMatrixRooms()
 
     // 默认选择第一个可用房间
     const rooms = matrixStore.rooms

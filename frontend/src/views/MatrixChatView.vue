@@ -595,7 +595,7 @@ const handleRealLoginSuccess = async (loginInfo: { userId: string; homeserver: s
   try {
     // Matrix客户端已经在MatrixRealLogin组件中启动
     // 这里只需要等待同步完成并获取房间列表
-    await matrixStore.startSync()
+    await matrixStore.fetchMatrixRooms()
 
     // 获取邀请数量
     await loadPendingInvitations()

@@ -116,7 +116,7 @@
           title="发送消息"
         >
           <svg viewBox="0 0 24 24">
-            <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z"/>
+            <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z"></path>
           </svg>
         </button>
       </div>
@@ -578,7 +578,7 @@ onUnmounted(() => {
 })
 </script>
 
-style scoped>
+<style scoped>
 .matrix-message-input-v39 {
   background: rgba(0, 0, 0, 0.3);
   border-top: 1px solid #3a4a5c;
