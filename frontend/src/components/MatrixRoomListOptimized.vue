@@ -221,7 +221,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { useMatrixStore } from '@/stores/matrix'
+import { useMatrixV39Store } from '@/stores/matrix-v39-clean'
 import VirtualRoomList from './VirtualRoomList.vue'
 
 interface Props {
@@ -240,7 +240,7 @@ const emit = defineEmits<{
   'create-space': []
 }>()
 
-const matrixStore = useMatrixStore()
+const matrixStore = useMatrixV39Store()
 
 // 引用
 const roomsSectionRef = ref<HTMLElement>()
@@ -258,6 +258,7 @@ const currentFPS = ref(60)
 const renderTime = ref(0)
 let frameCount = 0
 let lastTime = performance.now()
+let fpsInterval: number | null = null
 
 // 布局计算
 const roomListHeight = ref(400)
@@ -319,8 +320,6 @@ const publicRooms = computed(() => {
 })
 
 const filteredRooms = computed(() => {
-  const start = performance.now()
-  
   let rooms = []
   switch (activeFilter.value) {
     case 'unread':
@@ -347,7 +346,6 @@ const filteredRooms = computed(() => {
     )
   }
 
-  renderTime.value = Math.round(performance.now() - start)
   return rooms
 })
 
@@ -436,16 +434,33 @@ const toggleVirtualScroll = () => {
 
 // 性能监控
 const updateFPS = () => {
-  frameCount++
-  const now = performance.now()
-  
-  if (now - lastTime >= 1000) {
-    currentFPS.value = Math.round((frameCount * 1000) / (now - lastTime))
-    frameCount = 0
-    lastTime = now
+  if (fpsInterval) {
+    clearInterval(fpsInterval)
   }
   
-  requestAnimationFrame(updateFPS)
+  fpsInterval = setInterval(() => {
+    const now = performance.now()
+    const fps = Math.round((frameCount * 1000) / (now - lastTime))
+    currentFPS.value = fps
+    frameCount = 0
+    lastTime = now
+  }, 1000) // 每秒更新一次FPS
+}
+
+// 帧计数器
+const frameCounter = () => {
+  frameCount++
+}
+
+// 渲染时间监控
+const measureRenderTime = () => {
+  const start = performance.now()
+  // 触发一次强制重绘来测量渲染时间
+  if (roomsSectionRef.value) {
+    roomsSectionRef.value.offsetHeight // 强制重绘
+  }
+  const end = performance.now()
+  renderTime.value = Math.round(end - start)
 }
 
 // 计算房间列表高度
@@ -473,7 +488,7 @@ watch(() => filteredRooms.value.length, (newCount) => {
 onMounted(async () => {
   // 加载房间列表
   if (matrixStore.isLoggedIn) {
-    await matrixStore.fetchRooms()
+    await matrixStore.fetchMatrixRooms()
   }
   
   // 计算布局
@@ -481,11 +496,21 @@ onMounted(async () => {
   window.addEventListener('resize', handleResize)
   
   // 启动性能监控
-  updateFPS()
-  
-  // 开发模式下显示性能信息
   if (import.meta.env.DEV) {
     showPerformanceInfo.value = true
+    updateFPS()
+    
+    // 定期测量渲染时间
+    const renderTimer = setInterval(() => {
+      measureRenderTime()
+    }, 5000) // 每5秒测量一次渲染时间
+    
+    // 清理函数
+    return () => {
+      if (renderTimer) {
+        clearInterval(renderTimer)
+      }
+    }
   }
 })
 

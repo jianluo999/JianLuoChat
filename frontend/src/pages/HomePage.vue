@@ -1,13 +1,49 @@
 <template>
   <div class="home-page">
-    <h1>欢迎使用应用</h1>
+    <h1>欢迎使用 JianLuoChat</h1>
     <div class="navigation">
-      <router-link to="/chat" class="nav-link">💬 聊天</router-link>
-      <router-link to="/rooms" class="nav-link">🏠 房间列表</router-link>
+      <!-- 基础功能 -->
+      <router-link to="/login" class="nav-link">🔐 真实登录</router-link>
+      <router-link to="/chat" class="nav-link">💬 聊天室列表</router-link>
+      <router-link to="/chat-page" class="nav-link">📱 聊天页面</router-link>
+      
+      <!-- 消息相关功能 -->
       <router-link to="/message-features-test" class="nav-link">📝 消息功能测试</router-link>
+      <router-link to="/matrix-message-area" class="nav-link">💬 基础消息区域</router-link>
+      <router-link to="/matrix-message-area-enhanced" class="nav-link">⚡ 增强消息区域</router-link>
+      <router-link to="/matrix-message-area-simple" class="nav-link">📋 简化消息区域</router-link>
+      <router-link to="/matrix-message-input" class="nav-link">⌨️ 消息输入组件</router-link>
+      <router-link to="/matrix-message-input-v39" class="nav-link">🔄 V39消息输入</router-link>
+      <router-link to="/matrix-message-item" class="nav-link">📦 消息项组件</router-link>
+      
+      <!-- 房间管理功能 -->
+      <router-link to="/matrix-room-list" class="nav-link">🏠 房间列表</router-link>
+      <router-link to="/matrix-room-list-optimized" class="nav-link">🚀 优化房间列表</router-link>
+      <router-link to="/matrix-room-browser" class="nav-link">🌐 房间浏览器</router-link>
+      <router-link to="/matrix-room-manager" class="nav-link">🛠️ 房间管理器</router-link>
+      
+      <!-- 导航与用户信息 -->
+      <router-link to="/matrix-navigation" class="nav-link">🧭 导航组件</router-link>
+      <router-link to="/matrix-user-id" class="nav-link">👤 用户ID组件</router-link>
+      
+      <!-- 安全与加密功能 -->
+      <router-link to="/encryption-settings" class="nav-link">🔒 加密设置</router-link>
+      <router-link to="/encryption-test" class="nav-link">🧪 加密测试</router-link>
+      <router-link to="/crypto-debug" class="nav-link">🔍 加密调试</router-link>
+      <router-link to="/device-verification" class="nav-link">✅ 设备验证</router-link>
+      
+      <!-- 性能与安全测试 -->
       <router-link to="/performance" class="nav-link">⚡ 性能测试</router-link>
-      <router-link to="/security" class="nav-link">🔒 安全审计</router-link>
-      <router-link v-if="isDev" to="/debug/log-report" class="nav-link debug">🔧 日志调试</router-link>
+      <router-link to="/security" class="nav-link">🛡️ 安全审计</router-link>
+      
+      <!-- Matrix V39 功能 -->
+      <router-link to="/matrix-test" class="nav-link">🧪 Matrix测试</router-link>
+      <router-link to="/matrix-v39-demo" class="nav-link">🚀 V39演示</router-link>
+      <router-link to="/matrix-chat-v39" class="nav-link">💬 V39聊天</router-link>
+      
+      <!-- 调试与日志 -->
+      <router-link v-if="isDev" to="/log-report" class="nav-link debug">🔧 日志报告</router-link>
+      <router-link to="/matrix-chat-demo" class="nav-link debug">🎭 聊天演示</router-link>
     </div>
   </div>
 </template>

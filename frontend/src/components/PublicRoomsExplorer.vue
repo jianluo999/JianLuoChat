@@ -190,12 +190,12 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useMatrixStore } from '@/stores/matrix'
+import { useMatrixV39Store } from '@/stores/matrix-v39-clean'
 
 // 定义 emit 事件
 const emit = defineEmits(['room-joined'])
 
-const matrixStore = useMatrixStore()
+const matrixStore = useMatrixV39Store()
 
 // 响应式数据
 const publicRooms = ref([])
@@ -371,10 +371,10 @@ const joinRoom = async (room) => {
   try {
     console.log(`🚀 开始加入房间: ${room.name || room.canonical_alias} (${room.room_id})`)
     
-    // 使用新的加入房间并同步函数
-    const success = await matrixStore.joinRoomAndSync(room.room_id, room)
+    // 使用新的加入房间函数
+    const response = await matrixStore.joinRoom(room.room_id)
     
-    if (success) {
+    if (response) {
       console.log(`🎉 房间加入流程完成: ${room.name || room.canonical_alias}`)
       
       // 关闭详情模态框
@@ -417,7 +417,7 @@ const joinRoom = async (room) => {
             avatarUrl: room.avatar_url ? matrixStore.matrixClient.mxcUrlToHttp(room.avatar_url) : null,
             lastActivity: Date.now()
           }
-          matrixStore.addRoom(newRoom)
+          // Room will be automatically added to the store after joining
           
           // 关闭详情模态框
           if (selectedRoom.value && selectedRoom.value.room_id === room.room_id) {

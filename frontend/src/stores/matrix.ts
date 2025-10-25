@@ -1374,18 +1374,21 @@ export const useMatrixStore = defineStore('matrix', () => {
             }
           }
 
-          // 添加到消息列表
+          // 添加到消息列表 - 使用Set进行快速去重检查
           const roomMessages = messages.value.get(room.roomId) || []
-          const existingMessage = roomMessages.find(m => m.id === newMessage.id)
-          if (!existingMessage) {
+          const existingMessageIds = new Set(roomMessages.map(m => m.id))
+          
+          if (!existingMessageIds.has(newMessage.id)) {
             messages.value.set(room.roomId, [...roomMessages, newMessage])
             console.log('✅ 新消息已添加到本地列表')
-
+  
             // 更新房间最后消息
             const targetRoom = rooms.value.find(r => r.id === room.roomId)
             if (targetRoom) {
               targetRoom.lastMessage = newMessage
             }
+          } else {
+            console.log('🔄 消息已存在，跳过去重:', newMessage.id)
           }
         }
       })

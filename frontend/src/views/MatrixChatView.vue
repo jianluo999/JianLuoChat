@@ -2,11 +2,17 @@
   <div class="matrix-client">
     <!-- 真正的Matrix登录 -->
     <MatrixRealLogin
-      v-if="!matrixStore.isLoggedIn"
+      v-if="!matrixStore.isLoggedIn && !isInitializing"
       @login-success="handleRealLoginSuccess"
     />
 
-
+    <!-- 加载状态 -->
+    <div v-else-if="isInitializing" class="loading-screen">
+      <div class="loading-container">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">正在初始化 Matrix 客户端...</div>
+      </div>
+    </div>
 
     <!-- Matrix主界面 -->
     <div v-else-if="matrixStore.isLoggedIn" class="matrix-main-interface">
@@ -536,6 +542,7 @@ const selectedServer = ref(localStorage.getItem('matrix-selected-server') || 'ma
 const selectedSpace = ref('')
 const selectedRoom = ref('')
 const userStatus = ref<'online' | 'offline' | 'away' | 'busy'>('online')
+const isInitializing = ref(false)
 
 // 模态框状态
 const showCreateRoom = ref(false)
@@ -587,6 +594,9 @@ const hasJwtToken = computed(() => {
 // 真正的Matrix登录成功处理
 const handleRealLoginSuccess = async (loginInfo: { userId: string; homeserver: string }) => {
   console.log('Matrix login successful:', loginInfo)
+  
+  // 设置初始化状态
+  isInitializing.value = true
 
   // 更新选择的服务器
   selectedServer.value = loginInfo.homeserver
@@ -608,6 +618,9 @@ const handleRealLoginSuccess = async (loginInfo: { userId: string; homeserver: s
     }
   } catch (error) {
     console.error('Failed to initialize Matrix client:', error)
+  } finally {
+    // 完成初始化
+    isInitializing.value = false
   }
 }
 
@@ -867,31 +880,38 @@ onMounted(async () => {
     if (matrixStore.matrixClient && matrixStore.isConnected) {
       console.log('Matrix已经初始化，跳过重复初始化')
     } else {
+      // 设置初始化状态
+      isInitializing.value = true
+      
       // 尝试从localStorage恢复登录状态
       const restored = await matrixStore.initializeMatrix()
 
       if (restored) {
         console.log('Matrix login restored from localStorage')
+        
+        // 恢复服务器选择
+        const savedServer = localStorage.getItem('matrix-selected-server')
+        if (savedServer) {
+          selectedServer.value = savedServer
+        }
+
+        // 加载邀请和房间信息
+        await loadPendingInvitations()
+
+        // 选择默认房间
+        const rooms = matrixStore.rooms
+        if (rooms.length > 0) {
+          const worldChannel = rooms.find(room => room.name?.includes('world') || room.name?.includes('世界'))
+          selectedRoom.value = worldChannel?.id || rooms[0].id
+        }
       }
-    }
-
-    // 恢复服务器选择
-    const savedServer = localStorage.getItem('matrix-selected-server')
-    if (savedServer) {
-      selectedServer.value = savedServer
-    }
-
-    // 加载邀请和房间信息
-    await loadPendingInvitations()
-
-    // 选择默认房间
-    const rooms = matrixStore.rooms
-    if (rooms.length > 0) {
-      const worldChannel = rooms.find(room => room.name?.includes('world') || room.name?.includes('世界'))
-      selectedRoom.value = worldChannel?.id || rooms[0].id
+      
+      // 完成初始化
+      isInitializing.value = false
     }
   } catch (error) {
     console.error('Failed to restore Matrix login:', error)
+    isInitializing.value = false
   }
 
   // 如果已经登录（可能是刚刚恢复的），直接初始化
@@ -907,6 +927,41 @@ onMounted(async () => {
   background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
   color: #e0e6ed;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* 加载屏幕样式 */
+.loading-screen {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+}
+
+.loading-container {
+  text-align: center;
+  color: #e0e6ed;
+}
+
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(0, 255, 136, 0.2);
+  border-top: 4px solid #00ff88;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 1.2rem;
+  color: #64b5f6;
+  font-weight: 500;
 }
 
 .matrix-main-interface {

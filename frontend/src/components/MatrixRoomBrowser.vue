@@ -124,12 +124,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useMatrixStore } from '@/stores/matrix'
+import { useMatrixV39Store } from '@/stores/matrix-v39-clean'
 import { matrixAPI } from '@/services/api'
 
 const emit = defineEmits(['close', 'room-selected'])
 
-const matrixStore = useMatrixStore()
+const matrixStore = useMatrixV39Store()
 
 // 状态
 const loading = ref(false)
@@ -194,7 +194,7 @@ const searchRooms = async () => {
 }
 
 const loadRooms = async () => {
-  if (!matrixStore.matrixClient) {
+  if (!matrixStore.isLoggedIn || !matrixStore.matrixClient) {
     console.error('请先登录 Matrix 账户')
     return
   }
@@ -287,8 +287,7 @@ const joinRoom = async (room: any) => {
       lastActivity: new Date().toISOString()
     }
 
-    // 添加到Matrix store
-    matrixStore.addRoom(newRoom)
+    // 房间已经通过Matrix客户端加入，会自动同步到store
 
     console.log(`✅ 成功加入房间: ${room.name}`)
 

@@ -1,149 +1,53 @@
 <template>
   <div class="performance-test-page">
-    <div class="test-header">
-      <h1>Matrix 房间列表性能测试</h1>
-      <p>测试虚拟滚动优化效果</p>
-    </div>
-
-    <div class="test-controls">
-      <div class="control-group">
-        <label>房间数量:</label>
-        <select v-model="roomCount" @change="generateRooms">
-          <option value="10">10 个房间</option>
-          <option value="31">31 个房间 (当前)</option>
-          <option value="50">50 个房间</option>
-          <option value="100">100 个房间</option>
-          <option value="200">200 个房间</option>
-        </select>
-      </div>
-
-      <div class="control-group">
-        <label>渲染模式:</label>
-        <select v-model="renderMode">
-          <option value="traditional">传统渲染</option>
-          <option value="virtual">虚拟滚动</option>
-          <option value="auto">自动选择</option>
-        </select>
-      </div>
-
-      <div class="control-group">
-        <button @click="runPerformanceTest" :disabled="isRunningTest" class="test-button">
-          {{ isRunningTest ? '测试中...' : '运行性能测试' }}
-        </button>
+    <h1>性能测试页面</h1>
+    <div class="test-section">
+      <h2>测试项目</h2>
+      <div class="test-buttons">
+        <el-button @click="testWheelEvent">测试Wheel事件</el-button>
+        <el-button @click="testScrollPerformance">测试滚动性能</el-button>
+        <el-button @click="testFPS">测试FPS</el-button>
+        <el-button @click="clearLogs">清除日志</el-button>
       </div>
     </div>
 
-    <div class="test-results" v-if="testResults.length > 0">
-      <h2>测试结果</h2>
-      <div class="results-grid">
-        <div 
-          v-for="result in testResults" 
-          :key="result.testName"
-          class="result-card"
-          :class="{ 'best-performance': result.isBest }"
-        >
-          <h3>{{ result.testName }}</h3>
-          <div class="metrics">
-            <div class="metric">
-              <span class="metric-label">FPS:</span>
-              <span class="metric-value" :class="getFPSClass(result.metrics.fps)">
-                {{ result.metrics.fps }}
-              </span>
-            </div>
-            <div class="metric">
-              <span class="metric-label">渲染时间:</span>
-              <span class="metric-value">{{ result.metrics.renderTime }}ms</span>
-            </div>
-            <div class="metric">
-              <span class="metric-label">DOM 元素:</span>
-              <span class="metric-value">{{ result.metrics.domElements }}</span>
-            </div>
-            <div class="metric">
-              <span class="metric-label">内存使用:</span>
-              <span class="metric-value">{{ result.metrics.memoryUsage }}MB</span>
-            </div>
-          </div>
+    <div class="test-section">
+      <h2>Element Plus 组件测试</h2>
+      <div class="element-test">
+        <!-- 测试ElTable的wheel事件 -->
+        <el-table :data="tableData" style="width: 100%" height="200" border>
+          <el-table-column prop="name" label="姓名" width="180"></el-table-column>
+          <el-table-column prop="age" label="年龄" width="180"></el-table-column>
+          <el-table-column prop="address" label="地址"></el-table-column>
+        </el-table>
+      </div>
+    </div>
+
+    <div class="test-section">
+      <h2>性能监控</h2>
+      <div class="performance-metrics">
+        <div class="metric">
+          <span class="label">当前FPS:</span>
+          <span class="value" :class="fpsClass">{{ currentFPS }}</span>
+        </div>
+        <div class="metric">
+          <span class="label">Jank计数:</span>
+          <span class="value">{{ jankCount }}</span>
+        </div>
+        <div class="metric">
+          <span class="label">滚动事件:</span>
+          <span class="value">{{ scrollEventCount }}</span>
         </div>
       </div>
     </div>
 
-    <div class="live-demo">
-      <h2>实时演示</h2>
-      <div class="demo-controls">
-        <label class="demo-toggle">
-          <input 
-            type="checkbox" 
-            v-model="useVirtualScrollInDemo"
-            @change="updateDemoMode"
-          />
-          <span>启用虚拟滚动</span>
-        </label>
-        <div class="performance-metrics">
-          <span class="fps-display">FPS: {{ currentFPS }}</span>
-          <span class="render-time">渲染: {{ renderTime }}ms</span>
-        </div>
-      </div>
-
-      <div class="demo-container">
-        <!-- 虚拟滚动演示 -->
-        <VirtualRoomList
-          v-if="useVirtualScrollInDemo"
-          :rooms="testRooms"
-          :selected-room="selectedRoom"
-          :container-height="400"
-          :item-height="72"
-          :show-performance-metrics="true"
-          @room-selected="selectRoom"
-          class="demo-room-list"
-        />
-
-        <!-- 传统渲染演示 -->
-        <div 
-          v-else
-          class="traditional-room-list demo-room-list"
-          :style="{ height: '400px', overflowY: 'auto' }"
-        >
-          <div
-            v-for="room in testRooms"
-            :key="room.id"
-            class="room-item"
-            :class="{ active: room.id === selectedRoom }"
-            @click="selectRoom(room.id)"
-          >
-            <div class="room-avatar">
-              <div class="avatar-placeholder">
-                {{ getRoomInitials(room.name) }}
-              </div>
-            </div>
-            <div class="room-info">
-              <div class="room-name">{{ room.name }}</div>
-              <div class="room-preview" v-if="room.lastMessage">
-                {{ room.lastMessage.senderName }}: {{ room.lastMessage.content }}
-              </div>
-              <div class="room-topic" v-else-if="room.topic">
-                {{ room.topic }}
-              </div>
-            </div>
-            <div class="room-badges">
-              <div v-if="room.unreadCount > 0" class="unread-badge">
-                {{ room.unreadCount }}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="optimization-tips">
-      <h2>优化建议</h2>
-      <div class="tips-grid">
-        <div class="tip-card" v-for="tip in optimizationTips" :key="tip.title">
-          <div class="tip-icon">{{ tip.icon }}</div>
-          <h3>{{ tip.title }}</h3>
-          <p>{{ tip.description }}</p>
-          <div class="tip-impact" :class="tip.impact">
-            影响: {{ tip.impact }}
-          </div>
+    <div class="test-section">
+      <h2>事件日志</h2>
+      <div class="event-log" ref="eventLogRef">
+        <div v-for="(log, index) in eventLogs" :key="index" class="log-entry">
+          <span class="timestamp">{{ log.timestamp }}</span>
+          <span class="type">{{ log.type }}</span>
+          <span class="message">{{ log.message }}</span>
         </div>
       </div>
     </div>
@@ -151,164 +55,188 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
-import VirtualRoomList from '@/components/VirtualRoomList.vue'
-import { performanceTester, runQuickPerformanceTest } from '@/utils/performanceTest'
+import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { ElButton, ElTable, ElTableColumn } from 'element-plus'
+import { passiveEventManager } from '@/utils/passiveEventManager'
 
-// 状态管理
-const roomCount = ref(31)
-const renderMode = ref('auto')
-const isRunningTest = ref(false)
-const testResults = ref<any[]>([])
-const selectedRoom = ref('')
-
-// 演示相关
-const useVirtualScrollInDemo = ref(true)
-const testRooms = ref<any[]>([])
-const currentFPS = ref(60)
-const renderTime = ref(0)
-
-// 性能监控
-let frameCount = 0
-let lastTime = performance.now()
-
-// 优化建议
-const optimizationTips = [
-  {
-    icon: '🚀',
-    title: '虚拟滚动',
-    description: '只渲染可见区域的房间项，大幅减少 DOM 元素数量',
-    impact: 'high'
-  },
-  {
-    icon: '💾',
-    title: '数据懒加载',
-    description: '按需加载房间详细信息，减少初始内存占用',
-    impact: 'medium'
-  },
-  {
-    icon: '🔍',
-    title: '搜索防抖',
-    description: '延迟搜索执行，避免频繁的过滤操作',
-    impact: 'medium'
-  },
-  {
-    icon: '🖼️',
-    title: '图片懒加载',
-    description: '延迟加载房间头像，提升初始渲染速度',
-    impact: 'low'
-  },
-  {
-    icon: '⚡',
-    title: 'Web Workers',
-    description: '在后台线程处理数据，避免阻塞主线程',
-    impact: 'high'
-  },
-  {
-    icon: '📦',
-    title: '数据缓存',
-    description: '缓存房间数据，减少重复的网络请求',
-    impact: 'medium'
-  }
-]
+// 响应式数据
+const currentFPS = ref(0)
+const jankCount = ref(0)
+const scrollEventCount = ref(0)
+const eventLogs = ref<Array<{timestamp: string, type: string, message: string}>>([])
+const eventLogRef = ref<HTMLElement>()
 
 // 计算属性
-const bestResult = computed(() => {
-  if (testResults.value.length === 0) return null
-  return testResults.value.reduce((best, current) => 
-    current.metrics.fps > best.metrics.fps ? current : best
-  )
+const fpsClass = computed(() => {
+  return currentFPS.value >= 45 ? 'fps-good' : 'fps-poor'
 })
+const tableData = ref([
+  { name: '张三', age: 25, address: '北京市朝阳区' },
+  { name: '李四', age: 30, address: '上海市浦东新区' },
+  { name: '王五', age: 35, address: '广州市天河区' },
+  { name: '赵六', age: 28, address: '深圳市南山区' },
+  { name: '钱七', age: 32, address: '杭州市西湖区' },
+  { name: '孙八', age: 29, address: '成都市武侯区' },
+])
 
-// 方法
-const generateRooms = () => {
-  testRooms.value = performanceTester.generateTestRooms(parseInt(roomCount.value))
-}
-
-const runPerformanceTest = async () => {
-  isRunningTest.value = true
-  testResults.value = []
+// 添加日志
+const addLog = (type: string, message: string) => {
+  const timestamp = new Date().toLocaleTimeString()
+  eventLogs.value.unshift({ timestamp, type, message })
   
-  try {
-    const count = parseInt(roomCount.value)
-    
-    if (renderMode.value === 'traditional' || renderMode.value === 'auto') {
-      const traditionalResult = await performanceTester.testRenderPerformance(count, false)
-      testResults.value.push({
-        testName: `传统渲染 (${count} 个房间)`,
-        roomCount: count,
-        metrics: traditionalResult,
-        timestamp: Date.now(),
-        isBest: false
-      })
-    }
-    
-    if (renderMode.value === 'virtual' || renderMode.value === 'auto') {
-      const virtualResult = await performanceTester.testRenderPerformance(count, true)
-      testResults.value.push({
-        testName: `虚拟滚动 (${count} 个房间)`,
-        roomCount: count,
-        metrics: virtualResult,
-        timestamp: Date.now(),
-        isBest: false
-      })
-    }
-    
-    // 标记最佳性能结果
-    if (bestResult.value) {
-      const best = testResults.value.find(r => r.metrics.fps === bestResult.value.metrics.fps)
-      if (best) best.isBest = true
-    }
-    
-  } catch (error) {
-    console.error('性能测试失败:', error)
-  } finally {
-    isRunningTest.value = false
-  }
-}
-
-const selectRoom = (roomId: string) => {
-  selectedRoom.value = roomId
-}
-
-const updateDemoMode = () => {
-  console.log(`演示模式切换到: ${useVirtualScrollInDemo.value ? '虚拟滚动' : '传统渲染'}`)
-}
-
-const getRoomInitials = (name: string): string => {
-  return name.split(' ').map(word => word[0]).join('').toUpperCase().substring(0, 2)
-}
-
-const getFPSClass = (fps: number): string => {
-  if (fps >= 55) return 'fps-excellent'
-  if (fps >= 45) return 'fps-good'
-  if (fps >= 30) return 'fps-fair'
-  return 'fps-poor'
-}
-
-// FPS 监控
-const updateFPS = () => {
-  frameCount++
-  const now = performance.now()
-  
-  if (now - lastTime >= 1000) {
-    currentFPS.value = Math.round((frameCount * 1000) / (now - lastTime))
-    frameCount = 0
-    lastTime = now
+  // 限制日志数量
+  if (eventLogs.value.length > 50) {
+    eventLogs.value = eventLogs.value.slice(0, 50)
   }
   
-  requestAnimationFrame(updateFPS)
+  // 滚动到最新日志
+  nextTick(() => {
+    if (eventLogRef.value) {
+      eventLogRef.value.scrollTop = 0
+    }
+  })
+}
+
+// 测试wheel事件
+const testWheelEvent = () => {
+  addLog('测试', 'Wheel事件测试开始')
+  addLog('信息', '请尝试在表格上使用鼠标滚轮')
+}
+
+// 测试滚动性能
+const testScrollPerformance = () => {
+  addLog('测试', '滚动性能测试开始')
+  
+  // 创建一个可滚动的元素进行测试
+  const scrollContainer = document.createElement('div')
+  scrollContainer.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 300px;
+    height: 200px;
+    overflow: auto;
+    background: white;
+    border: 2px solid #409EFF;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+  `
+  
+  const content = document.createElement('div')
+  content.style.height = '1000px'
+  content.innerHTML = '<div style="padding: 20px;">滚动测试区域<br/>内容很长...</div>'.repeat(50)
+  scrollContainer.appendChild(content)
+  
+  document.body.appendChild(scrollContainer)
+  
+  let passive = true
+  const testHandler = (e: Event) => {
+    scrollEventCount.value++
+    addLog('滚动', `检测到滚动事件 (总数: ${scrollEventCount.value})`)
+    
+    // 检查事件是否被标记为被动
+    if (e.cancelable && typeof e.defaultPrevented === 'boolean') {
+      if (e.defaultPrevented) {
+        addLog('信息', '事件被正确阻止')
+      }
+    }
+  }
+  
+  // 测试非被动监听器
+  scrollContainer.addEventListener('wheel', testHandler, { passive: false })
+  addLog('测试', '已添加非被动wheel监听器（应该被自动转换）')
+  
+  // 3秒后移除
+  setTimeout(() => {
+    scrollContainer.removeEventListener('wheel', testHandler)
+    document.body.removeChild(scrollContainer)
+    addLog('测试', '测试完成，已清理')
+  }, 3000)
+}
+
+// 测试FPS
+const testFPS = () => {
+  addLog('测试', 'FPS测试开始')
+  
+  let frameCount = 0
+  let lastTime = performance.now()
+  let testDuration = 5000 // 5秒测试
+  
+  const measureFPS = () => {
+    const currentTime = performance.now()
+    frameCount++
+    
+    if (currentTime - lastTime >= 1000) {
+      const fps = Math.round((frameCount * 1000) / (currentTime - lastTime))
+      currentFPS.value = fps
+      frameCount = 0
+      lastTime = currentTime
+      
+      addLog('FPS', `当前FPS: ${fps}`)
+      
+      if (fps < 45) {
+        jankCount.value++
+        addLog('警告', `低FPS检测: ${fps} (Jank计数: ${jankCount.value})`)
+      }
+    }
+    
+    testDuration -= 16 // 约60fps的间隔
+    if (testDuration > 0) {
+      requestAnimationFrame(measureFPS)
+    } else {
+      addLog('测试', 'FPS测试完成')
+    }
+  }
+  
+  measureFPS()
+}
+
+// 清除日志
+const clearLogs = () => {
+  eventLogs.value = []
+  addLog('信息', '日志已清除')
+}
+
+// 监听被动事件管理器的性能报告
+const handlePerformanceError = (error: any) => {
+  addLog('性能', `${error.message} (阈值: ${error.threshold})`)
 }
 
 // 生命周期
 onMounted(() => {
-  generateRooms()
-  updateFPS()
-  performanceTester.startFPSMonitoring()
+  addLog('系统', '性能测试页面已加载')
+  addLog('系统', '被动事件管理器状态检查...')
+  
+  // 检查被动事件管理器是否正常工作
+  try {
+    const listeners = passiveEventManager.getListenersInfo()
+    addLog('系统', `被动事件管理器监听器数量: ${listeners.length}`)
+  } catch (error) {
+    addLog('错误', '无法获取被动事件管理器状态')
+  }
+  
+  // 开始FPS监控
+  let lastTime = performance.now()
+  let frameCount = 0
+  
+  const monitorFPS = () => {
+    frameCount++
+    const currentTime = performance.now()
+    
+    if (currentTime - lastTime >= 1000) {
+      currentFPS.value = Math.round((frameCount * 1000) / (currentTime - lastTime))
+      frameCount = 0
+      lastTime = currentTime
+    }
+    
+    requestAnimationFrame(monitorFPS)
+  }
+  
+  monitorFPS()
 })
 
 onUnmounted(() => {
-  // 清理资源
+  addLog('系统', '性能测试页面已卸载')
 })
 </script>
 
@@ -317,358 +245,106 @@ onUnmounted(() => {
   padding: 20px;
   max-width: 1200px;
   margin: 0 auto;
-  background: linear-gradient(180deg, rgba(26, 26, 46, 0.95) 0%, rgba(22, 33, 62, 0.95) 100%);
-  color: #e0e6ed;
-  min-height: 100vh;
 }
 
-.test-header {
-  text-align: center;
+.test-section {
   margin-bottom: 30px;
+  padding: 20px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  background: #fafafa;
 }
 
-.test-header h1 {
-  color: #64b5f6;
-  margin-bottom: 10px;
+.test-section h2 {
+  margin-top: 0;
+  color: #303133;
 }
 
-.test-header p {
-  color: #b0bec5;
-}
-
-.test-controls {
+.test-buttons {
   display: flex;
-  gap: 20px;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 30px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.control-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  align-items: center;
-}
-
-.control-group label {
-  font-size: 14px;
-  color: #b0bec5;
-  font-weight: 500;
-}
-
-.control-group select {
-  padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid #3a4a5c;
-  border-radius: 4px;
-  color: #e0e6ed;
-  font-size: 14px;
-}
-
-.test-button {
-  padding: 10px 20px;
-  background: linear-gradient(135deg, #64b5f6, #42a5f5);
-  border: none;
-  border-radius: 6px;
-  color: white;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.test-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(100, 181, 246, 0.3);
-}
-
-.test-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.test-results {
-  margin-bottom: 40px;
-}
-
-.test-results h2 {
-  color: #64b5f6;
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.results-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-}
-
-.result-card {
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid #3a4a5c;
-  border-radius: 8px;
-  padding: 20px;
-  transition: all 0.3s ease;
-}
-
-.result-card.best-performance {
-  border-color: #4caf50;
-  background: rgba(76, 175, 80, 0.1);
-}
-
-.result-card h3 {
-  color: #e0e6ed;
-  margin-bottom: 15px;
-  font-size: 16px;
-}
-
-.metrics {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.metric {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(58, 74, 92, 0.3);
-}
-
-.metric-label {
-  color: #b0bec5;
-  font-size: 13px;
-}
-
-.metric-value {
-  color: #e0e6ed;
-  font-weight: 600;
-  font-family: 'Courier New', monospace;
-}
-
-.fps-excellent { color: #4caf50; }
-.fps-good { color: #8bc34a; }
-.fps-fair { color: #ff9800; }
-.fps-poor { color: #f44336; }
-
-.live-demo {
-  margin-bottom: 40px;
-}
-
-.live-demo h2 {
-  color: #64b5f6;
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.demo-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  padding: 15px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 6px;
-}
-
-.demo-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  color: #b0bec5;
-}
-
-.demo-toggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: #64b5f6;
+.element-test {
+  margin-top: 15px;
 }
 
 .performance-metrics {
   display: flex;
   gap: 20px;
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
+  flex-wrap: wrap;
 }
 
-.fps-display {
-  color: #4caf50;
-}
-
-.render-time {
-  color: #64b5f6;
-}
-
-.demo-container {
-  border: 1px solid #3a4a5c;
-  border-radius: 8px;
-  overflow: hidden;
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.demo-room-list {
-  background: linear-gradient(180deg, rgba(26, 26, 46, 0.95) 0%, rgba(22, 33, 62, 0.95) 100%);
-}
-
-.traditional-room-list {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(100, 181, 246, 0.3) transparent;
-}
-
-.traditional-room-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.traditional-room-list::-webkit-scrollbar-thumb {
-  background: rgba(100, 181, 246, 0.3);
-  border-radius: 3px;
-}
-
-.room-item {
+.metric {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 12px 16px;
-  cursor: pointer;
-  border-bottom: 1px solid rgba(58, 74, 92, 0.3);
-  transition: background-color 0.2s ease;
-  min-height: 72px;
-}
-
-.room-item:hover {
-  background: rgba(100, 181, 246, 0.1);
-}
-
-.room-item.active {
-  background: rgba(100, 181, 246, 0.2);
-  border-left: 3px solid #64b5f6;
-}
-
-.room-avatar {
-  width: 40px;
-  height: 40px;
-  margin-right: 12px;
-  flex-shrink: 0;
-}
-
-.avatar-placeholder {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #64b5f6, #42a5f5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.room-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.room-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: #e0e6ed;
-  margin-bottom: 4px;
-}
-
-.room-preview, .room-topic {
-  font-size: 12px;
-  color: #b0bec5;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.room-badges {
-  flex-shrink: 0;
-}
-
-.unread-badge {
-  background: #4caf50;
-  color: white;
-  border-radius: 10px;
-  padding: 2px 6px;
-  font-size: 10px;
-  font-weight: 600;
-  min-width: 16px;
-  text-align: center;
-}
-
-.optimization-tips {
-  margin-bottom: 40px;
-}
-
-.optimization-tips h2 {
-  color: #64b5f6;
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.tips-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
-}
-
-.tip-card {
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid #3a4a5c;
-  border-radius: 8px;
-  padding: 20px;
-  text-align: center;
-  transition: all 0.3s ease;
-}
-
-.tip-card:hover {
-  transform: translateY(-2px);
-  border-color: #64b5f6;
-}
-
-.tip-icon {
-  font-size: 32px;
-  margin-bottom: 10px;
-}
-
-.tip-card h3 {
-  color: #e0e6ed;
-  margin-bottom: 10px;
-  font-size: 16px;
-}
-
-.tip-card p {
-  color: #b0bec5;
-  font-size: 14px;
-  line-height: 1.5;
-  margin-bottom: 10px;
-}
-
-.tip-impact {
-  padding: 4px 8px;
+  padding: 10px;
+  background: white;
   border-radius: 4px;
+  border: 1px solid #e4e7ed;
+}
+
+.label {
   font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
+  color: #909399;
+  margin-bottom: 5px;
 }
 
-.tip-impact.high {
-  background: rgba(76, 175, 80, 0.2);
-  color: #4caf50;
+.value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #303133;
 }
 
-.tip-impact.medium {
-  background: rgba(255, 152, 0, 0.2);
-  color: #ff9800;
+.fps-good {
+  color: #67c23a;
 }
 
-.tip-impact.low {
-  background: rgba(158, 158, 158, 0.2);
-  color: #9e9e9e;
+.fps-poor {
+  color: #f56c6c;
+}
+
+.event-log {
+  height: 300px;
+  overflow-y: auto;
+  background: #2c3e50;
+  color: #ecf0f1;
+  padding: 10px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.log-entry {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 5px;
+  padding: 2px 0;
+  border-bottom: 1px solid #34495e;
+}
+
+.timestamp {
+  color: #bdc3c7;
+  min-width: 80px;
+}
+
+.type {
+  color: #3498db;
+  min-width: 60px;
+  font-weight: bold;
+}
+
+.message {
+  flex: 1;
+}
+
+:deep(.el-table) {
+  background: white;
+}
+
+:deep(.el-table__body) {
+  font-size: 14px;
 }
 </style>

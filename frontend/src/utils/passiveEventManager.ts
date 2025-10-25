@@ -184,14 +184,74 @@ class PassiveEventManager {
   optimizeExistingListeners(): void {
     console.log('🔍 检测非被动事件监听器...')
     
-    // 这是一个概念性的实现，实际上很难检测到已存在的监听器
-    // 在实际应用中，我们应该在添加监听器时就使用被动模式
+    // 针对Element Plus等第三方组件库的wheel事件监听器
+    // 我们需要主动干预来添加被动模式
+    this.patchElementPlusWheelListeners()
     
     const problematicEvents = ['wheel', 'touchstart', 'touchmove', 'scroll']
     
     problematicEvents.forEach(eventType => {
       console.warn(`⚠️ 建议检查 ${eventType} 事件监听器是否使用了被动模式`)
     })
+  }
+
+  /**
+   * 修补Element Plus的wheel事件监听器
+   * Element Plus的ElTable和ElScrollbar组件使用了非被动的wheel监听器
+   */
+  private patchElementPlusWheelListeners(): void {
+    // 使用MutationObserver监控DOM变化，当Element Plus组件被添加时进行修补
+    if (typeof MutationObserver !== 'undefined') {
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              const element = node as Element
+              this.patchElementWheelListeners(element)
+              
+              // 递归检查子元素
+              const children = element.querySelectorAll('*')
+              children.forEach(child => this.patchElementWheelListeners(child))
+            }
+          })
+        })
+      })
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      })
+
+      // 立即检查现有的元素
+      this.patchElementWheelListeners(document.body)
+      const allElements = document.querySelectorAll('*')
+      allElements.forEach(element => this.patchElementWheelListeners(element))
+    }
+  }
+
+  /**
+   * 为单个元素修补wheel事件监听器
+   */
+  private patchElementWheelListeners(element: Element): void {
+    // 检查是否是Element Plus的滚动相关组件
+    const isElementPlusScrollComponent = element.classList.contains('el-table') ||
+                                       element.classList.contains('el-scrollbar') ||
+                                       element.classList.contains('el-dialog') ||
+                                       element.getAttribute('data-v-')?.includes('el-')
+    
+    if (isElementPlusScrollComponent && element.addEventListener) {
+      // 重写addEventListener方法来强制使用被动模式
+      const originalAddEventListener = element.addEventListener.bind(element)
+      
+      element.addEventListener = (type: string, listener: EventListenerOrEventListenerObject, options?: AddEventListenerOptions) => {
+        if (type === 'wheel' && typeof options === 'object' && options.passive === false) {
+          console.debug(`🔧 修补Element Plus wheel监听器: ${element.className}`)
+          // 强制使用被动模式
+          return originalAddEventListener(type, listener, { ...options, passive: true })
+        }
+        return originalAddEventListener(type, listener, options)
+      }
+    }
   }
 
   /**

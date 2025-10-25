@@ -111,10 +111,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMatrixStore } from '@/stores/matrix'
+import { useMatrixV39Store } from '@/stores/matrix-v39-clean'
 
 const router = useRouter()
-const matrixStore = useMatrixStore()
+const matrixStore = useMatrixV39Store()
 
 const navExpanded = ref(false)
 

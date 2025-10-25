@@ -90,7 +90,32 @@ const zh = {
       }
     },
     federated: '联邦',
-    protocol: 'Matrix 协议'
+    protocol: 'Matrix 协议',
+    browseRooms: '浏览房间',
+    createRoom: '创建房间',
+    settings: '设置',
+    logout: '退出',
+    roomName: '房间名称',
+    roomType: '房间类型',
+    privateRoom: '私人房间',
+    publicRoom: '公共房间',
+    enableEncryption: '启用加密',
+    invitations: '邀请',
+    homeserver: '服务器',
+    spaces: '空间',
+    rooms: '房间',
+    members: '成员',
+    spaceRooms: '空间房间',
+    memberCount: '成员数量',
+    noRoomsFound: '没有找到房间',
+    createFirstRoom: '创建第一个房间',
+    createSpace: '创建空间',
+    federation: '联邦',
+    encryption: '加密',
+    realTimeSync: '实时同步',
+    startDirectMessage: '开始私聊',
+    inviteToRoom: '邀请到房间',
+    viewProfile: '查看资料'
   }
 }
 
@@ -184,7 +209,32 @@ const en = {
       }
     },
     federated: 'Federated',
-    protocol: 'Matrix Protocol'
+    protocol: 'Matrix Protocol',
+    browseRooms: 'Browse Rooms',
+    createRoom: 'Create Room',
+    settings: 'Settings',
+    logout: 'Logout',
+    roomName: 'Room Name',
+    roomType: 'Room Type',
+    privateRoom: 'Private Room',
+    publicRoom: 'Public Room',
+    enableEncryption: 'Enable Encryption',
+    invitations: 'Invitations',
+    homeserver: 'Server',
+    spaces: 'Spaces',
+    rooms: 'Rooms',
+    members: 'Members',
+    spaceRooms: 'Space Rooms',
+    memberCount: 'Member Count',
+    noRoomsFound: 'No rooms found',
+    createFirstRoom: 'Create first room',
+    createSpace: 'Create Space',
+    federation: 'Federation',
+    encryption: 'Encryption',
+    realTimeSync: 'Real-time Sync',
+    startDirectMessage: 'Start Direct Message',
+    inviteToRoom: 'Invite to Room',
+    viewProfile: 'View Profile'
   }
 }
 

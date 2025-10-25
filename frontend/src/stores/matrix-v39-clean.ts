@@ -310,30 +310,64 @@ class MatrixCryptoManager {
 
       // 检查客户端是否支持加密
       if (typeof client.initRustCrypto !== 'function') {
-        console.warn('客户端不支持 Rust 加密，跳过加密')
+        console.warn('客户端不支持 Rust 加密，尝试传统加密')
+        
+        // 尝试传统加密初始化
+        if (typeof client.initCrypto === 'function') {
+          try {
+            await client.initCrypto()
+            console.log('✅ 传统加密引擎初始化成功')
+            return true
+          } catch (legacyError) {
+            console.warn('传统加密也失败，跳过加密:', legacyError)
+            return false
+          }
+        }
         return false
       }
 
-      // 初始化 Rust 加密引擎
-      await retryWithBackoff(async () => {
+      // 初始化 Rust 加密引擎，使用更宽松的配置
+      try {
         await client.initRustCrypto({
           useIndexedDB: true,
-          storagePrefix: 'jianluochat-crypto-v39'
+          storagePrefix: 'jianluochat-crypto-v39',
+          // 添加更多容错配置
+          pickleKey: undefined, // 让SDK自动生成
+          setupEncryptionOnLogin: false // 不在登录时强制设置加密
         })
-      }, 3, 2000)
+        
+        console.log('✅ Rust 加密引擎初始化成功')
 
-      console.log('✅ Rust 加密引擎初始化成功')
+        // 等待加密准备就绪，但不阻塞太久
+        const crypto = client.getCrypto()
+        if (crypto) {
+          console.log('✅ 加密 API 可用')
+          return true
+        }
 
-      // 等待加密准备就绪
-      const crypto = client.getCrypto()
-      if (crypto) {
-        console.log('✅ 加密 API 可用')
-        return true
+        console.warn('⚠️ 加密 API 不可用，但初始化成功')
+        return false
+        
+      } catch (rustError) {
+        console.warn('Rust 加密初始化失败，尝试传统加密:', rustError)
+        
+        // 回退到传统加密
+        if (typeof client.initCrypto === 'function') {
+          try {
+            await client.initCrypto()
+            console.log('✅ 传统加密引擎初始化成功')
+            return true
+          } catch (legacyError) {
+            console.warn('传统加密也失败:', legacyError)
+            return false
+          }
+        }
+        
+        throw rustError
       }
 
-      return false
     } catch (error: any) {
-      console.error('❌ 加密初始化失败:', error)
+      console.error('❌ 加密初始化完全失败:', error)
       console.warn('⚠️ 将以非加密模式继续运行')
       return false
     }
@@ -662,21 +696,30 @@ class MatrixPerformanceManager {
 // ==================== 客户端管理 ====================
 
 class MatrixClientManager {
-  static async createClient(userId: string, accessToken: string, homeserver: string) {
+  static async createClient(userId: string, accessToken: string, homeserver: string, providedDeviceId?: string) {
     try {
       console.log(`🚀 创建 Matrix 客户端: ${userId} @ ${homeserver}`)
       
       // 动态导入 Matrix SDK
       const sdk = await import('matrix-js-sdk')
       
-      // 生成设备ID
-      const deviceIdKey = `jianluochat-device-id-${userId.split(':')[0].substring(1)}`
-      let deviceId = localStorage.getItem(deviceIdKey)
+      // 使用提供的设备ID或从存储中获取/生成
+      let deviceId = providedDeviceId
       
       if (!deviceId) {
-        deviceId = generateDeviceId(userId)
+        const deviceIdKey = `jianluochat-device-id-${userId.split(':')[0].substring(1)}`
+        deviceId = localStorage.getItem(deviceIdKey)
+        
+        if (!deviceId) {
+          deviceId = generateDeviceId(userId)
+          localStorage.setItem(deviceIdKey, deviceId)
+          console.log('🆔 生成新的设备ID:', deviceId)
+        }
+      } else {
+        // 如果提供了设备ID，也保存到localStorage
+        const deviceIdKey = `jianluochat-device-id-${userId.split(':')[0].substring(1)}`
         localStorage.setItem(deviceIdKey, deviceId)
-        console.log('🆔 生成新的设备ID:', deviceId)
+        console.log('🆔 使用服务器提供的设备ID:', deviceId)
       }
 
       // 创建高级存储
@@ -1013,7 +1056,13 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
             childRooms: [],
             parentSpaces: [],
             updatedAt: Date.now(),
-            createdAt: room.getCreatedAt() || Date.now()
+            createdAt: (() => {
+              try {
+                return room.getCreatedAt?.() || Date.now()
+              } catch (e) {
+                return Date.now()
+              }
+            })()
           }
 
           // 获取房间成员
@@ -1053,6 +1102,11 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       )
 
       console.log(`✅ 房间列表更新完成: ${convertedRooms.length} 房间, ${convertedSpaces.length} 空间, ${convertedDMs.length} 私聊`)
+      
+      // 如果房间列表仍然为空，尝试强制刷新
+      if (convertedRooms.length === 0 && convertedSpaces.length === 0 && convertedDMs.length === 0) {
+        console.warn('⚠️ 房间列表为空，可能需要等待同步完成')
+      }
 
     } catch (error) {
       console.error('❌ 更新房间列表失败:', error)
@@ -1114,11 +1168,17 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
         // 重置重连状态
         MatrixReconnectionManager.resetReconnectionState(connection.value.syncState)
         
-        setTimeout(() => {
-          if (matrixClient.value) {
-            updateRoomsFromClient(matrixClient.value)
-          }
-        }, 100)
+        // 立即更新房间列表，然后再延迟更新一次确保完整性
+        if (matrixClient.value) {
+          updateRoomsFromClient(matrixClient.value)
+          
+          // 延迟更新以确保所有房间都已加载
+          setTimeout(() => {
+            if (matrixClient.value) {
+              updateRoomsFromClient(matrixClient.value)
+            }
+          }, 500)
+        }
       } else if (state === 'ERROR') {
         console.error('❌ 同步错误:', data?.error)
         connection.value.syncState.syncError = data?.error?.message || 'Unknown sync error'
@@ -1331,16 +1391,23 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
             const client = await MatrixClientManager.createClient(
               loginData.userId, 
               loginData.accessToken, 
-              loginData.homeserver
+              loginData.homeserver,
+              loginData.deviceId
             )
             
-            // 初始化加密
-            const cryptoEnabled = await MatrixClientManager.initializeCrypto(client)
-            connection.value.cryptoReady = cryptoEnabled
-            
-            // 更新加密状态
-            if (cryptoEnabled) {
-              cryptoStatus.value = await MatrixCryptoManager.updateCryptoStatus(client)
+            // 初始化加密（允许失败）
+            let cryptoEnabled = false
+            try {
+              cryptoEnabled = await MatrixClientManager.initializeCrypto(client)
+              connection.value.cryptoReady = cryptoEnabled
+              
+              // 更新加密状态
+              if (cryptoEnabled) {
+                cryptoStatus.value = await MatrixCryptoManager.updateCryptoStatus(client)
+              }
+            } catch (cryptoError) {
+              console.warn('⚠️ 加密初始化失败，但继续正常运行:', cryptoError)
+              connection.value.cryptoReady = false
             }
             
             // 设置事件监听器
@@ -1376,6 +1443,28 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
               initialSyncLimit: 50,
               lazyLoadMembers: true
             })
+            
+            // 等待初始同步完成
+            console.log('⏳ 等待初始同步完成...')
+            await new Promise((resolve) => {
+              const checkSync = () => {
+                const state = client.getSyncState()
+                if (state === 'SYNCING' || state === 'PREPARED') {
+                  console.log('✅ 初始同步完成')
+                  resolve(true)
+                } else {
+                  setTimeout(checkSync, 100)
+                }
+              }
+              checkSync()
+            })
+
+            // 强制更新房间列表
+            setTimeout(() => {
+              if (client) {
+                updateRoomsFromClient(client)
+              }
+            }, 1000)
             
             console.log('✅ Matrix 登录状态恢复成功')
             return true
@@ -1440,16 +1529,22 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       }
       localStorage.setItem('matrix-v39-login-info', JSON.stringify(loginData))
 
-      // 创建正式客户端
-      const client = await MatrixClientManager.createClient(userId, accessToken, serverUrl)
+      // 创建正式客户端，使用服务器返回的设备ID
+      const client = await MatrixClientManager.createClient(userId, accessToken, serverUrl, deviceId)
       
-      // 初始化加密
-      const cryptoEnabled = await MatrixClientManager.initializeCrypto(client)
-      connection.value.cryptoReady = cryptoEnabled
-      
-      // 更新加密状态
-      if (cryptoEnabled) {
-        cryptoStatus.value = await MatrixCryptoManager.updateCryptoStatus(client)
+      // 初始化加密（允许失败）
+      let cryptoEnabled = false
+      try {
+        cryptoEnabled = await MatrixClientManager.initializeCrypto(client)
+        connection.value.cryptoReady = cryptoEnabled
+        
+        // 更新加密状态
+        if (cryptoEnabled) {
+          cryptoStatus.value = await MatrixCryptoManager.updateCryptoStatus(client)
+        }
+      } catch (cryptoError) {
+        console.warn('⚠️ 加密初始化失败，但继续正常运行:', cryptoError)
+        connection.value.cryptoReady = false
       }
       
       // 设置事件监听器
@@ -1486,6 +1581,28 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
         initialSyncLimit: 50,
         lazyLoadMembers: true
       })
+
+      // 等待初始同步完成
+      console.log('⏳ 等待初始同步完成...')
+      await new Promise((resolve) => {
+        const checkSync = () => {
+          const state = client.getSyncState()
+          if (state === 'SYNCING' || state === 'PREPARED') {
+            console.log('✅ 初始同步完成')
+            resolve(true)
+          } else {
+            setTimeout(checkSync, 100)
+          }
+        }
+        checkSync()
+      })
+
+      // 强制更新房间列表
+      setTimeout(() => {
+        if (client) {
+          updateRoomsFromClient(client)
+        }
+      }, 1000)
 
       console.log('✅ Matrix 登录成功')
       return { success: true, user: currentUser.value }
