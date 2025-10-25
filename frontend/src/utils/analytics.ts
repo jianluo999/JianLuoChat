@@ -15,14 +15,33 @@ interface AnalyticsEvent {
 
 class Analytics {
   private baseUrl = 'https://nlog.daxuesoutijiang.com'
-  private sessionId = this.generateSessionId()
+  private sessionId: string
   private userId?: string
+  private isEnabled: boolean
+
+  constructor() {
+    this.sessionId = this.generateSessionId()
+    this.isEnabled = this.shouldEnableReporting()
+  }
+
+  /**
+   * 判断是否应该启用日志上报
+   */
+  private shouldEnableReporting(): boolean {
+    // 在开发环境中默认禁用，除非明确启用
+    if (import.meta.env.DEV) {
+      return import.meta.env.VITE_ENABLE_ANALYTICS === 'true'
+    }
+    
+    // 生产环境中默认启用
+    return true
+  }
 
   /**
    * 生成会话ID
    */
   private generateSessionId(): string {
-    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    return `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
   }
 
   /**
@@ -33,33 +52,65 @@ class Analytics {
   }
 
   /**
+   * 启用/禁用日志上报
+   */
+  setEnabled(enabled: boolean): void {
+    this.isEnabled = enabled
+    console.log(`📊 Analytics ${enabled ? '已启用' : '已禁用'}`)
+  }
+
+  /**
+   * 获取当前启用状态
+   */
+  isReportingEnabled(): boolean {
+    return this.isEnabled
+  }
+
+  /**
    * 安全的事件上报
    */
-  private safeTrack = safeLogReport(async (event: AnalyticsEvent) => {
-    const payload = {
-      ...event,
-      timestamp: event.timestamp || Date.now(),
-      userId: event.userId || this.userId,
-      sessionId: this.sessionId,
-      url: window.location.href,
-      userAgent: navigator.userAgent,
-      referrer: document.referrer
+  private async safeTrack(event: AnalyticsEvent): Promise<void> {
+    // 如果禁用了上报，只在控制台输出
+    if (!this.isEnabled) {
+      if (import.meta.env.DEV) {
+        console.log('📊 [Analytics Mock]', event.event, event.properties)
+      }
+      return
     }
 
-    const response = await fetch(`${this.baseUrl}/log/track`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-      // 设置较短的超时时间，避免阻塞
-      signal: AbortSignal.timeout(3000)
-    })
+    const safeReportFn = safeLogReport(async () => {
+      const payload = {
+        ...event,
+        timestamp: event.timestamp || Date.now(),
+        userId: event.userId || this.userId,
+        sessionId: this.sessionId,
+        url: window.location.href,
+        userAgent: navigator.userAgent,
+        referrer: document.referrer
+      }
 
-    if (!response.ok) {
-      throw new Error(`Analytics request failed: ${response.status}`)
-    }
-  }, 'analytics-track')
+      // 在开发环境中使用代理路径
+      const url = import.meta.env.DEV 
+        ? '/log/track' 
+        : `${this.baseUrl}/log/track`
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        // 设置较短的超时时间，避免阻塞
+        signal: AbortSignal.timeout(3000)
+      })
+
+      if (!response.ok) {
+        throw new Error(`Analytics request failed: ${response.status}`)
+      }
+    }, `analytics-track-${event.event}`)
+
+    await safeReportFn()
+  }
 
   /**
    * 页面浏览事件

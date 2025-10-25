@@ -56,6 +56,29 @@
             {{ logServerStatusText }}
           </span>
         </div>
+        <div class="stat-item">
+          <span class="label">上报状态:</span>
+          <span class="value" :class="{ 'success': analyticsEnabled, 'error': !analyticsEnabled }">
+            {{ analyticsEnabled ? '启用' : '禁用' }}
+          </span>
+        </div>
+      </div>
+
+      <!-- 环境信息 -->
+      <div class="stat-card">
+        <h3>⚙️ 环境信息</h3>
+        <div class="stat-item">
+          <span class="label">环境:</span>
+          <span class="value">{{ isDev ? '开发' : '生产' }}</span>
+        </div>
+        <div class="stat-item">
+          <span class="label">URL:</span>
+          <span class="value small">{{ currentUrl }}</span>
+        </div>
+        <div class="stat-item">
+          <span class="label">用户代理:</span>
+          <span class="value small">{{ userAgent }}</span>
+        </div>
       </div>
 
       <!-- 测试工具 -->
@@ -67,6 +90,9 @@
           </button>
           <button @click="testNetworkError" class="test-btn error">
             模拟网络错误
+          </button>
+          <button @click="toggleAnalytics" class="test-btn" :class="{ 'success': !analyticsEnabled }">
+            {{ analyticsEnabled ? '禁用上报' : '启用上报' }}
           </button>
           <button @click="clearStats" class="test-btn">
             清除统计
@@ -117,6 +143,10 @@ const isOnline = ref(navigator.onLine)
 const logServerStatus = ref<'checking' | 'ok' | 'error'>('checking')
 const testing = ref(false)
 const realtimeLogs = ref<LogEntry[]>([])
+const analyticsEnabled = ref(analytics.isReportingEnabled())
+const isDev = ref(import.meta.env.DEV)
+const currentUrl = ref(window.location.href)
+const userAgent = ref(navigator.userAgent)
 
 const logServerStatusText = computed(() => {
   switch (logServerStatus.value) {
@@ -188,10 +218,18 @@ function testNetworkError() {
 
 // 清除统计
 function clearStats() {
-  // 这里需要在 logReportHandler 中添加清除方法
+  logReportHandler.clearAll()
   realtimeLogs.value = []
   addLog('统计信息已清除', 'info')
   updateStats()
+}
+
+// 切换分析上报状态
+function toggleAnalytics() {
+  const newState = !analyticsEnabled.value
+  analytics.setEnabled(newState)
+  analyticsEnabled.value = newState
+  addLog(`分析上报已${newState ? '启用' : '禁用'}`, newState ? 'success' : 'info')
 }
 
 // 添加实时日志
@@ -317,6 +355,11 @@ onUnmounted(() => {
   color: #e74c3c;
 }
 
+.value.small {
+  font-size: 11px;
+  word-break: break-all;
+}
+
 .no-errors {
   color: #27ae60;
   font-style: italic;
@@ -377,6 +420,15 @@ onUnmounted(() => {
 
 .test-btn.error:hover {
   background: #c0392b;
+}
+
+.test-btn.success {
+  background: #27ae60;
+  color: white;
+}
+
+.test-btn.success:hover {
+  background: #229954;
 }
 
 .test-btn:disabled {

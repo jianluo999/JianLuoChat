@@ -1,854 +1,473 @@
 <template>
-  <div class="room-manager-overlay">
-    <div class="room-manager-modal">
-      <div class="manager-header">
-        <h3>房间管理</h3>
-        <button @click="$emit('close')" class="close-button">×</button>
-      </div>
+  <div class="matrix-room-manager">
+    <div class="room-manager-header">
+      <h3>房间管理</h3>
+      <button @click="showCreateRoom = true" class="btn-create-room">
+        <i class="fas fa-plus"></i> 创建房间
+      </button>
+    </div>
+
+    <div class="room-list">
+      <div v-if="loading" class="loading">加载中...</div>
       
-      <div class="manager-content">
-        <!-- 房间信息 -->
-        <div class="room-info-section">
-          <div class="section-header">
-            <h4>房间信息</h4>
-            <button @click="editMode = !editMode" class="edit-button">
-              {{ editMode ? '保存' : '编辑' }}
-            </button>
-          </div>
-          
-          <div class="room-details">
-            <div class="detail-row">
-              <label>房间名称:</label>
-              <input
-                v-if="editMode"
-                v-model="roomInfo.name"
-                type="text"
-                class="edit-input"
-              />
-              <span v-else class="detail-value">{{ roomInfo.name }}</span>
-            </div>
-            
-            <div class="detail-row">
-              <label>房间ID:</label>
-              <span class="detail-value room-id">{{ roomInfo.id }}</span>
-              <button @click="copyToClipboard(roomInfo.id)" class="copy-button">复制</button>
-            </div>
-            
-            <div class="detail-row">
-              <label>房间别名:</label>
-              <input
-                v-if="editMode"
-                v-model="roomInfo.alias"
-                type="text"
-                class="edit-input"
-                placeholder="#room-alias:matrix.org"
-              />
-              <span v-else class="detail-value">{{ roomInfo.alias || '无' }}</span>
-            </div>
-            
-            <div class="detail-row">
-              <label>房间主题:</label>
-              <textarea
-                v-if="editMode"
-                v-model="roomInfo.topic"
-                class="edit-textarea"
-                placeholder="房间主题描述..."
-              ></textarea>
-              <span v-else class="detail-value">{{ roomInfo.topic || '无' }}</span>
-            </div>
-            
-            <div class="detail-row">
-              <label>房间类型:</label>
-              <select v-if="editMode" v-model="roomInfo.isPublic" class="edit-select">
-                <option :value="true">公开房间</option>
-                <option :value="false">私密房间</option>
-              </select>
-              <span v-else class="detail-value">
-                {{ roomInfo.isPublic ? '公开房间' : '私密房间' }}
-              </span>
-            </div>
-            
-            <div class="detail-row">
-              <label>端到端加密:</label>
-              <label v-if="editMode" class="checkbox-label">
-                <input type="checkbox" v-model="roomInfo.encrypted" />
-                <span class="checkmark"></span>
-              </label>
-              <span v-else class="detail-value encryption-status" :class="{ enabled: roomInfo.encrypted }">
-                {{ roomInfo.encrypted ? '🔐 已启用' : '🔓 未启用' }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 成员管理 -->
-        <div class="members-section">
-          <div class="section-header">
-            <h4>成员管理 ({{ members.length }})</h4>
-            <button @click="showInviteDialog = true" class="invite-button">
-              邀请用户
-            </button>
-          </div>
-          
-          <div class="members-list">
-            <div
-              v-for="member in members"
-              :key="member.id"
-              class="member-item"
-            >
-              <div class="member-avatar">
-                <img v-if="member.avatarUrl" :src="member.avatarUrl" :alt="member.name" />
-                <div v-else class="default-avatar">{{ member.name.charAt(0).toUpperCase() }}</div>
-              </div>
-              
-              <div class="member-info">
-                <div class="member-name">{{ member.name }}</div>
-                <div class="member-id">{{ member.id }}</div>
-                <div class="member-role" :class="member.role">{{ getRoleText(member.role) }}</div>
-              </div>
-              
-              <div class="member-actions">
-                <select
-                  v-if="canManageMembers && member.role !== 'admin'"
-                  v-model="member.role"
-                  @change="updateMemberRole(member)"
-                  class="role-select"
-                >
-                  <option value="member">成员</option>
-                  <option value="moderator">管理员</option>
-                  <option value="admin">房主</option>
-                </select>
-                
-                <button
-                  v-if="canKickMembers && member.role !== 'admin'"
-                  @click="kickMember(member)"
-                  class="kick-button"
-                  title="踢出房间"
-                >
-                  🚪
-                </button>
-                
-                <button
-                  v-if="canBanMembers && member.role !== 'admin'"
-                  @click="banMember(member)"
-                  class="ban-button"
-                  title="封禁用户"
-                >
-                  🚫
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 房间设置 -->
-        <div class="settings-section">
-          <div class="section-header">
-            <h4>房间设置</h4>
-          </div>
-          
-          <div class="settings-grid">
-            <div class="setting-item">
-              <label class="setting-label">
-                <input type="checkbox" v-model="settings.allowGuests" />
-                <span class="checkmark"></span>
-                允许访客加入
-              </label>
-            </div>
-            
-            <div class="setting-item">
-              <label class="setting-label">
-                <input type="checkbox" v-model="settings.enableHistory" />
-                <span class="checkmark"></span>
-                新成员可查看历史消息
-              </label>
-            </div>
-            
-            <div class="setting-item">
-              <label class="setting-label">
-                <input type="checkbox" v-model="settings.requireInvite" />
-                <span class="checkmark"></span>
-                需要邀请才能加入
-              </label>
-            </div>
-            
-            <div class="setting-item">
-              <label class="setting-label">
-                <input type="checkbox" v-model="settings.enableNotifications" />
-                <span class="checkmark"></span>
-                启用推送通知
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <!-- 危险操作 -->
-        <div class="danger-section">
-          <div class="section-header">
-            <h4>危险操作</h4>
-          </div>
-          
-          <div class="danger-actions">
-            <button @click="leaveRoom" class="danger-button leave">
-              离开房间
-            </button>
-            
-            <button
-              v-if="isRoomAdmin"
-              @click="deleteRoom"
-              class="danger-button delete"
-            >
-              删除房间
-            </button>
-          </div>
-        </div>
+      <div v-else-if="rooms.length === 0" class="no-rooms">
+        <p>暂无房间</p>
+        <button @click="showCreateRoom = true" class="btn-create-room">
+          创建第一个房间
+        </button>
       </div>
-      
-      <div class="manager-footer">
-        <button @click="saveChanges" class="save-button" :disabled="!hasChanges">
-          保存更改
-        </button>
-        <button @click="$emit('close')" class="cancel-button">
-          关闭
-        </button>
+
+      <div v-else class="rooms-grid">
+        <div 
+          v-for="room in rooms" 
+          :key="room.id" 
+          class="room-card"
+          :class="{ 'private': room.isPrivate, 'public': room.isPublic }"
+        >
+          <div class="room-header">
+            <i :class="getRoomIcon(room)"></i>
+            <span class="room-name">{{ room.name }}</span>
+            <span class="room-type" :class="room.isPrivate ? 'private' : 'public'">
+              {{ room.isPrivate ? '私密' : '公开' }}
+            </span>
+          </div>
+          
+          <div class="room-info">
+            <p class="room-topic">{{ room.topic || '暂无描述' }}</p>
+            <p class="room-members">成员: {{ room.memberCount }}</p>
+          </div>
+          
+          <div class="room-actions">
+            <button @click="joinRoom(room)" class="btn-join">
+              <i class="fas fa-sign-in-alt"></i> 加入
+            </button>
+            <button @click="openRoomSettings(room)" class="btn-settings">
+              <i class="fas fa-cog"></i>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- 邀请用户对话框 -->
-    <div v-if="showInviteDialog" class="invite-overlay" @click="showInviteDialog = false">
-      <div class="invite-dialog" @click.stop>
-        <div class="invite-header">
-          <h4>邀请用户</h4>
-          <button @click="showInviteDialog = false" class="close-button">×</button>
+    <!-- 创建房间对话框 -->
+    <div v-if="showCreateRoom" class="modal-overlay" @click="showCreateRoom = false">
+      <div class="modal" @click.stop>
+        <div class="modal-header">
+          <h4>创建房间</h4>
+          <button @click="showCreateRoom = false" class="close-btn">
+            <i class="fas fa-times"></i>
+          </button>
         </div>
         
-        <div class="invite-content">
-          <div class="invite-input-group">
-            <label>用户ID或邮箱:</label>
-            <input
-              v-model="inviteUserId"
-              type="text"
-              placeholder="@username:matrix.org 或 user@example.com"
-              class="invite-input"
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="roomName">房间名称</label>
+            <input 
+              id="roomName" 
+              v-model="newRoom.name" 
+              type="text" 
+              placeholder="输入房间名称"
+              required
             />
           </div>
           
-          <div class="invite-message-group">
-            <label>邀请消息 (可选):</label>
-            <textarea
-              v-model="inviteMessage"
-              placeholder="欢迎加入我们的房间..."
-              class="invite-textarea"
+          <div class="form-group">
+            <label for="roomType">房间类型</label>
+            <select id="roomType" v-model="newRoom.type">
+              <option value="public">公开房间</option>
+              <option value="private">私密房间</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label for="roomAlias">房间别名</label>
+            <input 
+              id="roomAlias" 
+              v-model="newRoom.alias" 
+              type="text" 
+              placeholder="可选：房间别名"
+            />
+          </div>
+          
+          <div class="form-group">
+            <label for="roomTopic">房间描述</label>
+            <textarea 
+              id="roomTopic" 
+              v-model="newRoom.topic" 
+              placeholder="可选：房间描述"
+              rows="3"
             ></textarea>
           </div>
         </div>
         
-        <div class="invite-footer">
-          <button @click="sendInvite" class="invite-send-button" :disabled="!inviteUserId.trim()">
-            发送邀请
+        <div class="modal-footer">
+          <button @click="showCreateRoom = false" class="btn-cancel">取消</button>
+          <button @click="createRoom" class="btn-confirm">创建</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 房间设置对话框 -->
+    <div v-if="showRoomSettings" class="modal-overlay" @click="showRoomSettings = false">
+      <div class="modal" @click.stop>
+        <div class="modal-header">
+          <h4>{{ currentRoom.name }} 设置</h4>
+          <button @click="showRoomSettings = false" class="close-btn">
+            <i class="fas fa-times"></i>
           </button>
-          <button @click="showInviteDialog = false" class="invite-cancel-button">
-            取消
-          </button>
+        </div>
+        
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="roomName">房间名称</label>
+            <input 
+              id="roomName" 
+              v-model="currentRoom.name" 
+              type="text" 
+              required
+            />
+          </div>
+          
+          <div class="form-group">
+            <label for="roomTopic">房间描述</label>
+            <textarea 
+              id="roomTopic" 
+              v-model="currentRoom.topic" 
+              rows="3"
+            ></textarea>
+          </div>
+          
+          <div class="form-group">
+            <label class="switch">
+              <input type="checkbox" v-model="currentRoom.isPublic" />
+              <span class="slider"></span>
+              公开房间
+            </label>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button @click="showRoomSettings = false" class="btn-cancel">取消</button>
+          <button @click="saveRoomSettings" class="btn-confirm">保存</button>
         </div>
       </div>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useMatrixStore } from '@/stores/matrix'
+<script>
+import { ref, onMounted } from 'vue';
+import { useMatrixStore } from '@/stores/matrix';
 
-const props = defineProps<{
-  roomId: string
-}>()
+export default {
+  name: 'MatrixRoomManager',
+  setup() {
+    const matrixStore = useMatrixStore();
+    
+    // 数据
+    const rooms = ref([]);
+    const loading = ref(false);
+    const showCreateRoom = ref(false);
+    const showRoomSettings = ref(false);
+    const currentRoom = ref({});
+    
+    const newRoom = ref({
+      name: '',
+      type: 'public',
+      alias: '',
+      topic: ''
+    });
 
-const emit = defineEmits(['close', 'room-updated'])
+    // 方法
+    const loadRooms = async () => {
+      loading.value = true;
+      try {
+        const response = await matrixStore.getMatrixRooms();
+        if (response.success) {
+          rooms.value = response.rooms || [];
+        }
+      } catch (error) {
+        console.error('加载房间失败:', error);
+      } finally {
+        loading.value = false;
+      }
+    };
 
-const matrixStore = useMatrixStore()
+    const createRoom = async () => {
+      if (!newRoom.value.name.trim()) {
+        alert('请输入房间名称');
+        return;
+      }
+      
+      try {
+        const roomData = {
+          name: newRoom.value.name,
+          type: newRoom.value.type,
+          alias: newRoom.value.alias,
+          topic: newRoom.value.topic
+        };
+        
+        const response = await matrixStore.createMatrixRoom(roomData);
+        if (response.success) {
+          alert('房间创建成功');
+          showCreateRoom.value = false;
+          newRoom.value = { name: '', type: 'public', alias: '', topic: '' };
+          await loadRooms();
+        } else {
+          alert('房间创建失败: ' + (response.error || '未知错误'));
+        }
+      } catch (error) {
+        console.error('创建房间失败:', error);
+        alert('创建房间失败');
+      }
+    };
 
-// 状态
-const editMode = ref(false)
-const showInviteDialog = ref(false)
-const inviteUserId = ref('')
-const inviteMessage = ref('')
+    const joinRoom = async (room) => {
+      try {
+        const response = await matrixStore.joinMatrixRoom(room.id);
+        if (response.success) {
+          alert('加入房间成功');
+          await loadRooms();
+        } else {
+          alert('加入房间失败: ' + (response.error || '未知错误'));
+        }
+      } catch (error) {
+        console.error('加入房间失败:', error);
+        alert('加入房间失败');
+      }
+    };
 
-// 房间信息
-const roomInfo = ref({
-  id: props.roomId,
-  name: 'Matrix Room',
-  alias: '#example:matrix.org',
-  topic: 'A Matrix protocol room',
-  isPublic: true,
-  encrypted: false,
-  memberCount: 0
-})
+    const openRoomSettings = (room) => {
+      currentRoom.value = { ...room };
+      showRoomSettings.value = true;
+    };
 
-// 成员列表
-const members = ref([
-  {
-    id: '@alice:matrix.org',
-    name: 'Alice',
-    avatarUrl: '',
-    role: 'admin',
-    powerLevel: 100
-  },
-  {
-    id: '@bob:matrix.org',
-    name: 'Bob',
-    avatarUrl: '',
-    role: 'moderator',
-    powerLevel: 50
-  },
-  {
-    id: '@charlie:matrix.org',
-    name: 'Charlie',
-    avatarUrl: '',
-    role: 'member',
-    powerLevel: 0
+    const saveRoomSettings = async () => {
+      try {
+        const response = await matrixStore.updateMatrixRoom(currentRoom.value.id, {
+          name: currentRoom.value.name,
+          topic: currentRoom.value.topic,
+          isPublic: currentRoom.value.isPublic
+        });
+        
+        if (response.success) {
+          alert('房间设置保存成功');
+          showRoomSettings.value = false;
+          await loadRooms();
+        } else {
+          alert('保存失败: ' + (response.error || '未知错误'));
+        }
+      } catch (error) {
+        console.error('保存房间设置失败:', error);
+        alert('保存失败');
+      }
+    };
+
+    const getRoomIcon = (room) => {
+      if (room.isPrivate) {
+        return 'fas fa-lock';
+      } else if (room.memberCount > 10) {
+        return 'fas fa-users';
+      } else {
+        return 'fas fa-user-friends';
+      }
+    };
+
+    // 生命周期
+    onMounted(() => {
+      loadRooms();
+    });
+
+    return {
+      rooms,
+      loading,
+      showCreateRoom,
+      showRoomSettings,
+      currentRoom,
+      newRoom,
+      loadRooms,
+      createRoom,
+      joinRoom,
+      openRoomSettings,
+      saveRoomSettings,
+      getRoomIcon
+    };
   }
-])
-
-// 房间设置
-const settings = ref({
-  allowGuests: false,
-  enableHistory: true,
-  requireInvite: false,
-  enableNotifications: true
-})
-
-// 计算属性
-const canManageMembers = computed(() => {
-  // 检查当前用户是否有管理成员的权限
-  return true // 简化实现
-})
-
-const canKickMembers = computed(() => {
-  return true // 简化实现
-})
-
-const canBanMembers = computed(() => {
-  return true // 简化实现
-})
-
-const isRoomAdmin = computed(() => {
-  return true // 简化实现
-})
-
-const hasChanges = computed(() => {
-  // 检查是否有未保存的更改
-  return true // 简化实现
-})
-
-// 方法
-const getRoleText = (role: string) => {
-  const roleMap = {
-    admin: '房主',
-    moderator: '管理员',
-    member: '成员'
-  }
-  return roleMap[role as keyof typeof roleMap] || '成员'
-}
-
-const copyToClipboard = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text)
-    // 显示复制成功提示
-  } catch (error) {
-    console.error('Failed to copy to clipboard:', error)
-  }
-}
-
-const updateMemberRole = async (member: any) => {
-  try {
-    // 调用API更新成员角色
-    console.log('Updating member role:', member)
-  } catch (error) {
-    console.error('Failed to update member role:', error)
-  }
-}
-
-const kickMember = async (member: any) => {
-  if (confirm(`确定要踢出用户 ${member.name} 吗？`)) {
-    try {
-      // 调用API踢出成员
-      console.log('Kicking member:', member)
-    } catch (error) {
-      console.error('Failed to kick member:', error)
-    }
-  }
-}
-
-const banMember = async (member: any) => {
-  if (confirm(`确定要封禁用户 ${member.name} 吗？`)) {
-    try {
-      // 调用API封禁成员
-      console.log('Banning member:', member)
-    } catch (error) {
-      console.error('Failed to ban member:', error)
-    }
-  }
-}
-
-const sendInvite = async () => {
-  try {
-    // 调用API发送邀请
-    console.log('Sending invite to:', inviteUserId.value)
-    showInviteDialog.value = false
-    inviteUserId.value = ''
-    inviteMessage.value = ''
-  } catch (error) {
-    console.error('Failed to send invite:', error)
-  }
-}
-
-const saveChanges = async () => {
-  try {
-    // 保存房间信息和设置
-    console.log('Saving room changes')
-    emit('room-updated', roomInfo.value)
-  } catch (error) {
-    console.error('Failed to save changes:', error)
-  }
-}
-
-const leaveRoom = async () => {
-  if (confirm('确定要离开这个房间吗？')) {
-    try {
-      // 调用API离开房间
-      console.log('Leaving room')
-      emit('close')
-    } catch (error) {
-      console.error('Failed to leave room:', error)
-    }
-  }
-}
-
-const deleteRoom = async () => {
-  if (confirm('确定要删除这个房间吗？此操作不可撤销！')) {
-    try {
-      // 调用API删除房间
-      console.log('Deleting room')
-      emit('close')
-    } catch (error) {
-      console.error('Failed to delete room:', error)
-    }
-  }
-}
-
-// 生命周期
-onMounted(() => {
-  // 加载房间信息
-  console.log('Loading room info for:', props.roomId)
-})
+};
 </script>
 
 <style scoped>
-.room-manager-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+.matrix-room-manager {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin: 10px 0;
 }
 
-.room-manager-modal {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border: 1px solid #3a4a5c;
-  border-radius: 16px;
-  width: 90%;
-  max-width: 800px;
-  height: 90%;
+.room-manager-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.room-manager-header h3 {
+  margin: 0;
+  color: #333;
+}
+
+.btn-create-room {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+}
+
+.btn-create-room:hover {
+  background: #0056b3;
+}
+
+.room-list {
   display: flex;
   flex-direction: column;
-  color: #e0e6ed;
+  gap: 15px;
 }
 
-.manager-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid #3a4a5c;
-}
-
-.manager-header h3 {
-  color: #64b5f6;
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.close-button {
-  background: none;
-  border: none;
-  color: #e0e6ed;
-  font-size: 1.5rem;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background 0.3s ease;
-}
-
-.close-button:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.manager-content {
-  flex: 1;
-  padding: 24px;
-  overflow-y: auto;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.section-header h4 {
-  color: #64b5f6;
-  margin: 0;
-  font-size: 1.2rem;
-}
-
-.edit-button,
-.invite-button {
-  padding: 6px 12px;
-  background: rgba(100, 181, 246, 0.2);
-  border: 1px solid rgba(100, 181, 246, 0.3);
-  border-radius: 6px;
-  color: #64b5f6;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: all 0.3s ease;
-}
-
-.edit-button:hover,
-.invite-button:hover {
-  background: rgba(100, 181, 246, 0.3);
-}
-
-.room-info-section,
-.members-section,
-.settings-section,
-.danger-section {
-  margin-bottom: 32px;
+.loading, .no-rooms {
+  text-align: center;
+  color: #666;
   padding: 20px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.detail-row {
+.no-rooms p {
+  margin-bottom: 15px;
+  font-size: 16px;
+}
+
+.rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 15px;
+}
+
+.room-card {
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 15px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.room-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.room-card.private {
+  border-left: 4px solid #dc3545;
+}
+
+.room-card.public {
+  border-left: 4px solid #28a745;
+}
+
+.room-header {
   display: flex;
   align-items: center;
-  margin-bottom: 16px;
-  gap: 12px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
-.detail-row label {
-  min-width: 120px;
-  color: #b0bec5;
+.room-header i {
+  font-size: 18px;
+}
+
+.room-name {
+  font-weight: 600;
+  color: #333;
+  flex: 1;
+}
+
+.room-type {
+  background: #e9ecef;
+  color: #495057;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
   font-weight: 500;
 }
 
-.detail-value {
-  flex: 1;
-  color: #e0e6ed;
+.room-type.private {
+  background: #f8d7da;
+  color: #721c24;
 }
 
-.room-id {
-  font-family: monospace;
-  font-size: 0.9rem;
+.room-type.public {
+  background: #d4edda;
+  color: #155724;
 }
 
-.copy-button {
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  color: #e0e6ed;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: background 0.3s ease;
+.room-info {
+  margin-bottom: 12px;
 }
 
-.copy-button:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.edit-input,
-.edit-select {
-  flex: 1;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  color: #e0e6ed;
-  font-size: 0.9rem;
-}
-
-.edit-textarea {
-  flex: 1;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  color: #e0e6ed;
-  font-size: 0.9rem;
-  resize: vertical;
-  min-height: 60px;
-}
-
-.edit-input:focus,
-.edit-select:focus,
-.edit-textarea:focus {
-  outline: none;
-  border-color: #64b5f6;
-}
-
-.encryption-status.enabled {
-  color: #81c784;
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-}
-
-.checkbox-label input[type="checkbox"] {
-  margin-right: 8px;
-}
-
-.members-list {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.member-item {
-  display: flex;
-  align-items: center;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
+.room-topic {
+  color: #666;
+  font-size: 14px;
+  line-height: 1.4;
   margin-bottom: 8px;
-  gap: 12px;
 }
 
-.member-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  overflow: hidden;
+.room-members {
+  color: #888;
+  font-size: 12px;
 }
 
-.member-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.default-avatar {
-  width: 100%;
-  height: 100%;
-  background: #64b5f6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  color: #1a1a2e;
-}
-
-.member-info {
-  flex: 1;
-}
-
-.member-name {
-  font-weight: 600;
-  color: #e0e6ed;
-  margin-bottom: 2px;
-}
-
-.member-id {
-  font-size: 0.8rem;
-  color: #b0bec5;
-  font-family: monospace;
-  margin-bottom: 2px;
-}
-
-.member-role {
-  font-size: 0.8rem;
-  padding: 2px 6px;
-  border-radius: 10px;
-  display: inline-block;
-}
-
-.member-role.admin {
-  background: rgba(244, 67, 54, 0.2);
-  color: #f44336;
-}
-
-.member-role.moderator {
-  background: rgba(255, 167, 38, 0.2);
-  color: #ffa726;
-}
-
-.member-role.member {
-  background: rgba(129, 199, 132, 0.2);
-  color: #81c784;
-}
-
-.member-actions {
+.room-actions {
   display: flex;
   gap: 8px;
-  align-items: center;
 }
 
-.role-select {
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  color: #e0e6ed;
-  font-size: 0.8rem;
-}
-
-.kick-button,
-.ban-button {
-  width: 28px;
-  height: 28px;
+.btn-join, .btn-settings {
+  flex: 1;
+  padding: 6px 12px;
   border: none;
   border-radius: 4px;
+  font-size: 12px;
   cursor: pointer;
-  font-size: 0.9rem;
-  transition: all 0.3s ease;
+  transition: background-color 0.3s ease;
 }
 
-.kick-button {
-  background: rgba(255, 167, 38, 0.2);
+.btn-join {
+  background: #28a745;
+  color: white;
 }
 
-.kick-button:hover {
-  background: rgba(255, 167, 38, 0.3);
+.btn-join:hover {
+  background: #218838;
 }
 
-.ban-button {
-  background: rgba(244, 67, 54, 0.2);
+.btn-settings {
+  background: #6c757d;
+  color: white;
 }
 
-.ban-button:hover {
-  background: rgba(244, 67, 54, 0.3);
+.btn-settings:hover {
+  background: #5a6268;
 }
 
-.settings-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
-}
-
-.setting-item {
-  display: flex;
-  align-items: center;
-}
-
-.setting-label {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  color: #e0e6ed;
-}
-
-.setting-label input[type="checkbox"] {
-  margin-right: 8px;
-}
-
-.danger-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.danger-button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.danger-button.leave {
-  background: rgba(255, 167, 38, 0.2);
-  color: #ffa726;
-  border: 1px solid rgba(255, 167, 38, 0.3);
-}
-
-.danger-button.leave:hover {
-  background: rgba(255, 167, 38, 0.3);
-}
-
-.danger-button.delete {
-  background: rgba(244, 67, 54, 0.2);
-  color: #f44336;
-  border: 1px solid rgba(244, 67, 54, 0.3);
-}
-
-.danger-button.delete:hover {
-  background: rgba(244, 67, 54, 0.3);
-}
-
-.manager-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 24px;
-  border-top: 1px solid #3a4a5c;
-}
-
-.save-button,
-.cancel-button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.save-button {
-  background: #64b5f6;
-  color: #1a1a2e;
-}
-
-.save-button:hover:not(:disabled) {
-  background: #42a5f5;
-}
-
-.save-button:disabled {
-  background: #555;
-  color: #999;
-  cursor: not-allowed;
-}
-
-.cancel-button {
-  background: rgba(255, 255, 255, 0.1);
-  color: #e0e6ed;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.cancel-button:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-/* 邀请对话框样式 */
-.invite-overlay {
+/* 模态框样式 */
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -858,110 +477,155 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1001;
+  z-index: 1000;
 }
 
-.invite-dialog {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border: 1px solid #3a4a5c;
-  border-radius: 12px;
-  width: 90%;
+.modal {
+  background: white;
+  border-radius: 8px;
   max-width: 500px;
-  color: #e0e6ed;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
 }
 
-.invite-header {
+.modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid #3a4a5c;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #dee2e6;
 }
 
-.invite-header h4 {
-  color: #64b5f6;
+.modal-header h4 {
   margin: 0;
+  color: #333;
 }
 
-.invite-content {
-  padding: 20px;
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #666;
 }
 
-.invite-input-group,
-.invite-message-group {
+.close-btn:hover {
+  color: #333;
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.form-group {
   margin-bottom: 16px;
 }
 
-.invite-input-group label,
-.invite-message-group label {
+.form-group label {
   display: block;
-  margin-bottom: 8px;
-  color: #b0bec5;
+  margin-bottom: 6px;
   font-weight: 500;
+  color: #333;
 }
 
-.invite-input,
-.invite-textarea {
+.form-group input, .form-group textarea, .form-group select {
   width: 100%;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  color: #e0e6ed;
-  font-size: 0.9rem;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
 }
 
-.invite-textarea {
+.form-group textarea {
   resize: vertical;
-  min-height: 80px;
 }
 
-.invite-input:focus,
-.invite-textarea:focus {
+.form-group input:focus, .form-group textarea:focus, .form-group select:focus {
   outline: none;
-  border-color: #64b5f6;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
 
-.invite-footer {
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 34px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #28a745;
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+.modal-footer {
   display: flex;
   justify-content: flex-end;
+  padding: 16px 24px 20px;
+  border-top: 1px solid #dee2e6;
   gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid #3a4a5c;
 }
 
-.invite-send-button,
-.invite-cancel-button {
-  padding: 8px 16px;
+.btn-cancel, .btn-confirm {
+  padding: 8px 20px;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
+  font-size: 14px;
   cursor: pointer;
-  font-weight: 500;
-  transition: all 0.3s ease;
+  transition: background-color 0.3s ease;
 }
 
-.invite-send-button {
-  background: #64b5f6;
-  color: #1a1a2e;
+.btn-cancel {
+  background: #6c757d;
+  color: white;
 }
 
-.invite-send-button:hover:not(:disabled) {
-  background: #42a5f5;
+.btn-cancel:hover {
+  background: #5a6268;
 }
 
-.invite-send-button:disabled {
-  background: #555;
-  color: #999;
-  cursor: not-allowed;
+.btn-confirm {
+  background: #007bff;
+  color: white;
 }
 
-.invite-cancel-button {
-  background: rgba(255, 255, 255, 0.1);
-  color: #e0e6ed;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.invite-cancel-button:hover {
-  background: rgba(255, 255, 255, 0.2);
+.btn-confirm:hover {
+  background: #0056b3;
 }
 </style>

@@ -148,8 +148,8 @@
     </div>
 
     <!-- 房间详情模态框 -->
-    <div v-if="selectedRoom" class="modal-overlay" @click="closeRoomDetails">
-      <div class="room-details-modal" @click.stop>
+    <div v-if="selectedRoom" class="modal-overlay" @click.self="closeRoomDetails">
+      <div class="room-details-modal" @click.stop @keydown.esc="closeRoomDetails" tabindex="0" @keydown.enter="joinRoom(selectedRoom)" @focus="focusModal">
         <div class="modal-header">
           <h3>{{ selectedRoom.name || selectedRoom.canonical_alias }}</h3>
           <button @click="closeRoomDetails" class="close-btn">×</button>
@@ -369,45 +369,77 @@ const joinRoom = async (room) => {
 
   isJoining.value[room.room_id] = true
   try {
-    await matrixStore.matrixClient.joinRoom(room.room_id)
-    console.log(`成功加入房间: ${room.name || room.canonical_alias}`)
+    console.log(`🚀 开始加入房间: ${room.name || room.canonical_alias} (${room.room_id})`)
+    
+    // 使用新的加入房间并同步函数
+    const success = await matrixStore.joinRoomAndSync(room.room_id, room)
+    
+    if (success) {
+      console.log(`🎉 房间加入流程完成: ${room.name || room.canonical_alias}`)
+      
+      // 关闭详情模态框
+      if (selectedRoom.value && selectedRoom.value.room_id === room.room_id) {
+        closeRoomDetails()
+      }
 
-    // 将加入的房间添加到本地房间列表
-    const newRoom = {
-      id: room.room_id,
-      name: room.name || room.canonical_alias || room.room_id,
-      alias: room.canonical_alias,
-      topic: room.topic,
-      type: 'room',
-      isPublic: room.world_readable || true,
-      memberCount: room.num_joined_members || 0,
-      members: [],
-      unreadCount: 0,
-      encrypted: false,
-      joinRule: 'public',
-      historyVisibility: 'shared',
-      avatarUrl: room.avatar_url ? matrixStore.matrixClient.mxcUrlToHttp(room.avatar_url) : null,
-      lastActivity: Date.now()
+      // 触发房间加入事件，让父组件知道用户加入了新房间
+      emit('room-joined', room.room_id)
+      
+      // 显示成功消息
+      console.log(`✅ 房间 "${room.name || room.canonical_alias}" 已成功加入并显示在房间列表中`)
+    } else {
+      throw new Error('房间加入失败')
     }
-
-    // 添加到 Matrix store 的房间列表
-    matrixStore.addRoom(newRoom)
-
-    // 显示成功消息
-    console.log(`✅ 房间 "${newRoom.name}" 已添加到房间列表`)
-
-    // 关闭详情模态框
-    if (selectedRoom.value && selectedRoom.value.room_id === room.room_id) {
-      closeRoomDetails()
-    }
-
-    // 触发房间加入事件，让父组件知道用户加入了新房间
-    emit('room-joined', newRoom.id)
 
   } catch (error) {
-    console.error('加入房间失败:', error)
-    // 显示错误消息给用户
-    alert(`加入房间失败: ${error.message || '未知错误'}`)
+    console.error('❌ 加入房间失败:', error)
+    
+    // 提供更友好的错误信息
+    let errorMessage = '加入房间失败'
+    if (error.message) {
+      if (error.message.includes('already in room') || error.message.includes('已经在房间')) {
+        errorMessage = '您已经在这个房间中了'
+        // 即使已经在房间中，也尝试添加到本地列表
+        try {
+          const newRoom = {
+            id: room.room_id,
+            name: room.name || room.canonical_alias || room.room_id,
+            alias: room.canonical_alias,
+            topic: room.topic,
+            type: 'private' as const,
+            isPublic: room.world_readable || true,
+            memberCount: room.num_joined_members || 0,
+            members: [],
+            unreadCount: 0,
+            encrypted: false,
+            joinRule: 'public',
+            historyVisibility: 'shared',
+            avatarUrl: room.avatar_url ? matrixStore.matrixClient.mxcUrlToHttp(room.avatar_url) : null,
+            lastActivity: Date.now()
+          }
+          matrixStore.addRoom(newRoom)
+          
+          // 关闭详情模态框
+          if (selectedRoom.value && selectedRoom.value.room_id === room.room_id) {
+            closeRoomDetails()
+          }
+          
+          emit('room-joined', room.room_id)
+          console.log(`✅ 房间已添加到列表中`)
+          return // 成功处理，不显示错误
+        } catch (addError) {
+          console.warn('添加已存在房间到列表失败:', addError)
+        }
+      } else if (error.message.includes('not allowed')) {
+        errorMessage = '没有权限加入此房间'
+      } else if (error.message.includes('not found')) {
+        errorMessage = '房间不存在或已被删除'
+      } else {
+        errorMessage = `加入房间失败: ${error.message}`
+      }
+    }
+    
+    alert(errorMessage)
   } finally {
     isJoining.value[room.room_id] = false
   }
@@ -415,10 +447,14 @@ const joinRoom = async (room) => {
 
 const showRoomDetails = (room) => {
   selectedRoom.value = room
+  // 添加键盘事件监听器
+  document.addEventListener('keydown', handleKeyDown)
 }
 
 const closeRoomDetails = () => {
   selectedRoom.value = null
+  // 移除键盘事件监听器
+  document.removeEventListener('keydown', handleKeyDown)
 }
 
 const getAvatarUrl = (mxcUrl) => {
@@ -438,6 +474,19 @@ const truncateText = (text, maxLength) => {
 
 const handleImageError = (event) => {
   event.target.style.display = 'none'
+}
+
+// 处理键盘事件
+const handleKeyDown = (event) => {
+  if (event.key === 'Escape') {
+    closeRoomDetails()
+  }
+}
+
+// 模态框获取焦点时自动聚焦
+const focusModal = () => {
+  const modal = document.querySelector('.room-details-modal')
+  if (modal) modal.focus()
 }
 
 // 生命周期

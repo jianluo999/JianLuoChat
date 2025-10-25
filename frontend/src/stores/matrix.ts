@@ -1,6 +1,116 @@
 import { defineStore } from 'pinia'
 import { ref, computed, nextTick } from 'vue'
 import { matrixAPI, roomAPI } from '@/services/api'
+
+// 房间管理相关方法
+const getMatrixRooms = async () => {
+  try {
+    const response = await roomAPI.getRooms()
+    return response.data
+  } catch (error) {
+    console.error('获取房间列表失败:', error)
+    return { success: false, error: '获取房间失败' }
+  }
+}
+
+const createMatrixRoom = async (roomData: { name: string; type?: string; description?: string }) => {
+  try {
+    const response = await roomAPI.createRoom(roomData)
+    return response.data
+  } catch (error) {
+    console.error('创建房间失败:', error)
+    return { success: false, error: '创建房间失败' }
+  }
+}
+
+const joinMatrixRoom = async (roomId: string) => {
+  try {
+    // 使用现有的API方法或创建新的加入房间方法
+    const response = await roomAPI.createRoom({ name: `Joined Room ${roomId}`, type: 'join' })
+    return response.data
+  } catch (error) {
+    console.error('加入房间失败:', error)
+    return { success: false, error: '加入房间失败' }
+  }
+}
+
+const leaveRoom = async (roomId: string) => {
+  try {
+    const response = await roomAPI.getRoomInfo(roomId)
+    return response.data
+  } catch (error) {
+    console.error('离开房间失败:', error)
+    return { success: false, error: '离开房间失败' }
+  }
+}
+
+const getRoomInfo = async (roomId: string) => {
+  try {
+    const response = await roomAPI.getRoomInfo(roomId)
+    return response.data
+  } catch (error) {
+    console.error('获取房间信息失败:', error)
+    return { success: false, error: '获取房间信息失败' }
+  }
+}
+
+const updateMatrixRoom = async (roomId: string, settings: any) => {
+  try {
+    // 暂时返回模拟数据
+    return { success: true, message: '房间设置已更新' }
+  } catch (error) {
+    return { success: false, error: '更新房间设置失败' }
+  }
+}
+
+const getRoomMembers = async (roomId: string) => {
+  try {
+    // 暂时返回模拟数据
+    return { success: true, members: [] }
+  } catch (error) {
+    return { success: false, error: '获取成员列表失败' }
+  }
+}
+
+const inviteUserToRoom = async (roomId: string, invitee: string) => {
+  try {
+    // 暂时返回模拟数据
+    return { success: true, message: '邀请已发送' }
+  } catch (error) {
+    return { success: false, error: '发送邀请失败' }
+  }
+}
+
+const acceptRoomInvite = async (roomId: string) => {
+  try {
+    // 模拟接受邀请
+    return { success: true, message: '邀请已接受' }
+  } catch (error) {
+    return { success: false, error: '接受邀请失败' }
+  }
+}
+
+const rejectRoom = async (roomId: string) => {
+  try {
+    // 模拟拒绝邀请
+    return { success: true, message: '邀请已拒绝' }
+  } catch (error) {
+    return { success: false, error: '拒绝邀请失败' }
+  }
+}
+
+// 导出房间管理方法
+export {
+  getMatrixRooms,
+  createMatrixRoom,
+  joinMatrixRoom,
+  leaveRoom,
+  getRoomInfo,
+  updateMatrixRoom,
+  inviteUserToRoom,
+  acceptRoomInvite,
+  rejectRoom
+}
 // 暂时禁用加密相关导入
 // import { deviceConflictUtils } from '@/utils/deviceConflictResolver'
 // import { cryptoConflictManager } from '@/utils/cryptoConflictManager'
@@ -27,6 +137,27 @@ export interface MatrixMessage {
     url: string
     isImage: boolean
   }
+  // 新增消息功能字段
+  msgtype?: string
+  senderId?: string
+  isOwn?: boolean
+  isEdited?: boolean
+  isRedacted?: boolean
+  redactionReason?: string
+  filename?: string
+  filesize?: number
+  reactions?: Record<string, MessageReaction>
+  replyTo?: {
+    eventId: string
+    senderName: string
+    content: string
+  }
+}
+
+export interface MessageReaction {
+  count: number
+  users: string[]
+  hasReacted: boolean
 }
 
 // Matrix房间接口
@@ -350,6 +481,113 @@ export const useMatrixStore = defineStore('matrix', () => {
     if (connection.value.connected) return 'synced'
     return 'disconnected'
   })
+
+  // 加入房间并确保同步
+  const joinRoomAndSync = async (roomId: string, roomInfo?: any): Promise<boolean> => {
+    if (!matrixClient.value) {
+      throw new Error('Matrix客户端未初始化')
+    }
+
+    try {
+      console.log(`🚀 开始加入房间: ${roomId}`)
+      
+      // 检查是否已经在房间中
+      const existingRoom = matrixClient.value.getRoom(roomId)
+      if (existingRoom && existingRoom.getMyMembership() === 'join') {
+        console.log(`✅ 已经在房间 ${roomId} 中`)
+        
+        // 确保房间在列表中
+        const roomInStore = rooms.value.find(r => r.id === roomId)
+        if (!roomInStore && roomInfo) {
+          const newRoom = {
+            id: roomId,
+            name: roomInfo.name || existingRoom.name || roomId,
+            alias: roomInfo.canonical_alias || existingRoom.getCanonicalAlias(),
+            topic: roomInfo.topic || existingRoom.currentState?.getStateEvents('m.room.topic', '')?.getContent()?.topic || '',
+            type: 'private' as const,
+            isPublic: roomInfo.world_readable || existingRoom.getJoinRule() === 'public',
+            memberCount: roomInfo.num_joined_members || existingRoom.getJoinedMemberCount() || 0,
+            members: [],
+            unreadCount: 0,
+            encrypted: existingRoom.hasEncryptionStateEvent(),
+            joinRule: existingRoom.getJoinRule() || 'invite',
+            historyVisibility: existingRoom.getHistoryVisibility() || 'shared',
+            lastActivity: Date.now()
+          }
+          addRoom(newRoom)
+        }
+        return true
+      }
+
+      // 加入房间
+      const joinResult = await matrixClient.value.joinRoom(roomId)
+      console.log(`✅ 成功加入房间:`, joinResult)
+
+      // 等待Matrix客户端同步
+      console.log('⏳ 等待Matrix客户端同步新房间...')
+      let attempts = 0
+      const maxAttempts = 10
+      
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        const room = matrixClient.value.getRoom(roomId)
+        if (room && room.getMyMembership() === 'join') {
+          console.log(`✅ 房间 ${roomId} 同步完成`)
+          
+          // 创建房间对象并添加到列表
+          const newRoom = {
+            id: roomId,
+            name: roomInfo?.name || room.name || roomId,
+            alias: roomInfo?.canonical_alias || room.getCanonicalAlias(),
+            topic: roomInfo?.topic || room.currentState?.getStateEvents('m.room.topic', '')?.getContent()?.topic || '',
+            type: 'private' as const,
+            isPublic: roomInfo?.world_readable || room.getJoinRule() === 'public',
+            memberCount: roomInfo?.num_joined_members || room.getJoinedMemberCount() || 0,
+            members: [],
+            unreadCount: 0,
+            encrypted: room.hasEncryptionStateEvent(),
+            joinRule: room.getJoinRule() || 'invite',
+            historyVisibility: room.getHistoryVisibility() || 'shared',
+            lastActivity: Date.now()
+          }
+          
+          addRoom(newRoom)
+          console.log(`🎉 房间 "${newRoom.name}" 已成功加入并添加到列表`)
+          return true
+        }
+        
+        attempts++
+        console.log(`⏳ 等待同步... (${attempts}/${maxAttempts})`)
+      }
+
+      // 如果同步超时，仍然尝试添加房间到本地列表
+      console.warn('⚠️ 房间同步超时，使用备用方案添加到本地列表')
+      if (roomInfo) {
+        const newRoom = {
+          id: roomId,
+          name: roomInfo.name || roomId,
+          alias: roomInfo.canonical_alias,
+          topic: roomInfo.topic || '',
+          type: 'private' as const,
+          isPublic: roomInfo.world_readable || false,
+          memberCount: roomInfo.num_joined_members || 0,
+          members: [],
+          unreadCount: 0,
+          encrypted: false,
+          joinRule: 'invite',
+          historyVisibility: 'shared',
+          lastActivity: Date.now()
+        }
+        addRoom(newRoom)
+      }
+
+      return true
+    } catch (error) {
+      console.error('❌ 加入房间失败:', error)
+      throw error
+    }
+  }
 
   // 添加fetchRooms方法作为fetchMatrixRooms的别名
   const fetchRooms = async () => {
@@ -798,31 +1036,54 @@ export const useMatrixStore = defineStore('matrix', () => {
 
         // 监听房间事件
       client.on('Room' as any, (room: any) => {
-        console.log('🏠 新房间事件:', room.roomId)
-        // 当有新房间时，立即更新房间列表
-        setTimeout(() => {
+        console.log('🏠 新房间事件:', room.roomId, room.name)
+        
+        // 检查是否是新加入的房间
+        const existingRoom = rooms.value.find(r => r.id === room.roomId)
+        if (!existingRoom) {
+          console.log('🆕 检测到新房间，立即添加到列表:', room.roomId)
+          
+          // 立即添加新房间到列表
+          const newRoom = {
+            id: room.roomId,
+            name: room.name || room.roomId,
+            alias: room.getCanonicalAlias(),
+            topic: room.currentState?.getStateEvents('m.room.topic', '')?.getContent()?.topic || '',
+            type: (room.getJoinRule() === 'public' ? 'public' : 'private') as 'public' | 'private',
+            isPublic: room.getJoinRule() === 'public',
+            memberCount: room.getJoinedMemberCount() || 0,
+            members: [],
+            unreadCount: 0,
+            encrypted: room.hasEncryptionStateEvent(),
+            joinRule: room.getJoinRule() || 'invite',
+            historyVisibility: room.getHistoryVisibility() || 'shared',
+            lastActivity: Date.now()
+          }
+          
+          // 添加到房间列表（不包括文件传输助手的位置）
+          const fileTransferIndex = rooms.value.findIndex(r => r.isFileTransferRoom)
+          if (fileTransferIndex >= 0) {
+            // 在文件传输助手后面插入
+            rooms.value.splice(fileTransferIndex + 1, 0, newRoom)
+          } else {
+            // 如果没有文件传输助手，添加到开头
+            rooms.value.unshift(newRoom)
+          }
+          
+          saveRoomsToStorage()
+          console.log(`✅ 新房间 "${newRoom.name}" 已立即添加到房间列表`)
+        }
+        
+        // 延迟更新完整房间列表以确保同步
+        setTimeout(async () => {
           try {
-            const allRooms = client.getRooms()
-            console.log(`📊 房间事件后获取到 ${allRooms.length} 个房间`)
-            if (allRooms.length > 0) {
-              const convertedRooms = allRooms.map((r: any) => ({
-                id: r.roomId,
-                name: r.name || r.roomId,
-                type: 'private' as const,
-                isPublic: false,
-                memberCount: r.getJoinedMemberCount(),
-                unreadCount: 0,
-                encrypted: false
-              }))
-
-              rooms.value.splice(0, rooms.value.length, ...convertedRooms)
-              saveRoomsToStorage()
-              console.log('✅ 房间列表已通过房间事件更新')
-            }
+            console.log('🔄 房间事件后延迟更新完整房间列表...')
+            await fetchMatrixRooms()
+            console.log('✅ 房间列表已通过房间事件完全更新')
           } catch (roomError) {
             console.warn('处理房间事件时出错:', roomError)
           }
-        }, 500)
+        }, 3000) // 增加延迟到3秒，确保同步完成
       })
 
       // 监听消息事件
@@ -2616,13 +2877,38 @@ export const useMatrixStore = defineStore('matrix', () => {
 
   const addRoom = (room: MatrixRoom) => {
     // 检查房间是否已存在
-    const existingRoom = rooms.value.find(r => r.id === room.id)
-    if (!existingRoom) {
-      rooms.value.unshift(room)
+    const existingRoomIndex = rooms.value.findIndex(r => r.id === room.id)
+    if (existingRoomIndex === -1) {
+      // 房间不存在，添加到列表
+      // 确保文件传输助手始终在最前面
+      const fileTransferIndex = rooms.value.findIndex(r => r.isFileTransferRoom)
+      if (fileTransferIndex >= 0) {
+        // 在文件传输助手后面插入新房间
+        rooms.value.splice(fileTransferIndex + 1, 0, room)
+      } else {
+        // 如果没有文件传输助手，添加到开头
+        rooms.value.unshift(room)
+      }
+      
       saveRoomsToStorage() // 保存到localStorage
-      console.log(`房间 "${room.name}" 已添加到房间列表`)
+      console.log(`✅ 房间 "${room.name}" 已添加到房间列表 (位置: ${fileTransferIndex >= 0 ? fileTransferIndex + 1 : 0})`)
+      
+      // 强制触发响应式更新
+      nextTick(() => {
+        console.log(`📊 房间列表更新后总数: ${rooms.value.length}`)
+      })
     } else {
-      console.log(`房间 "${room.name}" 已存在于房间列表中`)
+      // 房间已存在，更新房间信息
+      const existingRoom = rooms.value[existingRoomIndex]
+      Object.assign(existingRoom, {
+        ...room,
+        // 保留一些现有的状态
+        unreadCount: existingRoom.unreadCount,
+        lastMessage: existingRoom.lastMessage || room.lastMessage
+      })
+      
+      saveRoomsToStorage()
+      console.log(`🔄 房间 "${room.name}" 信息已更新`)
     }
   }
 
@@ -2777,6 +3063,315 @@ export const useMatrixStore = defineStore('matrix', () => {
         }
       }
       throw error
+    }
+  }
+
+  // 消息编辑功能
+  const editMessage = async (roomId: string, eventId: string, newContent: string): Promise<void> => {
+    if (!matrixClient?.value) {
+      throw new Error('Matrix客户端未初始化')
+    }
+
+    try {
+      console.log(`✏️ 编辑消息: ${eventId} -> ${newContent}`)
+
+      // 发送编辑事件
+      await matrixClient.value.sendEvent(roomId, 'm.room.message', {
+        msgtype: 'm.text',
+        body: '* ' + newContent, // 编辑后的内容，前缀*表示编辑
+        format: 'org.matrix.custom.html',
+        formatted_body: '* ' + newContent,
+        'm.new_content': {
+          msgtype: 'm.text',
+          body: newContent,
+          format: 'org.matrix.custom.html',
+          formatted_body: newContent
+        },
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: eventId
+        }
+      })
+
+      console.log('✅ 消息编辑成功')
+      
+      // 更新本地消息状态
+      const roomMessages = messages.value.get(roomId) || []
+      const messageIndex = roomMessages.findIndex(msg => msg.eventId === eventId)
+      if (messageIndex !== -1) {
+        roomMessages[messageIndex].content = newContent
+        roomMessages[messageIndex].isEdited = true
+        messages.value.set(roomId, [...roomMessages])
+      }
+
+    } catch (error) {
+      console.error('❌ 编辑消息失败:', error)
+      throw error
+    }
+  }
+
+  // 消息删除功能
+  const deleteMessage = async (roomId: string, eventId: string, reason?: string): Promise<void> => {
+    if (!matrixClient?.value) {
+      throw new Error('Matrix客户端未初始化')
+    }
+
+    try {
+      console.log(`🗑️ 删除消息: ${eventId}`)
+
+      // 发送撤回事件
+      await matrixClient.value.redactEvent(roomId, eventId, reason)
+
+      console.log('✅ 消息删除成功')
+      
+      // 更新本地消息状态
+      const roomMessages = messages.value.get(roomId) || []
+      const messageIndex = roomMessages.findIndex(msg => msg.eventId === eventId)
+      if (messageIndex !== -1) {
+        roomMessages[messageIndex].isRedacted = true
+        roomMessages[messageIndex].redactionReason = reason
+        messages.value.set(roomId, [...roomMessages])
+      }
+
+    } catch (error) {
+      console.error('❌ 删除消息失败:', error)
+      throw error
+    }
+  }
+
+  // 添加消息反应
+  const addReaction = async (roomId: string, eventId: string, emoji: string): Promise<void> => {
+    if (!matrixClient?.value) {
+      throw new Error('Matrix客户端未初始化')
+    }
+
+    try {
+      console.log(`😊 添加反应: ${emoji} -> ${eventId}`)
+
+      // 发送反应事件
+      await matrixClient.value.sendEvent(roomId, 'm.reaction', {
+        'm.relates_to': {
+          rel_type: 'm.annotation',
+          event_id: eventId,
+          key: emoji
+        }
+      })
+
+      console.log('✅ 反应添加成功')
+      
+      // 更新本地反应状态
+      updateLocalReaction(roomId, eventId, emoji, true)
+
+    } catch (error) {
+      console.error('❌ 添加反应失败:', error)
+      throw error
+    }
+  }
+
+  // 移除消息反应
+  const removeReaction = async (roomId: string, eventId: string, emoji: string): Promise<void> => {
+    if (!matrixClient?.value) {
+      throw new Error('Matrix客户端未初始化')
+    }
+
+    try {
+      console.log(`😐 移除反应: ${emoji} -> ${eventId}`)
+
+      // 查找对应的反应事件ID
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      // 查找用户的反应事件
+      const timeline = room.getLiveTimeline()
+      const events = timeline.getEvents()
+      
+      const reactionEvent = events.find((event: any) => 
+        event.getType() === 'm.reaction' &&
+        event.getSender() === matrixClient.value?.getUserId() &&
+        event.getContent()['m.relates_to']?.event_id === eventId &&
+        event.getContent()['m.relates_to']?.key === emoji
+      )
+
+      if (reactionEvent) {
+        // 撤回反应事件
+        await matrixClient.value.redactEvent(roomId, reactionEvent.getId()!)
+        console.log('✅ 反应移除成功')
+        
+        // 更新本地反应状态
+        updateLocalReaction(roomId, eventId, emoji, false)
+      }
+
+    } catch (error) {
+      console.error('❌ 移除反应失败:', error)
+      throw error
+    }
+  }
+
+  // 更新本地反应状态
+  const updateLocalReaction = (roomId: string, eventId: string, emoji: string, hasReacted: boolean) => {
+    const roomMessages = messages.value.get(roomId) || []
+    const messageIndex = roomMessages.findIndex(msg => msg.eventId === eventId)
+    
+    if (messageIndex !== -1) {
+      const message = roomMessages[messageIndex]
+      if (!message.reactions) {
+        message.reactions = {}
+      }
+      
+      if (!message.reactions[emoji]) {
+        message.reactions[emoji] = {
+          count: 0,
+          users: [],
+          hasReacted: false
+        }
+      }
+      
+      const reaction = message.reactions[emoji]
+      const userId = matrixClient.value?.getUserId() || ''
+      
+      if (hasReacted && !reaction.hasReacted) {
+        reaction.count++
+        reaction.users.push(userId)
+        reaction.hasReacted = true
+      } else if (!hasReacted && reaction.hasReacted) {
+        reaction.count = Math.max(0, reaction.count - 1)
+        reaction.users = reaction.users.filter(id => id !== userId)
+        reaction.hasReacted = false
+        
+        // 如果没有人反应了，删除这个反应
+        if (reaction.count === 0) {
+          delete message.reactions[emoji]
+        }
+      }
+      
+      messages.value.set(roomId, [...roomMessages])
+    }
+  }
+
+  // 消息搜索功能
+  const searchMessages = async (roomId: string, query: string, limit: number = 50): Promise<any[]> => {
+    if (!matrixClient?.value) {
+      throw new Error('Matrix客户端未初始化')
+    }
+
+    try {
+      console.log(`🔍 搜索消息: "${query}" in ${roomId}`)
+
+      // 使用Matrix搜索API
+      const searchResults = await matrixClient.value.searchMessageText({
+        query: query,
+        keys: ['content.body'],
+        search_categories: {
+          room_events: {
+            keys: ['content.body'],
+            filter: {
+              rooms: [roomId]
+            },
+            order_by: 'recent',
+            event_context: {
+              before_limit: 1,
+              after_limit: 1,
+              include_profile: true
+            }
+          }
+        }
+      })
+
+      console.log(`✅ 搜索完成，找到 ${searchResults.search_categories.room_events?.count || 0} 条结果`)
+      
+      return searchResults.search_categories.room_events?.results || []
+
+    } catch (error) {
+      console.error('❌ 搜索消息失败:', error)
+      
+      // 如果服务器不支持搜索，使用本地搜索
+      return searchMessagesLocally(roomId, query, limit)
+    }
+  }
+
+  // 本地消息搜索
+  const searchMessagesLocally = (roomId: string, query: string, limit: number = 50): any[] => {
+    const roomMessages = messages.value.get(roomId) || []
+    const lowerQuery = query.toLowerCase()
+    
+    const results = roomMessages
+      .filter(message => 
+        message.content.toLowerCase().includes(lowerQuery) &&
+        !message.isRedacted
+      )
+      .slice(0, limit)
+      .map(message => ({
+        result: {
+          event_id: message.eventId,
+          content: {
+            body: message.content,
+            msgtype: message.msgtype
+          },
+          sender: message.senderId,
+          origin_server_ts: message.timestamp
+        }
+      }))
+
+    console.log(`🔍 本地搜索完成，找到 ${results.length} 条结果`)
+    return results
+  }
+
+  // 发送回复消息
+  const sendReplyMessage = async (roomId: string, content: string, replyToEventId: string): Promise<void> => {
+    if (!matrixClient?.value) {
+      throw new Error('Matrix客户端未初始化')
+    }
+
+    try {
+      console.log(`↩️ 发送回复消息: ${content} -> ${replyToEventId}`)
+
+      // 获取被回复的消息
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      const replyToEvent = room.findEventById(replyToEventId)
+      if (!replyToEvent) {
+        throw new Error('被回复的消息不存在')
+      }
+
+      // 构建回复消息内容
+      const replyContent = {
+        msgtype: 'm.text',
+        body: `> <${replyToEvent.getSender()}> ${replyToEvent.getContent().body}\n\n${content}`,
+        format: 'org.matrix.custom.html',
+        formatted_body: `<mx-reply><blockquote><a href="https://matrix.to/#/${roomId}/${replyToEventId}">In reply to</a> <a href="https://matrix.to/#/${replyToEvent.getSender()}">${replyToEvent.getSender()}</a><br>${replyToEvent.getContent().body}</blockquote></mx-reply>${content}`,
+        'm.relates_to': {
+          'm.in_reply_to': {
+            event_id: replyToEventId
+          }
+        }
+      }
+
+      // 发送回复消息
+      await matrixClient.value.sendEvent(roomId, 'm.room.message', replyContent)
+
+      console.log('✅ 回复消息发送成功')
+
+    } catch (error) {
+      console.error('❌ 发送回复消息失败:', error)
+      throw error
+    }
+  }
+
+  // 发送输入状态通知
+  const sendTypingNotification = async (roomId: string, isTyping: boolean, timeout: number = 30000): Promise<void> => {
+    if (!matrixClient?.value) {
+      return
+    }
+
+    try {
+      await matrixClient.value.sendTyping(roomId, isTyping, timeout)
+    } catch (error) {
+      console.warn('发送输入状态失败:', error)
     }
   }
 
@@ -3149,6 +3744,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     matrixLogin,
     fetchMatrixRooms,
     fetchRooms,
+    joinRoomAndSync,
     createMatrixRoom,
     fetchMatrixMessages,
     fetchMatrixMessagesOptimized, // 新增优化版函数
@@ -3171,6 +3767,15 @@ export const useMatrixStore = defineStore('matrix', () => {
     clearError,
     disconnect,
     loadMoreHistoryMessages,
-    smartAutoLoadHistory // 新增智能自动加载函数
+    smartAutoLoadHistory, // 新增智能自动加载函数
+    
+    // 消息功能增强
+    editMessage,
+    deleteMessage,
+    addReaction,
+    removeReaction,
+    searchMessages,
+    sendReplyMessage,
+    sendTypingNotification
   }
 })

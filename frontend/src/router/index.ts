@@ -54,6 +54,11 @@ const router = createRouter({
       component: () => import('@/pages/PerformanceTestPage.vue')
     },
     {
+      path: '/message-features-test',
+      name: 'message-features-test',
+      component: () => import('@/pages/MessageFeaturesTestPage.vue')
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       redirect: '/login'
@@ -88,7 +93,7 @@ router.beforeEach(async (to, from, next) => {
     } else {
       next()
     }
-  } else if (to.path === '/chat' || to.path === '/encryption-settings' || to.path === '/device-verification' || to.path === '/encryption-test' || to.path === '/crypto-debug' || to.path === '/matrix-test' || to.path === '/performance-test') {
+  } else if (to.path === '/chat' || to.path === '/encryption-settings' || to.path === '/device-verification' || to.path === '/encryption-test' || to.path === '/crypto-debug' || to.path === '/matrix-test' || to.path === '/performance-test' || to.path === '/message-features-test') {
     // 如果没有登录，重定向到登录页面
     // 暂时只检查token，不检查login info（因为可能在初始化过程中被清除）
     if (!hasTokenAfterDelay) {
