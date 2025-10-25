@@ -29,6 +29,11 @@ const router = createRouter({
       component: () => import('@/pages/DeviceVerificationPage.vue')
     },
     {
+      path: '/security-audit',
+      name: 'security-audit',
+      component: () => import('@/pages/SecurityAuditPage.vue')
+    },
+    {
       path: '/encryption-test',
       name: 'encryption-test',
       component: () => import('@/pages/EncryptionTest.vue')
