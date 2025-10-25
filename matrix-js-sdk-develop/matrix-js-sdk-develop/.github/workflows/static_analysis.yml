@@ -1,0 +1,173 @@
+name: Static Analysis
+on:
+    pull_request: {}
+    merge_group:
+        types: [checks_requested]
+    push:
+        branches: [develop, master]
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+permissions: {} # No permissions needed
+jobs:
+    ts_lint:
+        name: "Typescript Syntax Check"
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+            - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+              with:
+                  cache: "yarn"
+                  node-version-file: package.json
+
+            - name: Install Deps
+              run: "yarn install"
+
+            - name: Typecheck
+              run: "yarn run lint:types"
+
+    js_lint:
+        name: "ESLint"
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+            - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+              with:
+                  cache: "yarn"
+                  node-version-file: package.json
+
+            - name: Install Deps
+              run: "yarn install"
+
+            - name: Run Linter
+              run: "yarn run lint:js"
+
+    node_example_lint:
+        name: "Node.js example"
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+            - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+              with:
+                  cache: "yarn"
+                  node-version-file: package.json
+
+            - name: Install Deps
+              run: "yarn install"
+
+            - name: Build Types
+              run: "yarn build:types"
+
+            - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+              with:
+                  cache: "npm"
+                  node-version-file: "examples/node/package.json"
+                  # cache-dependency-path: '**/package-lock.json'
+
+            - name: Install Example Deps
+              run: "npm install"
+              working-directory: "examples/node"
+
+            - name: Check Syntax
+              run: "node --check app.js"
+              working-directory: "examples/node"
+
+            - name: Typecheck
+              run: "npx tsc"
+              working-directory: "examples/node"
+
+    workflow_lint:
+        name: "Workflow Lint"
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+            - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+              with:
+                  cache: "yarn"
+                  node-version-file: package.json
+
+            - name: Install Deps
+              run: "yarn install --frozen-lockfile"
+
+            - name: Run Linter
+              run: "yarn lint:workflows"
+
+    docs:
+        name: "JSDoc Checker"
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+            - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+              with:
+                  cache: "yarn"
+                  node-version-file: package.json
+
+            - name: Install Deps
+              run: "yarn install"
+
+            - name: Generate Docs
+              run: "yarn run gendoc --treatWarningsAsErrors --suppressCommentWarningsInDeclarationFiles"
+
+            - name: Upload Artifact
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+              with:
+                  name: docs
+                  path: _docs
+                  # We'll only use this in a workflow_run, then we're done with it
+                  retention-days: 1
+
+    analyse_dead_code:
+        name: "Analyse Dead Code"
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+            - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+              with:
+                  cache: "yarn"
+                  node-version-file: package.json
+
+            - name: Install Deps
+              run: "yarn install --frozen-lockfile"
+
+            - name: Run linter
+              run: "yarn run lint:knip"
+
+    element-web:
+        name: Downstream tsc element-web
+        if: github.event_name == 'merge_group'
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+              with:
+                  repository: element-hq/element-web
+
+            - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+              with:
+                  cache: "yarn"
+                  node-version: "lts/*"
+
+            - name: Install Dependencies
+              run: "./scripts/layered.sh"
+              env:
+                  # tell layered.sh to check out the right sha of the JS-SDK
+                  JS_SDK_GITHUB_BASE_REF: ${{ github.sha }}
+
+            - name: Typecheck
+              run: "yarn run lint:types"
+
+    # Hook for branch protection to skip downstream typechecking outside of merge queues
+    downstream:
+        name: Downstream Typescript Syntax Check
+        runs-on: ubuntu-24.04
+        if: always()
+        needs:
+            - element-web
+        steps:
+            - if: needs.element-web.result != 'skipped' && needs.element-web.result != 'success'
+              run: exit 1

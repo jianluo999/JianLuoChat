@@ -1,16 +1,25 @@
 {
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
-    "@matrix-org/matrix-sdk-crypto-wasm": "^15.0.0",
+    "@matrix-org/matrix-sdk-crypto-wasm": "^15.3.0",
     "@pinia/nuxt": "^0.11.1",
     "@types/socket.io-client": "^1.4.36",
     "axios": "^1.10.0",
     "date-fns": "^4.1.0",
     "element-plus": "^2.10.4",
-    "matrix-js-sdk": "^37.10.0",
+    "matrix-js-sdk": "^39.0.0",
     "pinia": "^3.0.3",
     "socket.io-client": "^4.8.1",
     "vue-i18n": "^9.14.4",
-    "vue-router": "^4.5.1"
+    "vue-router": "^4.5.1",
+    "matrix-events-sdk": "0.0.1",
+    "matrix-widget-api": "^1.10.0",
+    "oidc-client-ts": "^3.0.1",
+    "jwt-decode": "^4.0.0",
+    "bs58": "^6.0.0",
+    "uuid": "13",
+    "p-retry": "7",
+    "sdp-transform": "^2.14.1",
+    "unhomoglyph": "^1.0.6"
   }
 }

@@ -1,0 +1,109 @@
+name: Release Process
+on:
+    workflow_dispatch:
+        inputs:
+            mode:
+                description: What type of release
+                required: true
+                default: rc
+                type: choice
+                options:
+                    - rc
+                    - final
+            docs:
+                description: Publish docs
+                required: true
+                type: boolean
+                default: true
+            npm:
+                description: Publish to npm
+                required: true
+                type: boolean
+                default: true
+concurrency: ${{ github.workflow }}
+permissions: {} # No permissions required
+jobs:
+    release:
+        uses: matrix-org/matrix-js-sdk/.github/workflows/release-make.yml@develop
+        permissions:
+            contents: write
+            issues: write
+            pull-requests: read
+            id-token: write
+        secrets: inherit
+        with:
+            final: ${{ inputs.mode == 'final' }}
+            npm: ${{ inputs.npm }}
+
+    bump-downstreams:
+        name: Update npm dependency in downstream projects
+        needs: release
+        runs-on: ubuntu-24.04
+        strategy:
+            matrix:
+                repo:
+                    - element-hq/element-web
+        steps:
+            - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+              with:
+                  repository: ${{ matrix.repo }}
+                  ref: staging
+                  token: ${{ secrets.ELEMENT_BOT_TOKEN }}
+
+            - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+              with:
+                  cache: "yarn"
+                  node-version: "lts/*"
+
+            - name: Bump dependency
+              env:
+                  DEPENDENCY: ${{ needs.release.outputs.npm-id }}
+              run: |
+                  git config --global user.email "releases@riot.im"
+                  git config --global user.name "RiotRobot"
+                  yarn upgrade "$DEPENDENCY" --exact
+                  git add package.json yarn.lock
+                  git commit -am"Upgrade dependency to $DEPENDENCY"
+                  git push origin staging
+
+    docs:
+        name: Publish Documentation
+        needs: release
+        if: inputs.docs
+        runs-on: ubuntu-24.04
+        steps:
+            - name: 🧮 Checkout code
+              uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+            - name: 🔧 Yarn cache
+              uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+              with:
+                  cache: "yarn"
+                  node-version-file: package.json
+
+            - name: 🔨 Install dependencies
+              run: "yarn install --frozen-lockfile"
+
+            - name: 📖 Generate docs
+              run: yarn gendoc
+
+            - name: Upload artifact
+              uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+              with:
+                  path: _docs
+
+    docs-deploy:
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        runs-on: ubuntu-24.04
+        needs: docs
+        # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+        permissions:
+            contents: read
+            pages: write
+            id-token: write
+        steps:
+            - name: Deploy to GitHub Pages
+              id: deployment
+              uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
