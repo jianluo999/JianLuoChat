@@ -713,11 +713,17 @@ export const useMatrixStore = defineStore('matrix', () => {
       client.on('sync' as any, (state: string, prevState: string, data: any) => {
         try {
           console.log(`🔄 Matrix同步状态变化: ${prevState} -> ${state}`, data)
-          connection.value.syncState = { isActive: state === 'SYNCING' }
-
-          // 当同步完成时，尝试获取房间
+          
+          // 安全处理同步状态
           if (state === 'SYNCING' || state === 'PREPARED') {
-            console.log('✅ 同步状态良好，尝试获取房间...')
+            connection.value.syncState = {
+              isActive: true,
+              lastSync: Date.now(),
+              nextBatch: data?.response?.next_batch || connection.value.syncState.nextBatch
+            }
+            console.log('✅ 同步状态良好，客户端正在运行')
+            
+            // 当同步完成时，尝试获取房间
             setTimeout(() => {
               try {
                 const clientRooms = client.getRooms()
@@ -743,9 +749,35 @@ export const useMatrixStore = defineStore('matrix', () => {
                 console.warn('获取房间时出错:', roomError)
               }
             }, 1000)
-          } else if (state === 'SYNCING' && prevState !== 'SYNCING') {
+          } else if (state === 'ERROR') {
+            console.error('❌ 同步错误:', data?.error)
+            connection.value.syncState = {
+              isActive: false,
+              syncError: data?.error?.errcode || data?.error?.message || 'Unknown sync error'
+            }
+            
+            // 尝试重启同步
+            setTimeout(() => {
+              console.log('🔄 尝试重启同步...')
+              try {
+                client.startClient({
+                  initialSyncLimit: 200,
+                  lazyLoadMembers: true
+                })
+              } catch (restartError) {
+                console.error('重启同步失败:', restartError)
+              }
+            }, 5000)
+          } else if (state === 'STOPPED') {
+            console.log('⏹️ 同步已停止')
+            connection.value.syncState = { isActive: false }
+          } else {
+            connection.value.syncState = { isActive: state === 'SYNCING' }
+          }
+
+          // 首次同步完成时，立即更新房间列表
+          if (state === 'PREPARED' && prevState !== 'PREPARED') {
             console.log('🎯 首次同步完成，强制更新房间列表')
-            // 首次同步完成时，立即更新房间列表
             setTimeout(async () => {
               try {
                 await fetchMatrixRooms()
@@ -755,8 +787,12 @@ export const useMatrixStore = defineStore('matrix', () => {
               }
             }, 2000)
           }
-        } catch (syncError) {
+        } catch (syncError: any) {
           console.error('❌ 同步事件处理失败:', syncError)
+          connection.value.syncState = {
+            isActive: false,
+            syncError: syncError.message || 'Unknown sync error'
+          }
         }
       })
 
@@ -808,7 +844,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       console.log('🚀 启动Matrix客户端...')
       try {
         await client.startClient({
-          initialSyncLimit: 200, // 增加到200条历史消息
+          initialSyncLimit: 2000, // 增加到2000条历史消息
           lazyLoadMembers: true
         })
         console.log('✅ Matrix客户端启动命令已发送')
@@ -816,6 +852,32 @@ export const useMatrixStore = defineStore('matrix', () => {
         // 立即检查同步状态
         const immediateState = client.getSyncState()
         console.log('📊 启动后立即检查同步状态:', immediateState)
+
+        // 如果同步状态不佳，等待一段时间让同步开始
+        if (immediateState === null || immediateState === 'STOPPED') {
+          console.log('⏳ 初始同步状态不佳，等待同步开始...')
+          await new Promise(resolve => setTimeout(resolve, 3000))
+          
+          // 再次检查状态
+          const newState = client.getSyncState()
+          console.log('📊 3秒后同步状态:', newState)
+          
+          if (newState === null || newState === 'STOPPED') {
+            console.warn('⚠️ 同步仍未开始，尝试重新启动客户端...')
+            try {
+              // 尝试重新启动客户端
+              await client.stopClient()
+              await new Promise(resolve => setTimeout(resolve, 1000))
+              await client.startClient({
+                initialSyncLimit: 200,
+                lazyLoadMembers: true
+              })
+              console.log('✅ 重新启动客户端成功')
+            } catch (restartError) {
+              console.warn('重新启动客户端失败:', restartError)
+            }
+          }
+        }
 
       } catch (startError) {
         console.error('❌ 启动Matrix客户端失败:', startError)
@@ -1038,9 +1100,11 @@ export const useMatrixStore = defineStore('matrix', () => {
               } as any
 
               // 更新消息内容显示
-              newMessage.content = `${isImage ? '🖼️' : '📎'} ${newMessage.fileInfo.name}`
-              if (newMessage.fileInfo.size > 0) {
-                newMessage.content += ` (${formatFileSize(newMessage.fileInfo.size)})`
+              if (newMessage.fileInfo) {
+                newMessage.content = `${isImage ? '🖼️' : '📎'} ${newMessage.fileInfo.name}`
+                if (newMessage.fileInfo.size > 0) {
+                  newMessage.content += ` (${formatFileSize(newMessage.fileInfo.size)})`
+                }
               }
 
               console.log('✅ 文件信息已设置:', newMessage.fileInfo)
@@ -1584,7 +1648,7 @@ export const useMatrixStore = defineStore('matrix', () => {
         console.log('🚀 客户端未运行，尝试启动...')
         try {
           await matrixClient.value.startClient({
-            initialSyncLimit: 200, // 增加初始同步限制到200条
+            initialSyncLimit: 1000, // 增加初始同步限制到1000条
             lazyLoadMembers: true
           })
           console.log('✅ 客户端启动成功')
@@ -1633,7 +1697,7 @@ export const useMatrixStore = defineStore('matrix', () => {
 
             // 重新启动客户端
             await matrixClient.value.startClient({
-              initialSyncLimit: 200, // 增加同步限制到200条
+              initialSyncLimit: 2000, // 增加同步限制到2000条
               lazyLoadMembers: true
             })
             console.log('✅ 客户端重新启动成功')
@@ -1851,7 +1915,7 @@ export const useMatrixStore = defineStore('matrix', () => {
   }
 
   // Matrix消息管理
-  const fetchMatrixMessages = async (roomId: string, limit = 200) => {
+  const fetchMatrixMessages = async (roomId: string, limit = 200, autoLoadMore = true) => {
     try {
       if (!matrixClient.value) {
         console.error('Matrix客户端未初始化')
@@ -1996,12 +2060,24 @@ export const useMatrixStore = defineStore('matrix', () => {
         let events = timeline.getEvents()
 
         // 如果事件很少，尝试加载更多历史消息
-        if (events.length < 10) {
+        if (events.length < 20) {
           console.log(`📚 当前事件较少(${events.length}条)，尝试加载更多历史消息...`)
           try {
-            await matrixClient.value.scrollback(room, 30)
+            await matrixClient.value.scrollback(room, 200)
             events = timeline.getEvents()
             console.log(`📚 加载历史消息后，共有 ${events.length} 条事件`)
+            
+            // 如果仍然很少，继续加载更多
+            if (events.length < 50) {
+              console.log(`📚 事件仍然较少(${events.length}条)，继续加载更多历史消息...`)
+              try {
+                await matrixClient.value.scrollback(room, 500)
+                events = timeline.getEvents()
+                console.log(`📚 再次加载历史消息后，共有 ${events.length} 条事件`)
+              } catch (scrollError2) {
+                console.warn('第二次加载历史消息失败:', scrollError2)
+              }
+            }
           } catch (scrollError) {
             console.warn('加载历史消息失败:', scrollError)
           }
@@ -2093,6 +2169,20 @@ export const useMatrixStore = defineStore('matrix', () => {
 
       messages.value.set(roomId, roomMessages)
       console.log(`✅ 房间 ${roomId} 消息加载完成，共 ${roomMessages.length} 条`)
+
+      // 如果启用了自动加载更多，且消息数量较少，自动分页加载
+      if (autoLoadMore && roomMessages.length < 50) {
+        console.log(`🔄 检测到消息数量较少(${roomMessages.length}条)，启动自动分页加载...`)
+        try {
+          await autoLoadMoreHistory(roomId, 1000) // 尝试加载最多1000条消息
+          // 重新获取更新后的消息
+          const updatedMessages = messages.value.get(roomId) || []
+          console.log(`✅ 自动分页加载后，房间 ${roomId} 共有 ${updatedMessages.length} 条消息`)
+        } catch (error) {
+          console.warn('⚠️ 自动分页加载失败:', error)
+        }
+      }
+
       return roomMessages
     } catch (err: any) {
       error.value = 'Failed to fetch Matrix messages'
@@ -2571,7 +2661,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       console.log(`📊 当前时间线事件数量: ${currentEventCount}`)
 
       // 使用 scrollback 方法加载更多历史消息
-      const limit = 100 // 每次加载100条
+      const limit = 500 // 增加到每次加载500条
       console.log(`🔄 开始加载 ${limit} 条历史消息...`)
 
       await matrixClient.value.scrollback(room, limit)
@@ -2638,9 +2728,11 @@ export const useMatrixStore = defineStore('matrix', () => {
                 } as any
 
                 // 更新消息内容显示
-                message.content = `${isImage ? '🖼️' : '📎'} ${message.fileInfo.name}`
-                if (message.fileInfo.size > 0) {
-                  message.content += ` (${formatFileSize(message.fileInfo.size)})`
+                if (message.fileInfo) {
+                  message.content = `${isImage ? '🖼️' : '📎'} ${message.fileInfo.name}`
+                  if (message.fileInfo.size > 0) {
+                    message.content += ` (${formatFileSize(message.fileInfo.size)})`
+                  }
                 }
               }
             }
@@ -2688,6 +2780,333 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
+  // 自动分页加载历史消息
+  const autoLoadMoreHistory = async (roomId: string, maxMessages: number = 2000): Promise<void> => {
+    if (!matrixClient?.value) {
+      console.error('Matrix客户端未初始化')
+      return
+    }
+
+    try {
+      console.log(`🔄 开始自动分页加载房间 ${roomId} 的历史消息...`)
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('找不到房间')
+      }
+
+      let totalMessages = 0
+      const messagesPerBatch = 500 // 增加到每批加载500条
+
+      // 持续加载直到达到最大数量或无法加载更多
+      while (totalMessages < maxMessages) {
+        const currentEventCount = room.getLiveTimeline().getEvents().length
+        console.log(`📊 当前消息数量: ${currentEventCount}, 已加载: ${totalMessages}, 目标: ${maxMessages}`)
+
+        if (currentEventCount >= maxMessages) {
+          console.log('✅ 已达到目标消息数量，停止加载')
+          break
+        }
+
+        const messagesToLoad = Math.min(messagesPerBatch, maxMessages - totalMessages)
+        console.log(`🔄 开始加载 ${messagesToLoad} 条消息...`)
+
+        try {
+          await matrixClient.value.scrollback(room, messagesToLoad)
+          const newEventCount = room.getLiveTimeline().getEvents().length
+          const newlyLoaded = newEventCount - currentEventCount
+          
+          if (newlyLoaded === 0) {
+            console.log('📚 已到达消息历史的开始，停止加载')
+            break
+          }
+
+          totalMessages += newlyLoaded
+          console.log(`✅ 成功加载了 ${newlyLoaded} 条新消息，累计: ${totalMessages}`)
+          
+          // 短暂延迟避免服务器压力
+          await new Promise(resolve => setTimeout(resolve, 500))
+
+        } catch (scrollError: any) {
+          console.warn('⚠️ 加载批次消息失败:', scrollError)
+          // 如果是无法加载更多，停止循环
+          if (scrollError?.message && (scrollError.message.includes('scrollback') || scrollError.message.includes('start'))) {
+            console.log('📚 已到达消息历史的开始，停止加载')
+            break
+          }
+        }
+      }
+
+      console.log(`🎉 自动分页加载完成，总共加载了 ${totalMessages} 条消息`)
+    } catch (error) {
+      console.error('❌ 自动分页加载历史消息失败:', error)
+    }
+  }
+
+  // 智能自动加载历史消息
+  const smartAutoLoadHistory = async (roomId: string): Promise<void> => {
+    if (!matrixClient?.value) {
+      console.error('Matrix客户端未初始化')
+      return
+    }
+
+    try {
+      console.log(`🧠 开始智能自动加载房间 ${roomId} 的历史消息...`)
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('找不到房间')
+      }
+
+      const timeline = room.getLiveTimeline()
+      const currentEventCount = timeline.getEvents().length
+      console.log(`📊 当前消息数量: ${currentEventCount}`)
+
+      // 如果消息少于20条，说明可能是新房间或同步不完整，进行深度加载
+      if (currentEventCount < 20) {
+        console.log('🔍 检测到消息数量极少，启动深度加载模式...')
+        await autoLoadMoreHistory(roomId, 3000) // 加载最多3000条
+      }
+      // 如果消息在20-100条之间，进行中等加载
+      else if (currentEventCount < 100) {
+        console.log('🔍 检测到消息数量较少，启动中等加载模式...')
+        await autoLoadMoreHistory(roomId, 1500) // 加载最多1500条
+      }
+      // 如果消息在100-500条之间，进行轻量加载
+      else if (currentEventCount < 500) {
+        console.log('🔍 检测到消息数量一般，启动轻量加载模式...')
+        await autoLoadMoreHistory(roomId, 800) // 加载最多800条
+      }
+      // 如果消息超过500条，说明已经加载了足够多的历史消息
+      else {
+        console.log('✅ 已经加载了足够多的历史消息，跳过自动加载')
+      }
+    } catch (error) {
+      console.error('❌ 智能自动加载历史消息失败:', error)
+    }
+  }
+
+  // 优化的fetchMatrixMessages函数
+  const fetchMatrixMessagesOptimized = async (roomId: string, limit = 200, autoLoadMore = true) => {
+    try {
+      if (!matrixClient.value) {
+        console.error('Matrix客户端未初始化')
+        return []
+      }
+
+      console.log(`🚀 优化版开始加载房间消息: ${roomId}`)
+
+      let roomMessages: MatrixMessage[] = []
+
+      // 特殊处理文件传输助手
+      if (roomId === FILE_TRANSFER_ROOM_ID) {
+        console.log('📁 加载文件传输助手消息')
+        if (messages.value.has(roomId)) {
+          return messages.value.get(roomId) || []
+        }
+
+        const welcomeMessage: MatrixMessage = {
+          id: 'welcome-msg-' + Date.now(),
+          sender: 'system',
+          content: '欢迎使用文件传输助手！\n\n您可以在这里：\n• 发送文件和图片\n• 保存重要消息\n• 进行文件管理\n\n开始发送您的第一个文件吧！',
+          timestamp: Date.now(),
+          roomId: roomId,
+          type: 'm.room.message'
+        }
+
+        const welcomeMessages = [welcomeMessage]
+        messages.value.set(roomId, welcomeMessages)
+        return welcomeMessages
+      }
+
+      if (roomId === 'world') {
+        // 世界频道消息从后端API获取
+        try {
+          const response = await matrixAPI.getWorldChannelMessages()
+          if (response.data && Array.isArray(response.data)) {
+            roomMessages = response.data.map((msg: any) => ({
+              id: msg.id,
+              roomId: 'world',
+              content: msg.content,
+              sender: msg.sender,
+              senderName: msg.sender,
+              timestamp: msg.timestamp,
+              type: 'm.room.message',
+              eventId: msg.id,
+              encrypted: false,
+              status: 'sent' as const
+            }))
+          } else if (response.data && response.data.messages) {
+            roomMessages = response.data.messages.map((msg: any) => ({
+              id: msg.id,
+              roomId: 'world',
+              content: msg.content,
+              sender: msg.sender,
+              senderName: msg.sender,
+              timestamp: msg.timestamp,
+              type: 'm.room.message',
+              eventId: msg.id,
+              encrypted: false,
+              status: 'sent' as const
+            }))
+          }
+        } catch (error) {
+          console.error('Failed to fetch world channel messages:', error)
+          roomMessages = []
+        }
+      } else {
+        let room = matrixClient.value.getRoom(roomId)
+
+        // 如果房间不存在，可能是刚创建的房间，等待同步
+        if (!room) {
+          console.log(`❌ 房间 ${roomId} 暂时不存在，等待同步...`)
+          const syncState = matrixClient.value.getSyncState()
+          console.log(`📊 当前同步状态: ${syncState}`)
+
+          if (syncState === 'SYNCING' || syncState === 'PREPARED') {
+            console.log('⏳ 正在同步中，等待同步完成...')
+            await new Promise(resolve => {
+              const checkSync = () => {
+                const currentState = matrixClient.value.getSyncState()
+                if (currentState === 'SYNCING' || currentState === 'PREPARED') {
+                  setTimeout(checkSync, 500)
+                } else {
+                  resolve(true)
+                }
+              }
+              checkSync()
+              setTimeout(() => resolve(true), 10000)
+            })
+          }
+
+          // 再次尝试获取房间
+          room = matrixClient.value.getRoom(roomId)
+          if (!room) {
+            console.warn(`房间 ${roomId} 仍然不存在，尝试刷新房间列表`)
+            try {
+              await fetchMatrixRooms()
+              room = matrixClient.value.getRoom(roomId)
+            } catch (refreshError) {
+              console.error('刷新房间列表失败:', refreshError)
+            }
+          }
+
+          if (!room) {
+            console.warn(`❌ 房间 ${roomId} 最终未找到`)
+            return []
+          }
+        }
+
+        // 检查房间权限和状态
+        console.log(`🏠 房间信息:`, {
+          roomId,
+          name: room.name,
+          myMembership: room.getMyMembership(),
+          canSendMessage: room.maySendMessage(),
+          memberCount: room.getJoinedMemberCount()
+        })
+
+        // 获取房间的时间线事件
+        const timeline = room.getLiveTimeline()
+        let events = timeline.getEvents()
+
+        // 如果事件很少，尝试加载更多历史消息
+        if (events.length < 20) {
+          console.log(`📚 当前事件较少(${events.length}条)，启动智能加载...`)
+          try {
+            // 先尝试加载500条
+            await matrixClient.value.scrollback(room, 500)
+            events = timeline.getEvents()
+            console.log(`📚 加载历史消息后，共有 ${events.length} 条事件`)
+            
+            // 如果仍然很少，继续加载更多
+            if (events.length < 50) {
+              console.log(`📚 事件仍然较少(${events.length}条)，继续加载更多历史消息...`)
+              try {
+                await matrixClient.value.scrollback(room, 1000)
+                events = timeline.getEvents()
+                console.log(`📚 再次加载历史消息后，共有 ${events.length} 条事件`)
+              } catch (scrollError2) {
+                console.warn('第二次加载历史消息失败:', scrollError2)
+              }
+            }
+          } catch (scrollError) {
+            console.warn('加载历史消息失败:', scrollError)
+          }
+        }
+
+        if (events && events.length > 0) {
+          console.log(`📨 获取到 ${events.length} 条事件`)
+          const messageEvents = events.filter((event: any) => event.getType() === 'm.room.message')
+          console.log(`💬 消息事件数量: ${messageEvents.length}`)
+
+          roomMessages = messageEvents
+            .map((event: any) => {
+              const eventContent = event.getContent()
+              const content = eventContent?.body || eventContent?.formatted_body || ''
+
+              const message: MatrixMessage = {
+                id: event.getId(),
+                roomId,
+                content,
+                sender: event.getSender(),
+                senderName: event.getSender(),
+                timestamp: event.getTs(),
+                type: event.getType(),
+                eventId: event.getId(),
+                encrypted: !!eventContent?.algorithm,
+                status: 'sent' as const
+              }
+
+              // 处理文件消息
+              if (eventContent?.msgtype === 'm.image' || eventContent?.msgtype === 'm.file') {
+                const isImage = eventContent.msgtype === 'm.image'
+                const fileUrl = eventContent.url ? matrixClient.value?.mxcUrlToHttp(eventContent.url) : null
+
+                if (fileUrl) {
+                  message.fileInfo = {
+                    name: eventContent.filename || eventContent.body || 'Unknown file',
+                    size: eventContent.info?.size || 0,
+                    type: eventContent.info?.mimetype || 'application/octet-stream',
+                    url: fileUrl,
+                    isImage
+                  }
+
+                  message.content = `${isImage ? '🖼️' : '📎'} ${message.fileInfo.name}`
+                  if (message.fileInfo.size > 0) {
+                    message.content += ` (${formatFileSize(message.fileInfo.size)})`
+                  }
+                }
+              }
+
+              return message
+            })
+            .slice(-limit)
+        }
+      }
+
+      messages.value.set(roomId, roomMessages)
+      console.log(`✅ 房间 ${roomId} 消息加载完成，共 ${roomMessages.length} 条`)
+
+      // 如果启用了自动加载更多，且消息数量较少，启动智能自动加载
+      if (autoLoadMore && roomMessages.length < 100) {
+        console.log(`🔄 检测到消息数量较少(${roomMessages.length}条)，启动智能自动加载...`)
+        try {
+          await smartAutoLoadHistory(roomId)
+          const updatedMessages = messages.value.get(roomId) || []
+          console.log(`✅ 智能自动加载后，房间 ${roomId} 共有 ${updatedMessages.length} 条消息`)
+        } catch (error) {
+          console.warn('⚠️ 智能自动加载失败:', error)
+        }
+      }
+
+      return roomMessages
+    } catch (err: any) {
+      error.value = 'Failed to fetch Matrix messages'
+      console.error('Error fetching Matrix messages:', err)
+      messages.value.set(roomId, [])
+      return []
+    }
+  }
+
   return {
     // Matrix状态
     connection,
@@ -2732,6 +3151,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     fetchRooms,
     createMatrixRoom,
     fetchMatrixMessages,
+    fetchMatrixMessagesOptimized, // 新增优化版函数
     sendMatrixMessage,
     uploadFileToMatrix,
     sendFileMessage,
@@ -2750,6 +3170,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     addRoom,
     clearError,
     disconnect,
-    loadMoreHistoryMessages
+    loadMoreHistoryMessages,
+    smartAutoLoadHistory // 新增智能自动加载函数
   }
 })
