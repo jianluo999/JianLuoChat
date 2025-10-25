@@ -218,7 +218,7 @@ const availableServers = ref([
   { name: 'libera.chat', label: 'Libera.Chat', description: 'IRC桥接服务器' },
   { name: 'tchncs.de', label: 'tchncs.de', description: '德国的社区服务器' },
   { name: 'envs.net', label: 'envs.net', description: '环境友好的社区服务器' },
-  { name: 'nitro.chat', label: 'Nitro.chat', description: '高性能Matrix服务器' }
+  { name: 'nitro.chat', label: 'Nitro.chat', description: '高性能Matrix服务器' },
 ])
 
 // 计算属性
@@ -406,7 +406,7 @@ const joinRoom = async (room) => {
             name: room.name || room.canonical_alias || room.room_id,
             alias: room.canonical_alias,
             topic: room.topic,
-            type: 'private' as const,
+            type: 'private',
             isPublic: room.world_readable || true,
             memberCount: room.num_joined_members || 0,
             members: [],

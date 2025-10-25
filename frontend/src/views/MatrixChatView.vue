@@ -1656,7 +1656,8 @@ onMounted(async () => {
 
 /* v39 演示按钮样式 */
 .v39-demo-button {
-  background: linear-
+  background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+}
 
 /* 加密设置模态框样式 */
 .encryption-modal {

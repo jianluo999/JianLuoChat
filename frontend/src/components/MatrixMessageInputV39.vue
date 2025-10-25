@@ -576,7 +576,8 @@ onUnmounted(() => {
     clearTimeout(typingTimeout.value)
   }
 })
-</script><
+</script>
+
 style scoped>
 .matrix-message-input-v39 {
   background: rgba(0, 0, 0, 0.3);
