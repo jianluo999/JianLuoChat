@@ -4,6 +4,24 @@
  */
 
 import { errorHandler } from './errorHandler'
+import { logReportHandler } from './logReportHandler'
+
+/**
+ * 从fetch参数中提取URL
+ */
+function getUrlFromArgs(args: Parameters<typeof fetch>): string {
+  const [input] = args
+  if (typeof input === 'string') {
+    return input
+  }
+  if (input instanceof URL) {
+    return input.href
+  }
+  if (input instanceof Request) {
+    return input.url
+  }
+  return ''
+}
 
 /**
  * 设置全局网络错误拦截
@@ -17,11 +35,15 @@ export function setupNetworkInterceptor(): void {
       
       // 检查响应状态
       if (!response.ok) {
-        const url = typeof args[0] === 'string' ? args[0] : args[0].url
+        const url = getUrlFromArgs(args)
         
-        // 如果是APM相关请求失败，静默处理
+        // 如果是APM/日志上报相关请求失败，静默处理
         if (isAPMUrl(url)) {
-          console.debug('🔇 APM request failed (silenced):', url, response.status)
+          logReportHandler.handleLogReportFailure(
+            url, 
+            new Error(`HTTP ${response.status}: ${response.statusText}`),
+            'fetch-response-error'
+          )
           return response // 返回响应，不抛出错误
         }
         
@@ -39,15 +61,15 @@ export function setupNetworkInterceptor(): void {
       
       return response
     } catch (error: any) {
-      const url = typeof args[0] === 'string' ? args[0] : args[0].url
+      const url = getUrlFromArgs(args)
       
-      // 如果是APM相关请求错误，静默处理
+      // 如果是APM/日志上报相关请求错误，静默处理
       if (isAPMUrl(url)) {
-        console.debug('🔇 APM request error (silenced):', url, error.message)
+        logReportHandler.handleLogReportFailure(url, error, 'fetch-network-error')
         // 返回一个模拟的失败响应，而不是抛出错误
         return new Response(null, { 
           status: 0, 
-          statusText: 'APM Service Unavailable (Silenced)' 
+          statusText: 'Log Service Unavailable (Silenced)' 
         })
       }
       
@@ -70,10 +92,10 @@ export function setupNetworkInterceptor(): void {
   const originalXHROpen = XMLHttpRequest.prototype.open
   const originalXHRSend = XMLHttpRequest.prototype.send
 
-  XMLHttpRequest.prototype.open = function(method: string, url: string | URL, ...args: any[]) {
+  XMLHttpRequest.prototype.open = function(method: string, url: string | URL, async?: boolean, username?: string | null, password?: string | null) {
     this._url = url.toString()
     this._method = method.toUpperCase()
-    return originalXHROpen.apply(this, [method, url, ...args])
+    return originalXHROpen.call(this, method, url, async ?? true, username, password)
   }
 
   XMLHttpRequest.prototype.send = function(body?: any) {
@@ -87,9 +109,13 @@ export function setupNetworkInterceptor(): void {
     const originalOnLoad = xhr.onload
 
     xhr.onerror = function(event) {
-      // 如果是APM相关请求错误，静默处理
+      // 如果是APM/日志上报相关请求错误，静默处理
       if (isAPMUrl(url)) {
-        console.debug('🔇 APM XHR error (silenced):', url)
+        logReportHandler.handleLogReportFailure(
+          url, 
+          new Error('XMLHttpRequest failed'),
+          'xhr-error'
+        )
         return
       }
 
@@ -109,9 +135,13 @@ export function setupNetworkInterceptor(): void {
     }
 
     xhr.ontimeout = function(event) {
-      // 如果是APM相关请求超时，静默处理
+      // 如果是APM/日志上报相关请求超时，静默处理
       if (isAPMUrl(url)) {
-        console.debug('🔇 APM XHR timeout (silenced):', url)
+        logReportHandler.handleLogReportFailure(
+          url, 
+          new Error('XMLHttpRequest timeout'),
+          'xhr-timeout'
+        )
         return
       }
 
@@ -133,9 +163,13 @@ export function setupNetworkInterceptor(): void {
     xhr.onload = function(event) {
       // 检查HTTP错误状态
       if (xhr.status >= 400) {
-        // 如果是APM相关请求错误，静默处理
+        // 如果是APM/日志上报相关请求错误，静默处理
         if (isAPMUrl(url)) {
-          console.debug('🔇 APM XHR HTTP error (silenced):', url, xhr.status)
+          logReportHandler.handleLogReportFailure(
+            url, 
+            new Error(`HTTP ${xhr.status}: ${xhr.statusText}`),
+            'xhr-http-error'
+          )
         } else {
           errorHandler.handleNetworkError({
             url,
@@ -159,15 +193,21 @@ export function setupNetworkInterceptor(): void {
 }
 
 /**
- * 判断是否为APM相关的URL
+ * 判断是否为APM/日志上报相关的URL
  */
 function isAPMUrl(url: string): boolean {
   const apmPatterns = [
     'apm-volcano.zuoyebang.com',
+    'nlog.daxuesoutijiang.com',  // 埋点日志上报服务器
     'monitor_web/collect',
     '/settings/get/webpro',
+    '/log/',  // 日志上报路径
     'apmInject',
-    'aegisInject'
+    'aegisInject',
+    '$PageHide',  // 页面隐藏埋点
+    '$PageShow',  // 页面显示埋点
+    'analytics',  // 通用分析服务
+    'tracking'    // 通用追踪服务
   ]
 
   return apmPatterns.some(pattern => url.includes(pattern))
@@ -183,13 +223,16 @@ export async function safeNetworkRequest<T>(
   try {
     return await requestFn()
   } catch (error: any) {
-    // 如果是APM相关错误，静默处理并返回null
+    // 如果是APM/日志上报相关错误，静默处理并返回null
     if (error.message && (
       error.message.includes('apm-volcano') ||
+      error.message.includes('nlog.daxuesoutijiang.com') ||
       error.message.includes('monitor_web') ||
-      error.message.includes('ERR_CONNECTION_CLOSED')
+      error.message.includes('ERR_CONNECTION_CLOSED') ||
+      error.message.includes('ERR_NETWORK') ||
+      error.message.includes('ERR_INTERNET_DISCONNECTED')
     )) {
-      console.debug('🔇 Network request silenced:', context, error.message)
+      console.debug('🔇 日志上报请求已静默处理:', context, error.message)
       return null
     }
 

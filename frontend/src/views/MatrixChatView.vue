@@ -97,9 +97,9 @@
           />
         </div>
 
-        <!-- 中间：房间列表 -->
+        <!-- 中间：房间列表 (性能优化版) -->
         <div class="matrix-room-panel">
-          <MatrixRoomList 
+          <MatrixRoomListOptimized 
             :selected-space="selectedSpace"
             :selected-room="selectedRoom"
             @room-selected="handleRoomSelected"
@@ -269,7 +269,7 @@ import { invitationAPI, roomAPI } from '@/services/api'
 // 组件导入
 import MatrixRealLogin from '@/components/MatrixRealLogin.vue'
 import MatrixNavigation from '@/components/MatrixNavigation.vue'
-import MatrixRoomList from '@/components/MatrixRoomList.vue'
+import MatrixRoomListOptimized from '@/components/MatrixRoomListOptimized.vue'
 import MatrixMessageArea from '@/components/MatrixMessageArea.vue'
 import MatrixUserID from '@/components/MatrixUserID.vue'
 import MatrixChatDemo from '@/components/MatrixChatDemo.vue'
