@@ -298,6 +298,53 @@ const generateDeviceId = (userId: string): string => {
 // ==================== 加密管理 ====================
 
 class MatrixCryptoManager {
+  static async clearCryptoStores(userId: string): Promise<void> {
+    try {
+      console.log('🧹 清理加密存储...')
+      
+      // 清理 IndexedDB 中的加密数据
+      const dbNames = [
+        `jianluochat-matrix-v39-crypto-${userId}`,
+        `matrix-js-sdk::matrix-sdk-crypto`,
+        `matrix-js-sdk::crypto`
+      ]
+      
+      for (const dbName of dbNames) {
+        try {
+          const deleteReq = indexedDB.deleteDatabase(dbName)
+          await new Promise((resolve, reject) => {
+            deleteReq.onsuccess = () => resolve(undefined)
+            deleteReq.onerror = () => reject(deleteReq.error)
+            deleteReq.onblocked = () => {
+              console.warn(`数据库 ${dbName} 删除被阻塞`)
+              resolve(undefined)
+            }
+          })
+          console.log(`✅ 已清理数据库: ${dbName}`)
+        } catch (error) {
+          console.warn(`清理数据库 ${dbName} 失败:`, error)
+        }
+      }
+      
+      // 清理 localStorage 中的相关数据
+      const keysToRemove = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && (key.includes('crypto') || key.includes('olm') || key.includes('matrix-sdk'))) {
+          keysToRemove.push(key)
+        }
+      }
+      
+      keysToRemove.forEach(key => {
+        localStorage.removeItem(key)
+        console.log(`✅ 已清理 localStorage: ${key}`)
+      })
+      
+    } catch (error) {
+      console.warn('清理加密存储时出错:', error)
+    }
+  }
+
   static async initializeCrypto(client: any): Promise<boolean> {
     try {
       console.log('🔐 初始化 Rust 加密引擎...')
@@ -349,7 +396,27 @@ class MatrixCryptoManager {
         return false
         
       } catch (rustError) {
-        console.warn('Rust 加密初始化失败，尝试传统加密:', rustError)
+        console.warn('🔄 Rust 加密初始化失败，尝试清理并重试:', rustError)
+        
+        // 如果是设备ID不匹配错误，清理加密存储并重试
+        if (rustError instanceof Error && rustError.message && rustError.message.includes("doesn't match the account")) {
+          console.log('🧹 检测到设备ID不匹配，清理加密存储...')
+          await this.clearCryptoStores(client.getUserId())
+          
+          // 重试初始化
+          try {
+            await client.initRustCrypto({
+              useIndexedDB: true,
+              storagePrefix: 'jianluochat-crypto-v39',
+              pickleKey: undefined,
+              setupEncryptionOnLogin: false
+            })
+            console.log('✅ 清理后 Rust 加密引擎初始化成功')
+            return true
+          } catch (retryError) {
+            console.warn('🔄 重试后仍然失败，尝试传统加密:', retryError)
+          }
+        }
         
         // 回退到传统加密
         if (typeof client.initCrypto === 'function') {
@@ -708,7 +775,7 @@ class MatrixClientManager {
       
       if (!deviceId) {
         const deviceIdKey = `jianluochat-device-id-${userId.split(':')[0].substring(1)}`
-        deviceId = localStorage.getItem(deviceIdKey)
+        deviceId = localStorage.getItem(deviceIdKey) || undefined
         
         if (!deviceId) {
           deviceId = generateDeviceId(userId)
@@ -1497,6 +1564,17 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       const serverUrl = homeserver || 'matrix.jianluochat.com'
       console.log(`🔐 尝试 Matrix 登录: ${username} @ ${serverUrl}`)
 
+      // 检查并清理可能冲突的加密数据
+      const userId = `@${username}:${serverUrl.replace('https://', '').replace('http://', '')}`
+      const storedDeviceId = localStorage.getItem(`jianluochat-device-id-${username}`)
+      
+      // 如果存在存储的设备ID，检查是否有加密数据冲突
+      if (storedDeviceId) {
+        console.log(`🔍 检查设备ID冲突: 存储的设备ID = ${storedDeviceId}`)
+        // 预防性清理，避免设备ID不匹配
+        await MatrixCryptoManager.clearCryptoStores(userId)
+      }
+
       // 加载 SDK
       const sdk = await import('matrix-js-sdk')
       
@@ -1514,13 +1592,13 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
 
       console.log('✅ 登录响应:', loginResponse)
 
-      const userId = loginResponse.user_id
+      const loggedInUserId = loginResponse.user_id
       const accessToken = loginResponse.access_token
       const deviceId = loginResponse.device_id
 
       // 保存登录信息
       const loginData = {
-        userId,
+        userId: loggedInUserId,
         accessToken,
         deviceId,
         homeserver: serverUrl,
@@ -1530,7 +1608,7 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       localStorage.setItem('matrix-v39-login-info', JSON.stringify(loginData))
 
       // 创建正式客户端，使用服务器返回的设备ID
-      const client = await MatrixClientManager.createClient(userId, accessToken, serverUrl, deviceId)
+      const client = await MatrixClientManager.createClient(loggedInUserId, accessToken, serverUrl, deviceId)
       
       // 初始化加密（允许失败）
       let cryptoEnabled = false
@@ -1852,10 +1930,87 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       // 清除存储
       localStorage.removeItem('matrix-v39-login-info')
       
+      // 清理设备ID相关存储
+      const keysToRemove = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith('jianluochat-device-id-')) {
+          keysToRemove.push(key)
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key))
+      
       console.log('✅ Matrix 登出完成')
 
     } catch (error) {
       console.error('❌ 登出过程中出错:', error)
+    }
+  }
+
+  const resetClientState = async () => {
+    try {
+      console.log('🔄 重置客户端状态...')
+      
+      // 停止当前客户端
+      if (matrixClient.value) {
+        await MatrixClientManager.cleanup(matrixClient.value)
+        matrixClient.value = null
+      }
+      
+      // 清理所有状态
+      connection.value = {
+        connected: false,
+        homeserver: 'https://matrix.jianluochat.com',
+        syncState: { 
+          state: 'STOPPED',
+          isActive: false,
+          catchingUp: false,
+          reconnectAttempts: 0
+        },
+        cryptoReady: false,
+        slidingSyncSupported: false,
+        voipSupported: false,
+        threadsSupported: true,
+        spacesSupported: true
+      }
+      
+      currentUser.value = null
+      clientInitializing.value = false
+      
+      // 清空数据
+      rooms.splice(0, rooms.length)
+      spaces.splice(0, spaces.length)
+      directMessages.splice(0, directMessages.length)
+      messages.clear()
+      
+      // 清理所有存储数据
+      const loginInfo = localStorage.getItem('matrix-v39-login-info')
+      if (loginInfo) {
+        try {
+          const parsed = JSON.parse(loginInfo)
+          await MatrixCryptoManager.clearCryptoStores(parsed.userId)
+        } catch (e) {
+          console.warn('解析登录信息失败:', e)
+        }
+      }
+      
+      localStorage.removeItem('matrix-v39-login-info')
+      localStorage.removeItem('matrix-v39-access-token')
+      
+      // 清理设备ID和加密相关数据
+      const keysToRemove = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && (key.startsWith('jianluochat-') || key.includes('matrix') || key.includes('crypto') || key.includes('olm'))) {
+          keysToRemove.push(key)
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key))
+      
+      console.log('✅ 客户端状态重置完成')
+      
+    } catch (error) {
+      console.error('❌ 重置客户端状态失败:', error)
     }
   }
 
@@ -2403,6 +2558,7 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
     sendMatrixMessage,
     sendFileMessage,
     logout,
+    resetClientState,
 
     // 高级功能
     setupCrossSigning,

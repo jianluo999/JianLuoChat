@@ -229,7 +229,7 @@ export const useMatrixUnifiedStore = defineStore('matrix-unified', () => {
     fn: T,
     delay: number
   ): T => {
-    let timeoutId: NodeJS.Timeout
+    let timeoutId: any
     return ((...args: Parameters<T>) => {
       clearTimeout(timeoutId)
       timeoutId = setTimeout(() => fn(...args), delay)
@@ -304,9 +304,9 @@ export const useMatrixUnifiedStore = defineStore('matrix-unified', () => {
         const cached = await tx.objectStore('messages').get(roomId)
         
         // 检查缓存是否过期（24小时）
-        if (cached && Date.now() - cached.timestamp < 24 * 60 * 60 * 1000) {
+        if (cached && Date.now() - (cached as any).timestamp < 24 * 60 * 60 * 1000) {
           console.log(`💾 从缓存加载房间 ${roomId} 消息`)
-          return cached.messages
+          return (cached as any).messages
         }
       } catch (error) {
         console.warn('加载缓存消息失败:', error)
@@ -397,7 +397,7 @@ export const useMatrixUnifiedStore = defineStore('matrix-unified', () => {
       }))
       
       localStorage.setItem('matrix-rooms', JSON.stringify(roomsData))
-      await cacheManager.saveRooms(roomsData)
+      await cacheManager.saveRooms(roomsData as any)
       
       console.log(`💾 ${roomsData.length} 个房间已保存`)
     } catch (error) {

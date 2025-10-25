@@ -3484,7 +3484,6 @@ export const useMatrixStore = defineStore('matrix', () => {
 
   // 优化的fetchMatrixMessages函数（已整合到主函数中）
   const fetchMatrixMessagesOptimized = fetchMatrixMessages
-  }
 
   return {
     // Matrix状态
