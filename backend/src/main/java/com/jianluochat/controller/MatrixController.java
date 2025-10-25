@@ -200,39 +200,5 @@ public class MatrixController {
         }
     }
 
-    /**
-     * 加入Matrix房间
-     */
-    @PostMapping("/rooms/join")
-    public ResponseEntity<?> joinRoom(@RequestBody Map<String, String> request) {
-        try {
-            String roomIdOrAlias = request.get("roomIdOrAlias");
 
-            if (roomIdOrAlias == null || roomIdOrAlias.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "error", "房间ID或别名不能为空"
-                ));
-            }
-
-            logger.info("Attempting to join room: {}", roomIdOrAlias);
-
-            // 这里应该调用真实的Matrix API来加入房间
-            // 目前返回模拟成功结果
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("message", "成功加入房间");
-            result.put("roomId", roomIdOrAlias);
-            result.put("timestamp", System.currentTimeMillis());
-
-            return ResponseEntity.ok(result);
-
-        } catch (Exception e) {
-            logger.error("Failed to join room: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "error", "加入房间失败: " + e.getMessage()
-            ));
-        }
-    }
 }
