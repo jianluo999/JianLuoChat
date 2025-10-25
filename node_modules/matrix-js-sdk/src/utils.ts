@@ -435,18 +435,6 @@ export function immediate(): Promise<void> {
 export function isNullOrUndefined(val: any): boolean {
     return val === null || val === undefined;
 }
-/**
- * @deprecated use {@link PromiseWithResolvers} instead.
- */
-export type IDeferred<T> = PromiseWithResolvers<T>;
-
-/**
- * Creates a deferred promise. This is a promise that can be resolved or rejected.
- * @deprecated use {@link Promise.withResolvers} instead.
- */
-export function defer<T = void>(): IDeferred<T> {
-    return Promise.withResolvers<T>();
-}
 
 export async function promiseMapSeries<T>(
     promises: Array<T | Promise<T>>,
@@ -477,15 +465,21 @@ export async function chunkPromises<T>(fns: (() => Promise<T>)[], chunkSize: num
  * should always return a new promise.
  * @param promiseFn - The function to call to get a fresh promise instance. Takes an
  * attempt count as an argument, for logging/debugging purposes.
+ * @param shouldRetry - Optional function which is called with the error the latest rejection from promiseFn,
+ * retrying will ba aborted if this return false.
  * @returns The promise for the retried operation.
  */
-export function simpleRetryOperation<T>(promiseFn: (attempt: number) => Promise<T>): Promise<T> {
+export function simpleRetryOperation<T>(
+    promiseFn: (attempt: number) => Promise<T>,
+    shouldRetry?: (e: unknown) => boolean,
+): Promise<T> {
     return promiseRetry(
         (attempt: number) => {
             return promiseFn(attempt);
         },
         {
-            forever: true,
+            retries: Infinity,
+            shouldRetry: shouldRetry ? ({ error }): boolean => shouldRetry(error) : undefined,
             factor: 2,
             minTimeout: 3000, // ms
             maxTimeout: 15000, // ms

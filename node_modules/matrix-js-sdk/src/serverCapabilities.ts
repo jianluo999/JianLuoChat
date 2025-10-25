@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import { type IHttpOpts, type MatrixHttpApi, Method } from "./http-api/index.ts";
-import { logger } from "./logger.ts";
+import { type Logger } from "./logger.ts";
 
 // How often we update the server capabilities.
 // 6 hours - an arbitrary value, but they should change very infrequently.
@@ -64,6 +64,10 @@ export interface Capabilities {
     "m.set_displayname"?: ISetDisplayNameCapability;
     "m.set_avatar_url"?: ISetAvatarUrlCapability;
     "uk.tcpip.msc4133.profile_fields"?: IProfileFieldsCapability;
+    /**
+     * Since Matrix v1.16
+     */
+    "m.profile_fields"?: IProfileFieldsCapability;
 }
 
 type CapabilitiesResponse = {
@@ -78,7 +82,10 @@ export class ServerCapabilities {
     private retryTimeout?: ReturnType<typeof setTimeout>;
     private refreshTimeout?: ReturnType<typeof setInterval>;
 
-    public constructor(private readonly http: MatrixHttpApi<IHttpOpts & { onlyData: true }>) {}
+    public constructor(
+        private readonly logger: Logger,
+        private readonly http: MatrixHttpApi<IHttpOpts & { onlyData: true }>,
+    ) {}
 
     /**
      * Starts periodically fetching the server capabilities.
@@ -117,12 +124,12 @@ export class ServerCapabilities {
             await this.fetchCapabilities();
             this.clearTimeouts();
             this.refreshTimeout = setTimeout(this.poll, CAPABILITIES_CACHE_MS);
-            logger.debug("Fetched new server capabilities");
+            this.logger.debug("Fetched new server capabilities");
         } catch (e) {
             this.clearTimeouts();
             const howLong = Math.floor(CAPABILITIES_RETRY_MS + Math.random() * 5000);
             this.retryTimeout = setTimeout(this.poll, howLong);
-            logger.warn(`Failed to refresh capabilities: retrying in ${howLong}ms`, e);
+            this.logger.warn(`Failed to refresh capabilities: retrying in ${howLong}ms`, e);
         }
     };
 

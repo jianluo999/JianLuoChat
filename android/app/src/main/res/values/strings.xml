@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">JianluoChat</string>
+    <string name="title_activity_main">JianluoChat</string>
+    <string name="package_name">com.jianluochat.app</string>
+    <string name="custom_url_scheme">com.jianluochat.app</string>
+</resources>

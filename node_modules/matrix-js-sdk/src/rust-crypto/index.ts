@@ -91,6 +91,11 @@ export async function initRustCrypto(args: {
      * Called with (-1, -1) to mark the end of migration.
      */
     legacyMigrationProgressListener?: (progress: number, total: number) => void;
+
+    /**
+     * Whether to enable support for encrypting state events.
+     */
+    enableEncryptedStateEvents?: boolean;
 }): Promise<RustCrypto> {
     const { logger } = args;
 
@@ -98,19 +103,16 @@ export async function initRustCrypto(args: {
     logger.debug("Initialising Rust crypto-sdk WASM artifact");
     await RustSdkCryptoJs.initAsync();
 
-    // enable tracing in the rust-sdk
-    new RustSdkCryptoJs.Tracing(RustSdkCryptoJs.LoggerLevel.Debug).turnOn();
-
     logger.debug("Opening Rust CryptoStore");
     let storeHandle;
     if (args.storePrefix) {
         if (args.storeKey) {
-            storeHandle = await StoreHandle.openWithKey(args.storePrefix, args.storeKey);
+            storeHandle = await StoreHandle.openWithKey(args.storePrefix, args.storeKey, logger);
         } else {
-            storeHandle = await StoreHandle.open(args.storePrefix, args.storePassphrase);
+            storeHandle = await StoreHandle.open(args.storePrefix, args.storePassphrase, logger);
         }
     } else {
-        storeHandle = await StoreHandle.open();
+        storeHandle = await StoreHandle.open(null, null, logger);
     }
 
     if (args.legacyCryptoStore) {
@@ -131,6 +133,7 @@ export async function initRustCrypto(args: {
         args.cryptoCallbacks,
         storeHandle,
         args.legacyCryptoStore,
+        args.enableEncryptedStateEvents,
     );
 
     storeHandle.free();
@@ -148,6 +151,7 @@ async function initOlmMachine(
     cryptoCallbacks: CryptoCallbacks,
     storeHandle: StoreHandle,
     legacyCryptoStore?: CryptoStore,
+    enableEncryptedStateEvents?: boolean,
 ): Promise<RustCrypto> {
     logger.debug("Init OlmMachine");
 
@@ -155,6 +159,7 @@ async function initOlmMachine(
         new RustSdkCryptoJs.UserId(userId),
         new RustSdkCryptoJs.DeviceId(deviceId),
         storeHandle,
+        logger,
     );
 
     // A final migration step, now that we have an OlmMachine.
@@ -169,7 +174,16 @@ async function initOlmMachine(
     // Disable room key requests, per https://github.com/vector-im/element-web/issues/26524.
     olmMachine.roomKeyRequestsEnabled = false;
 
-    const rustCrypto = new RustCrypto(logger, olmMachine, http, userId, deviceId, secretStorage, cryptoCallbacks);
+    const rustCrypto = new RustCrypto(
+        logger,
+        olmMachine,
+        http,
+        userId,
+        deviceId,
+        secretStorage,
+        cryptoCallbacks,
+        enableEncryptedStateEvents,
+    );
 
     await olmMachine.registerRoomKeyUpdatedCallback((sessions: RustSdkCryptoJs.RoomKeyInfo[]) =>
         rustCrypto.onRoomKeysUpdated(sessions),
