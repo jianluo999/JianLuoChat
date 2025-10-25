@@ -16,6 +16,42 @@ interface MatrixMessage {
   status?: 'sending' | 'sent' | 'delivered' | 'failed'
   msgtype?: string
   fileInfo?: FileInfo
+  replyTo?: ReplyInfo
+  reactions?: Record<string, MessageReaction>
+  threadInfo?: ThreadInfo
+  location?: LocationInfo
+  edited?: boolean
+  editedAt?: number
+  redacted?: boolean
+  redactionReason?: string
+}
+
+interface ReplyInfo {
+  eventId: string
+  senderName: string
+  content: string
+  timestamp: number
+}
+
+interface MessageReaction {
+  count: number
+  users: string[]
+  hasReacted: boolean
+  key: string
+}
+
+interface ThreadInfo {
+  rootEventId: string
+  replyCount: number
+  latestReply?: MatrixMessage
+  isThread: boolean
+}
+
+interface LocationInfo {
+  latitude: number
+  longitude: number
+  description?: string
+  accuracy?: number
 }
 
 interface FileInfo {
@@ -39,11 +75,78 @@ interface MatrixRoom {
   isDirect: boolean
   isSpace: boolean
   memberCount: number
+  joinedMemberCount: number
+  invitedMemberCount: number
+  members: RoomMember[]
   lastMessage?: MatrixMessage
   unreadCount: number
+  notificationCount: number
+  highlightCount: number
   encrypted: boolean
+  encryptionAlgorithm?: string
   avatarUrl?: string
+  canonicalAlias?: string
+  altAliases: string[]
+  powerLevels: PowerLevels
+  joinRule: string
+  historyVisibility: string
+  guestAccess: string
+  tags: Record<string, any>
+  accountData: Record<string, any>
+  summary?: RoomSummary
+  typing: string[]
+  receipts: Record<string, Receipt[]>
+  presence: Record<string, PresenceInfo>
+  childRooms: string[]
+  parentSpaces: string[]
   updatedAt: number
+  createdAt: number
+}
+
+interface RoomMember {
+  userId: string
+  displayName?: string
+  avatarUrl?: string
+  membership: 'join' | 'invite' | 'leave' | 'ban' | 'knock'
+  powerLevel: number
+  lastActiveAgo?: number
+  presence?: 'online' | 'offline' | 'unavailable'
+  statusMessage?: string
+}
+
+interface PowerLevels {
+  users: Record<string, number>
+  usersDefault: number
+  events: Record<string, number>
+  eventsDefault: number
+  stateDefault: number
+  ban: number
+  kick: number
+  redact: number
+  invite: number
+  notifications: {
+    room: number
+  }
+}
+
+interface RoomSummary {
+  heroes: string[]
+  joinedMemberCount: number
+  invitedMemberCount: number
+}
+
+interface Receipt {
+  userId: string
+  timestamp: number
+  eventId: string
+  receiptType: string
+}
+
+interface PresenceInfo {
+  presence: 'online' | 'offline' | 'unavailable'
+  lastActiveAgo?: number
+  statusMessage?: string
+  currentlyActive?: boolean
 }
 
 interface MatrixUser {
@@ -51,6 +154,28 @@ interface MatrixUser {
   username: string
   displayName?: string
   avatarUrl?: string
+  presence?: 'online' | 'offline' | 'unavailable'
+  lastSeen?: number
+  statusMessage?: string
+  currentlyActive?: boolean
+  devices: Device[]
+  crossSigningInfo?: CrossSigningInfo
+}
+
+interface Device {
+  deviceId: string
+  displayName?: string
+  lastSeenIp?: string
+  lastSeenTs?: number
+  verified: boolean
+  blocked: boolean
+}
+
+interface CrossSigningInfo {
+  masterKey?: string
+  selfSigningKey?: string
+  userSigningKey?: string
+  trustLevel: 'verified' | 'unverified' | 'unknown'
 }
 
 interface ConnectionState {
@@ -61,6 +186,31 @@ interface ConnectionState {
   deviceId?: string
   syncState: SyncStateInfo
   cryptoReady: boolean
+  slidingSyncSupported: boolean
+  voipSupported: boolean
+  threadsSupported: boolean
+  spacesSupported: boolean
+}
+
+interface CryptoStatus {
+  ready: boolean
+  crossSigningReady: boolean
+  keyBackupEnabled: boolean
+  secretStorageReady: boolean
+  deviceVerified: boolean
+  roomKeysBackedUp: number
+  totalRoomKeys: number
+}
+
+interface PerformanceMetrics {
+  syncDuration: number
+  messageProcessingTime: number
+  encryptionTime: number
+  decryptionTime: number
+  memoryUsage: number
+  networkLatency: number
+  roomsLoaded: number
+  messagesLoaded: number
 }
 
 interface SyncStateInfo {
@@ -69,6 +219,10 @@ interface SyncStateInfo {
   lastSync?: number
   syncError?: string
   nextBatch?: string
+  catchingUp: boolean
+  syncProgress?: number
+  reconnectAttempts: number
+  lastReconnectAttempt?: number
 }
 
 // ==================== 工具函数 ====================
@@ -141,6 +295,370 @@ const generateDeviceId = (userId: string): string => {
   return `jianluochat_web_${userPart}_${timestamp}_${random}`
 }
 
+// ==================== 加密管理 ====================
+
+class MatrixCryptoManager {
+  static async initializeCrypto(client: any): Promise<boolean> {
+    try {
+      console.log('🔐 初始化 Rust 加密引擎...')
+
+      // 检查浏览器支持
+      if (!window.WebAssembly) {
+        console.warn('浏览器不支持 WebAssembly，跳过加密')
+        return false
+      }
+
+      // 检查客户端是否支持加密
+      if (typeof client.initRustCrypto !== 'function') {
+        console.warn('客户端不支持 Rust 加密，跳过加密')
+        return false
+      }
+
+      // 初始化 Rust 加密引擎
+      await retryWithBackoff(async () => {
+        await client.initRustCrypto({
+          useIndexedDB: true,
+          storagePrefix: 'jianluochat-crypto-v39'
+        })
+      }, 3, 2000)
+
+      console.log('✅ Rust 加密引擎初始化成功')
+
+      // 等待加密准备就绪
+      const crypto = client.getCrypto()
+      if (crypto) {
+        console.log('✅ 加密 API 可用')
+        return true
+      }
+
+      return false
+    } catch (error: any) {
+      console.error('❌ 加密初始化失败:', error)
+      console.warn('⚠️ 将以非加密模式继续运行')
+      return false
+    }
+  }
+
+  static async updateCryptoStatus(client: any): Promise<CryptoStatus> {
+    try {
+      const crypto = client.getCrypto()
+      if (!crypto) {
+        return {
+          ready: false,
+          crossSigningReady: false,
+          keyBackupEnabled: false,
+          secretStorageReady: false,
+          deviceVerified: false,
+          roomKeysBackedUp: 0,
+          totalRoomKeys: 0
+        }
+      }
+
+      const crossSigningInfo = await crypto.getCrossSigningStatus?.() || {}
+      const keyBackupInfo = await crypto.getActiveSessionBackupVersion?.() || null
+      const deviceInfo = await crypto.getOwnDeviceInfo?.() || {}
+
+      return {
+        ready: crypto.isReady?.() || false,
+        crossSigningReady: crossSigningInfo.publicKeysOnDevice && crossSigningInfo.privateKeysInSecretStorage,
+        keyBackupEnabled: !!keyBackupInfo,
+        secretStorageReady: await crypto.isSecretStorageReady?.() || false,
+        deviceVerified: deviceInfo?.verified || false,
+        roomKeysBackedUp: 0, // TODO: 实现统计
+        totalRoomKeys: 0 // TODO: 实现统计
+      }
+    } catch (error) {
+      console.warn('更新加密状态失败:', error)
+      return {
+        ready: false,
+        crossSigningReady: false,
+        keyBackupEnabled: false,
+        secretStorageReady: false,
+        deviceVerified: false,
+        roomKeysBackedUp: 0,
+        totalRoomKeys: 0
+      }
+    }
+  }
+
+  static async setupCrossSigningIfNeeded(client: any, password?: string): Promise<boolean> {
+    try {
+      const crypto = client.getCrypto()
+      if (!crypto) return false
+
+      const status = await crypto.getCrossSigningStatus?.() || {}
+      if (status.publicKeysOnDevice && status.privateKeysInSecretStorage) {
+        console.log('✅ 交叉签名已设置')
+        return true
+      }
+
+      console.log('🔧 设置交叉签名...')
+      
+      // 设置交叉签名
+      await crypto.bootstrapCrossSigning?.({
+        authUploadDeviceSigningKeys: async (makeRequest: any) => {
+          // 如果需要密码认证
+          if (password) {
+            return makeRequest({
+              type: 'm.login.password',
+              identifier: {
+                type: 'm.id.user',
+                user: client.getUserId()!
+              },
+              password: password
+            })
+          }
+          return makeRequest({})
+        }
+      })
+
+      console.log('✅ 交叉签名设置完成')
+      return true
+
+    } catch (error) {
+      console.error('❌ 设置交叉签名失败:', error)
+      return false
+    }
+  }
+
+  static async setupKeyBackupIfNeeded(client: any): Promise<boolean> {
+    try {
+      const crypto = client.getCrypto()
+      if (!crypto) return false
+
+      const backupInfo = await crypto.getActiveSessionBackupVersion?.() || null
+      if (backupInfo) {
+        console.log('✅ 密钥备份已启用')
+        return true
+      }
+
+      console.log('🔧 设置密钥备份...')
+      
+      // 创建密钥备份
+      await crypto.createKeyBackupVersion?.()
+      console.log('✅ 密钥备份设置完成')
+      
+      return true
+
+    } catch (error) {
+      console.error('❌ 设置密钥备份失败:', error)
+      return false
+    }
+  }
+}
+
+// ==================== 自动重连管理 ====================
+
+class MatrixReconnectionManager {
+  private static reconnectTimer: any = null
+  private static maxReconnectAttempts = 10
+  private static baseReconnectDelay = 1000
+
+  static startReconnection(client: any, syncState: any) {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+    }
+
+    const attempts = syncState.reconnectAttempts || 0
+    if (attempts >= this.maxReconnectAttempts) {
+      console.error('❌ 达到最大重连次数，停止重连')
+      return
+    }
+
+    const delay = Math.min(
+      this.baseReconnectDelay * Math.pow(2, attempts),
+      30000 // 最大 30 秒
+    )
+
+    console.log(`🔄 ${delay}ms 后尝试重连 (${attempts + 1}/${this.maxReconnectAttempts})`)
+
+    this.reconnectTimer = setTimeout(async () => {
+      try {
+        syncState.reconnectAttempts = attempts + 1
+        syncState.lastReconnectAttempt = Date.now()
+
+        console.log('🔄 尝试重新启动客户端...')
+        await client.startClient({
+          initialSyncLimit: 20,
+          lazyLoadMembers: true
+        })
+
+        console.log('✅ 客户端重启成功')
+        syncState.reconnectAttempts = 0
+      } catch (error) {
+        console.error('❌ 重连失败:', error)
+        this.startReconnection(client, syncState)
+      }
+    }, delay)
+  }
+
+  static stopReconnection() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+  }
+
+  static resetReconnectionState(syncState: any) {
+    syncState.reconnectAttempts = 0
+    syncState.lastReconnectAttempt = undefined
+    this.stopReconnection()
+  }
+}
+
+// ==================== 智能存储管理 ====================
+
+class MatrixStorageManager {
+  private static dbName = 'jianluochat-matrix-v39'
+  private static version = 3
+
+  static async createAdvancedStores(userId: string, sdk: any) {
+    try {
+      // 尝试创建 IndexedDB 存储
+      const store = new sdk.IndexedDBStore({
+        indexedDB: globalThis.indexedDB,
+        dbName: `${this.dbName}-store-${userId}`,
+        localStorage: globalThis.localStorage,
+        workerScript: null // 禁用 worker 以避免兼容性问题
+      })
+
+      let cryptoStore
+      try {
+        cryptoStore = new sdk.IndexedDBCryptoStore(
+          globalThis.indexedDB,
+          `${this.dbName}-crypto-${userId}`
+        )
+      } catch {
+        // 回退到 LocalStorage 加密存储
+        cryptoStore = new sdk.LocalStorageCryptoStore(globalThis.localStorage)
+      }
+
+      // 启动存储
+      await store.startup()
+      if (cryptoStore.startup) {
+        await cryptoStore.startup()
+      }
+
+      console.log('✅ 高级存储初始化成功')
+      return { store, cryptoStore }
+    } catch (error) {
+      console.warn('⚠️ IndexedDB 不可用，使用内存存储:', error)
+      
+      // 回退到内存存储
+      const store = new sdk.MemoryStore({
+        localStorage: globalThis.localStorage
+      })
+      
+      const cryptoStore = new sdk.MemoryCryptoStore()
+      
+      return { store, cryptoStore }
+    }
+  }
+
+  static async clearUserData(userId: string) {
+    try {
+      const storeDbName = `${this.dbName}-store-${userId}`
+      const cryptoDbName = `${this.dbName}-crypto-${userId}`
+      
+      // 删除数据库
+      await new Promise<void>((resolve, reject) => {
+        const deleteStore = indexedDB.deleteDatabase(storeDbName)
+        deleteStore.onsuccess = () => resolve()
+        deleteStore.onerror = () => reject(deleteStore.error)
+      })
+      
+      await new Promise<void>((resolve, reject) => {
+        const deleteCrypto = indexedDB.deleteDatabase(cryptoDbName)
+        deleteCrypto.onsuccess = () => resolve()
+        deleteCrypto.onerror = () => reject(deleteCrypto.error)
+      })
+      
+      // 清理 localStorage
+      const keys = Object.keys(localStorage)
+      keys.forEach(key => {
+        if (key.includes(userId) || key.includes('matrix-v39')) {
+          localStorage.removeItem(key)
+        }
+      })
+      
+      console.log('🧹 用户数据清理完成')
+    } catch (error) {
+      console.warn('清理用户数据失败:', error)
+    }
+  }
+}
+
+// ==================== 性能监控管理 ====================
+
+class MatrixPerformanceManager {
+  private static metrics: PerformanceMetrics = {
+    syncDuration: 0,
+    messageProcessingTime: 0,
+    encryptionTime: 0,
+    decryptionTime: 0,
+    memoryUsage: 0,
+    networkLatency: 0,
+    roomsLoaded: 0,
+    messagesLoaded: 0
+  }
+
+  static startTimer(operation: string): () => void {
+    const startTime = performance.now()
+    return () => {
+      const duration = performance.now() - startTime
+      this.recordMetric(operation, duration)
+    }
+  }
+
+  static recordMetric(operation: string, value: number) {
+    switch (operation) {
+      case 'sync':
+        this.metrics.syncDuration = value
+        break
+      case 'messageProcessing':
+        this.metrics.messageProcessingTime = value
+        break
+      case 'encryption':
+        this.metrics.encryptionTime = value
+        break
+      case 'decryption':
+        this.metrics.decryptionTime = value
+        break
+      case 'networkLatency':
+        this.metrics.networkLatency = value
+        break
+    }
+  }
+
+  static updateCounts(roomsLoaded: number, messagesLoaded: number) {
+    this.metrics.roomsLoaded = roomsLoaded
+    this.metrics.messagesLoaded = messagesLoaded
+  }
+
+  static getMetrics(): PerformanceMetrics {
+    // 更新内存使用情况
+    if ((performance as any).memory) {
+      this.metrics.memoryUsage = (performance as any).memory.usedJSHeapSize
+    }
+
+    return { ...this.metrics }
+  }
+
+  static logPerformanceReport() {
+    const metrics = this.getMetrics()
+    console.group('📊 Matrix 性能报告')
+    console.log(`同步耗时: ${metrics.syncDuration.toFixed(2)}ms`)
+    console.log(`消息处理: ${metrics.messageProcessingTime.toFixed(2)}ms`)
+    console.log(`加密耗时: ${metrics.encryptionTime.toFixed(2)}ms`)
+    console.log(`解密耗时: ${metrics.decryptionTime.toFixed(2)}ms`)
+    console.log(`网络延迟: ${metrics.networkLatency.toFixed(2)}ms`)
+    console.log(`内存使用: ${formatFileSize(metrics.memoryUsage)}`)
+    console.log(`房间数量: ${metrics.roomsLoaded}`)
+    console.log(`消息数量: ${metrics.messagesLoaded}`)
+    console.groupEnd()
+  }
+}
+
 // ==================== 客户端管理 ====================
 
 class MatrixClientManager {
@@ -161,8 +679,8 @@ class MatrixClientManager {
         console.log('🆔 生成新的设备ID:', deviceId)
       }
 
-      // 创建存储
-      const { store, cryptoStore } = await this.createStores(userId, sdk)
+      // 创建高级存储
+      const { store, cryptoStore } = await MatrixStorageManager.createAdvancedStores(userId, sdk)
 
       // 创建客户端配置
       const clientConfig = {
@@ -186,87 +704,8 @@ class MatrixClientManager {
     }
   }
 
-  static async createStores(userId: string, sdk: any) {
-    try {
-      // 尝试创建 IndexedDB 存储
-      const store = new sdk.IndexedDBStore({
-        indexedDB: globalThis.indexedDB,
-        dbName: `jianluochat-matrix-store-${userId}`,
-        localStorage: globalThis.localStorage
-      })
-
-      let cryptoStore
-      try {
-        cryptoStore = new sdk.IndexedDBCryptoStore(
-          globalThis.indexedDB,
-          `jianluochat-matrix-crypto-${userId}`
-        )
-      } catch {
-        // 回退到 LocalStorage 加密存储
-        cryptoStore = new sdk.LocalStorageCryptoStore(globalThis.localStorage)
-      }
-
-      // 启动存储
-      await store.startup()
-      if (cryptoStore.startup) {
-        await cryptoStore.startup()
-      }
-
-      console.log('✅ 存储初始化成功')
-      return { store, cryptoStore }
-    } catch (error) {
-      console.warn('⚠️ IndexedDB 不可用，使用内存存储:', error)
-      
-      // 回退到内存存储
-      const store = new sdk.MemoryStore({
-        localStorage: globalThis.localStorage
-      })
-      
-      const cryptoStore = new sdk.MemoryCryptoStore()
-      
-      return { store, cryptoStore }
-    }
-  }
-
   static async initializeCrypto(client: any): Promise<boolean> {
-    try {
-      console.log('🔐 初始化加密引擎...')
-
-      // 检查浏览器支持
-      if (!window.WebAssembly) {
-        console.warn('浏览器不支持 WebAssembly，跳过加密')
-        return false
-      }
-
-      // 检查客户端是否支持加密
-      if (typeof client.initRustCrypto !== 'function') {
-        console.warn('客户端不支持 Rust 加密，跳过加密')
-        return false
-      }
-
-      // 初始化 Rust 加密引擎
-      await retryWithBackoff(async () => {
-        await client.initRustCrypto({
-          useIndexedDB: true,
-          storagePrefix: 'jianluochat-crypto'
-        })
-      }, 3, 2000)
-
-      console.log('✅ Rust 加密引擎初始化成功')
-
-      // 等待加密准备就绪
-      const crypto = client.getCrypto()
-      if (crypto) {
-        console.log('✅ 加密 API 可用')
-        return true
-      }
-
-      return false
-    } catch (error: any) {
-      console.error('❌ 加密初始化失败:', error)
-      console.warn('⚠️ 将以非加密模式继续运行')
-      return false
-    }
+    return await MatrixCryptoManager.initializeCrypto(client)
   }
 
   static async cleanup(client: any) {
@@ -303,9 +742,15 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
     homeserver: 'https://matrix.jianluochat.com',
     syncState: { 
       state: 'STOPPED',
-      isActive: false
+      isActive: false,
+      catchingUp: false,
+      reconnectAttempts: 0
     },
-    cryptoReady: false
+    cryptoReady: false,
+    slidingSyncSupported: false,
+    voipSupported: false,
+    threadsSupported: true,
+    spacesSupported: true
   })
   
   const rooms = shallowReactive<MatrixRoom[]>([])
@@ -315,9 +760,40 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
   
   const currentUser = shallowRef<MatrixUser | null>(null)
   const currentRoomId = ref<string | null>(null)
+  const currentThreadId = ref<string | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
   const clientInitializing = ref(false)
+
+  // 新功能状态
+  const threads = shallowReactive(new Map<string, MatrixMessage[]>())
+  const reactions = shallowReactive(new Map<string, Record<string, MessageReaction>>())
+  const typing = shallowReactive(new Map<string, string[]>())
+  const presence = shallowReactive(new Map<string, PresenceInfo>())
+  const voipCalls = shallowReactive(new Map<string, any>())
+  const widgets = shallowReactive(new Map<string, any>())
+
+  // 加密和性能状态
+  const cryptoStatus = shallowRef<CryptoStatus>({
+    ready: false,
+    crossSigningReady: false,
+    keyBackupEnabled: false,
+    secretStorageReady: false,
+    deviceVerified: false,
+    roomKeysBackedUp: 0,
+    totalRoomKeys: 0
+  })
+
+  const performanceMetrics = shallowRef<PerformanceMetrics>({
+    syncDuration: 0,
+    messageProcessingTime: 0,
+    encryptionTime: 0,
+    decryptionTime: 0,
+    memoryUsage: 0,
+    networkLatency: 0,
+    roomsLoaded: 0,
+    messagesLoaded: 0
+  })
 
   // 计算属性
   const currentRoom = computed(() => {
@@ -340,10 +816,48 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
     [...rooms, ...spaces, ...directMessages].reduce((total, room) => total + room.unreadCount, 0)
   )
 
+  const totalNotificationCount = computed(() => 
+    [...rooms, ...spaces, ...directMessages].reduce((total, room) => total + (room.notificationCount || 0), 0)
+  )
+
+  const totalHighlightCount = computed(() => 
+    [...rooms, ...spaces, ...directMessages].reduce((total, room) => total + (room.highlightCount || 0), 0)
+  )
+
+  const currentThread = computed(() => 
+    currentThreadId.value ? threads.get(currentThreadId.value) || [] : []
+  )
+
+  const sortedSpaces = computed(() => 
+    [...spaces].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+  )
+
+  const sortedDirectMessages = computed(() => 
+    [...directMessages].sort((a, b) => {
+      const aTime = a.lastMessage?.timestamp || a.updatedAt || 0
+      const bTime = b.lastMessage?.timestamp || b.updatedAt || 0
+      return bTime - aTime
+    })
+  )
+
   const isConnected = computed(() => connection.value.connected)
   const isLoggedIn = computed(() => connection.value.connected && connection.value.userId)
   const isSyncing = computed(() => connection.value.syncState.isActive)
+  const isCatchingUp = computed(() => connection.value.syncState.catchingUp)
+  const syncProgress = computed(() => connection.value.syncState.syncProgress || 0)
   const homeserver = computed(() => connection.value.homeserver)
+
+  // 加密相关计算属性
+  const encryptionReady = computed(() => cryptoStatus.value.ready)
+  const crossSigningReady = computed(() => cryptoStatus.value.crossSigningReady)
+  const keyBackupReady = computed(() => cryptoStatus.value.keyBackupEnabled)
+  const deviceVerified = computed(() => cryptoStatus.value.deviceVerified)
+
+  // 功能支持计算属性
+  const supportsThreads = computed(() => connection.value.threadsSupported)
+  const supportsSpaces = computed(() => connection.value.spacesSupported)
+  const supportsVoip = computed(() => connection.value.voipSupported)
+  const supportsSlidingSync = computed(() => connection.value.slidingSyncSupported)
 
   // 辅助函数
   const convertEventToMessage = (event: any, room: any): MatrixMessage | null => {
@@ -445,6 +959,8 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
           const joinRule = room.getJoinRule()
           const isSpace = room.isSpaceRoom?.() || false
           const isDirect = client.isRoomDirect?.(room.roomId) || false
+          const powerLevelsEvent = room.currentState?.getStateEvents('m.room.power_levels', '')
+          const powerLevels = powerLevelsEvent?.getContent() || {}
 
           const matrixRoom: MatrixRoom = {
             id: room.roomId,
@@ -455,12 +971,61 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
             isPublic: joinRule === 'public',
             isDirect,
             isSpace,
-            memberCount: room.getJoinedMemberCount() || 0,
+            memberCount: room.currentState?.getJoinedMemberCount() || 0,
+            joinedMemberCount: room.getJoinedMemberCount() || 0,
+            invitedMemberCount: room.getInvitedMemberCount() || 0,
+            members: [],
             unreadCount: room.getUnreadNotificationCount() || 0,
+            notificationCount: room.getUnreadNotificationCount() || 0,
+            highlightCount: room.getUnreadNotificationCount('highlight') || 0,
             encrypted: room.hasEncryptionStateEvent(),
+            encryptionAlgorithm: room.hasEncryptionStateEvent() ? 'm.megolm.v1.aes-sha2' : undefined,
             avatarUrl: room.getAvatarUrl?.(client.baseUrl, 96, 96, 'scale'),
-            updatedAt: Date.now()
+            canonicalAlias: room.getCanonicalAlias(),
+            altAliases: room.getAltAliases() || [],
+            powerLevels: {
+              users: powerLevels.users || {},
+              usersDefault: powerLevels.users_default || 0,
+              events: powerLevels.events || {},
+              eventsDefault: powerLevels.events_default || 0,
+              stateDefault: powerLevels.state_default || 50,
+              ban: powerLevels.ban || 50,
+              kick: powerLevels.kick || 50,
+              redact: powerLevels.redact || 50,
+              invite: powerLevels.invite || 50,
+              notifications: {
+                room: powerLevels.notifications?.room || 50
+              }
+            },
+            joinRule: joinRule || 'invite',
+            historyVisibility: room.getHistoryVisibility() || 'shared',
+            guestAccess: room.getGuestAccess() || 'can_join',
+            tags: room.tags || {},
+            accountData: {},
+            summary: room.summary ? {
+              heroes: room.summary.heroes || [],
+              joinedMemberCount: room.summary.joinedMemberCount || 0,
+              invitedMemberCount: room.summary.invitedMemberCount || 0
+            } : undefined,
+            typing: [],
+            receipts: {},
+            presence: {},
+            childRooms: [],
+            parentSpaces: [],
+            updatedAt: Date.now(),
+            createdAt: room.getCreatedAt() || Date.now()
           }
+
+          // 获取房间成员
+          const members = room.getJoinedMembers()
+          matrixRoom.members = members.map((member: any) => ({
+            userId: member.userId,
+            displayName: member.name,
+            avatarUrl: member.getAvatarUrl?.(client.baseUrl, 32, 32, 'scale'),
+            membership: member.membership,
+            powerLevel: powerLevels.users?.[member.userId] || powerLevels.users_default || 0,
+            presence: presence.get(member.userId)?.presence
+          }))
 
           // 分类房间
           if (isSpace) {
@@ -481,6 +1046,12 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       spaces.splice(0, spaces.length, ...convertedSpaces)
       directMessages.splice(0, directMessages.length, ...convertedDMs)
 
+      // 更新性能指标
+      MatrixPerformanceManager.updateCounts(
+        convertedRooms.length + convertedSpaces.length + convertedDMs.length,
+        Array.from(messages.values()).reduce((total, msgs) => total + msgs.length, 0)
+      )
+
       console.log(`✅ 房间列表更新完成: ${convertedRooms.length} 房间, ${convertedSpaces.length} 空间, ${convertedDMs.length} 私聊`)
 
     } catch (error) {
@@ -488,22 +1059,61 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
     }
   }
 
+  // 新增辅助函数
+  const updateRoomMember = (roomId: string, member: RoomMember) => {
+    const allRooms = [...rooms, ...spaces, ...directMessages]
+    const room = allRooms.find(r => r.id === roomId)
+    if (room) {
+      const existingIndex = room.members.findIndex(m => m.userId === member.userId)
+      if (existingIndex >= 0) {
+        room.members[existingIndex] = { ...room.members[existingIndex], ...member }
+      } else {
+        room.members.push(member)
+      }
+      room.updatedAt = Date.now()
+    }
+  }
+
+  const updateRoomReceipt = (roomId: string, receipt: Receipt) => {
+    const allRooms = [...rooms, ...spaces, ...directMessages]
+    const room = allRooms.find(r => r.id === roomId)
+    if (room) {
+      if (!room.receipts[receipt.eventId]) {
+        room.receipts[receipt.eventId] = []
+      }
+      
+      const existingIndex = room.receipts[receipt.eventId].findIndex(r => r.userId === receipt.userId)
+      if (existingIndex >= 0) {
+        room.receipts[receipt.eventId][existingIndex] = receipt
+      } else {
+        room.receipts[receipt.eventId].push(receipt)
+      }
+    }
+  }
+
   // 事件处理器
   const setupEventListeners = (client: any) => {
-    console.log('🎧 设置事件监听器...')
+    console.log('🎧 设置高级事件监听器...')
 
-    // 同步事件
+    // 同步事件 - 增强版
     const handleSync = throttle((state: string, prevState: string | null, data: any) => {
+      const endTimer = MatrixPerformanceManager.startTimer('sync')
       console.log(`🔄 同步状态: ${prevState} -> ${state}`)
       
       connection.value.syncState = {
+        ...connection.value.syncState,
         state,
         isActive: state === 'SYNCING' || state === 'CATCHUP',
+        catchingUp: state === 'CATCHUP',
         lastSync: Date.now(),
-        nextBatch: data?.response?.next_batch || connection.value.syncState.nextBatch
+        nextBatch: data?.response?.next_batch || connection.value.syncState.nextBatch,
+        syncProgress: data?.progress || 0
       }
 
       if (state === 'PREPARED' || state === 'SYNCING') {
+        // 重置重连状态
+        MatrixReconnectionManager.resetReconnectionState(connection.value.syncState)
+        
         setTimeout(() => {
           if (matrixClient.value) {
             updateRoomsFromClient(matrixClient.value)
@@ -512,7 +1122,14 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       } else if (state === 'ERROR') {
         console.error('❌ 同步错误:', data?.error)
         connection.value.syncState.syncError = data?.error?.message || 'Unknown sync error'
+        
+        // 启动自动重连
+        MatrixReconnectionManager.startReconnection(client, connection.value.syncState)
+      } else if (state === 'STOPPED') {
+        MatrixReconnectionManager.stopReconnection()
       }
+
+      endTimer()
     }, 500)
 
     const handleNewRoom = throttle((room: any) => {
@@ -527,16 +1144,30 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
     const handleRoomTimeline = throttle((event: any, room: any, toStartOfTimeline: boolean) => {
       if (toStartOfTimeline) return
       
+      const endTimer = MatrixPerformanceManager.startTimer('messageProcessing')
+      
       try {
-        if (event.getType() === 'm.room.message') {
+        const eventType = event.getType()
+        
+        if (eventType === 'm.room.message') {
           const message = convertEventToMessage(event, room)
           if (message) {
             addMessageToRoom(room.roomId, message)
           }
+        } else if (eventType === 'm.reaction') {
+          handleReactionEvent(event, room)
+        } else if (eventType === 'm.room.member') {
+          handleMemberEvent(event, room)
+        } else if (eventType === 'm.typing') {
+          handleTypingEvent(event, room)
+        } else if (eventType === 'm.receipt') {
+          handleReceiptEvent(event, room)
         }
       } catch (error) {
         console.error('处理时间线事件失败:', error)
       }
+
+      endTimer()
     }, 50)
 
     const handleClientError = (error: any) => {
@@ -544,12 +1175,133 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       error.value = MatrixErrorHandler.handle(error, 'Matrix 客户端')
     }
 
+    // 新增事件处理函数
+    const handleReactionEvent = (event: any, room: any) => {
+      try {
+        const content = event.getContent()
+        const relatesTo = content['m.relates_to']
+        if (relatesTo?.rel_type === 'm.annotation') {
+          const targetEventId = relatesTo.event_id
+          const reactionKey = relatesTo.key
+          const sender = event.getSender()
+          
+          if (!reactions.has(targetEventId)) {
+            reactions.set(targetEventId, {})
+          }
+          
+          const eventReactions = reactions.get(targetEventId)!
+          if (!eventReactions[reactionKey]) {
+            eventReactions[reactionKey] = {
+              count: 0,
+              users: [],
+              hasReacted: false,
+              key: reactionKey
+            }
+          }
+          
+          const reaction = eventReactions[reactionKey]
+          if (!reaction.users.includes(sender)) {
+            reaction.users.push(sender)
+            reaction.count++
+            reaction.hasReacted = sender === currentUser.value?.id
+          }
+        }
+      } catch (error) {
+        console.error('处理反应事件失败:', error)
+      }
+    }
+
+    const handleMemberEvent = (event: any, room: any) => {
+      try {
+        const content = event.getContent()
+        const userId = event.getStateKey()
+        const membership = content.membership
+        
+        // 更新房间成员信息
+        updateRoomMember(room.roomId, {
+          userId,
+          displayName: content.displayname,
+          avatarUrl: content.avatar_url,
+          membership,
+          powerLevel: 0 // 需要从 power_levels 事件获取
+        })
+      } catch (error) {
+        console.error('处理成员事件失败:', error)
+      }
+    }
+
+    const handleTypingEvent = (event: any, room: any) => {
+      try {
+        const content = event.getContent()
+        const typingUsers = content.user_ids || []
+        typing.set(room.roomId, typingUsers)
+        
+        // 更新房间的 typing 状态
+        const roomObj = [...rooms, ...spaces, ...directMessages].find(r => r.id === room.roomId)
+        if (roomObj) {
+          roomObj.typing = typingUsers
+        }
+      } catch (error) {
+        console.error('处理打字事件失败:', error)
+      }
+    }
+
+    const handleReceiptEvent = (event: any, room: any) => {
+      try {
+        const content = event.getContent()
+        Object.entries(content).forEach(([eventId, receipts]: [string, any]) => {
+          Object.entries(receipts).forEach(([receiptType, users]: [string, any]) => {
+            Object.entries(users).forEach(([userId, receiptData]: [string, any]) => {
+              // 更新已读回执信息
+              updateRoomReceipt(room.roomId, {
+                userId,
+                timestamp: receiptData.ts,
+                eventId,
+                receiptType
+              })
+            })
+          })
+        })
+      } catch (error) {
+        console.error('处理回执事件失败:', error)
+      }
+    }
+
+    const handlePresenceEvent = (event: any) => {
+      try {
+        const content = event.getContent()
+        const userId = event.getSender()
+        
+        presence.set(userId, {
+          presence: content.presence,
+          lastActiveAgo: content.last_active_ago,
+          statusMessage: content.status_msg,
+          currentlyActive: content.currently_active
+        })
+      } catch (error) {
+        console.error('处理在线状态事件失败:', error)
+      }
+    }
+
+    // 绑定所有事件监听器
     client.on('sync', handleSync)
     client.on('Room', handleNewRoom)
     client.on('Room.timeline', handleRoomTimeline)
+    client.on('User.presence', handlePresenceEvent)
     client.on('error', handleClientError)
 
-    console.log('✅ 事件监听器设置完成')
+    // 加密事件
+    if (client.getCrypto) {
+      client.on('crypto.keyBackupStatus', (enabled: boolean) => {
+        cryptoStatus.value.keyBackupEnabled = enabled
+      })
+      
+      client.on('crypto.keyBackupFailed', (error: any) => {
+        console.error('❌ 密钥备份失败:', error)
+      })
+    }
+
+    console.log('✅ 高级事件监听器设置完成')
   }
 
   // 主要功能函数
@@ -586,6 +1338,11 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
             const cryptoEnabled = await MatrixClientManager.initializeCrypto(client)
             connection.value.cryptoReady = cryptoEnabled
             
+            // 更新加密状态
+            if (cryptoEnabled) {
+              cryptoStatus.value = await MatrixCryptoManager.updateCryptoStatus(client)
+            }
+            
             // 设置事件监听器
             setupEventListeners(client)
             
@@ -606,7 +1363,11 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
             currentUser.value = {
               id: loginData.userId,
               username: loginData.userId.split(':')[0].substring(1),
-              displayName: loginData.displayName || loginData.userId.split(':')[0].substring(1)
+              displayName: loginData.displayName || loginData.userId.split(':')[0].substring(1),
+              devices: [],
+              crossSigningInfo: {
+                trustLevel: 'unknown'
+              }
             }
             
             // 启动客户端
@@ -686,6 +1447,11 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       const cryptoEnabled = await MatrixClientManager.initializeCrypto(client)
       connection.value.cryptoReady = cryptoEnabled
       
+      // 更新加密状态
+      if (cryptoEnabled) {
+        cryptoStatus.value = await MatrixCryptoManager.updateCryptoStatus(client)
+      }
+      
       // 设置事件监听器
       setupEventListeners(client)
       
@@ -707,7 +1473,11 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       currentUser.value = {
         id: userId,
         username,
-        displayName: username
+        displayName: username,
+        devices: [],
+        crossSigningInfo: {
+          trustLevel: 'unknown'
+        }
       }
       
       // 启动客户端
@@ -942,9 +1712,15 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
         homeserver: 'https://matrix.jianluochat.com',
         syncState: { 
           state: 'STOPPED',
-          isActive: false
+          isActive: false,
+          catchingUp: false,
+          reconnectAttempts: 0
         },
-        cryptoReady: false
+        cryptoReady: false,
+        slidingSyncSupported: false,
+        voipSupported: false,
+        threadsSupported: true,
+        spacesSupported: true
       }
       
       currentUser.value = null
@@ -991,6 +1767,468 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
     error.value = null
   }
 
+  // ==================== 高级功能方法 ====================
+  
+  // 加密管理
+  const setupCrossSigning = async (password?: string) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log('🔐 设置交叉签名...')
+      
+      const result = await MatrixCryptoManager.setupCrossSigningIfNeeded(matrixClient.value, password)
+      if (result) {
+        cryptoStatus.value = await MatrixCryptoManager.updateCryptoStatus(matrixClient.value)
+      }
+      
+      return result
+    } catch (error) {
+      console.error('❌ 设置交叉签名失败:', error)
+      return false
+    }
+  }
+
+  const setupKeyBackup = async () => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log('🔐 设置密钥备份...')
+      
+      const result = await MatrixCryptoManager.setupKeyBackupIfNeeded(matrixClient.value)
+      if (result) {
+        cryptoStatus.value = await MatrixCryptoManager.updateCryptoStatus(matrixClient.value)
+      }
+      
+      return result
+    } catch (error) {
+      console.error('❌ 设置密钥备份失败:', error)
+      return false
+    }
+  }
+
+  const verifyDevice = async (userId: string, deviceId: string) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      const crypto = matrixClient.value.getCrypto()
+      if (!crypto) {
+        throw new Error('加密功能未启用')
+      }
+
+      console.log(`🔐 验证设备: ${userId}/${deviceId}`)
+      
+      // 获取设备信息
+      const device = await crypto.getDeviceInfo?.(userId, deviceId)
+      if (!device) {
+        throw new Error('设备不存在')
+      }
+
+      // 标记设备为已验证
+      await crypto.setDeviceVerified?.(userId, deviceId, true)
+      
+      console.log('✅ 设备验证成功')
+      cryptoStatus.value = await MatrixCryptoManager.updateCryptoStatus(matrixClient.value)
+      
+      return true
+    } catch (error) {
+      console.error('❌ 设备验证失败:', error)
+      return false
+    }
+  }
+
+  // 线程功能
+  const sendThreadReply = async (roomId: string, rootEventId: string, content: string) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log(`💬 发送线程回复: ${roomId}/${rootEventId}`)
+
+      const messageContent = {
+        msgtype: 'm.text',
+        body: content,
+        'm.relates_to': {
+          event_id: rootEventId,
+          rel_type: 'm.thread'
+        }
+      }
+
+      const response = await matrixClient.value.sendEvent(roomId, 'm.room.message', messageContent)
+      console.log('✅ 线程回复发送成功:', response)
+
+      return response
+    } catch (error) {
+      console.error('❌ 发送线程回复失败:', error)
+      throw error
+    }
+  }
+
+  const fetchThreadMessages = async (roomId: string, rootEventId: string) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log(`🧵 获取线程消息: ${roomId}/${rootEventId}`)
+
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      // 获取线程事件
+      const threadEvents = room.getThreads?.()?.get(rootEventId)?.events || []
+      
+      const threadMessages = threadEvents
+        .filter((event: any) => event.getType() === 'm.room.message')
+        .map((event: any) => convertEventToMessage(event, room))
+        .filter(Boolean)
+
+      threads.set(rootEventId, threadMessages)
+      
+      console.log(`✅ 线程消息获取完成: ${threadMessages.length} 条`)
+      return threadMessages
+    } catch (error) {
+      console.error('❌ 获取线程消息失败:', error)
+      return []
+    }
+  }
+
+  // 反应功能
+  const addReaction = async (roomId: string, eventId: string, reaction: string) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log(`👍 添加反应: ${roomId}/${eventId} -> ${reaction}`)
+
+      const content = {
+        'm.relates_to': {
+          rel_type: 'm.annotation',
+          event_id: eventId,
+          key: reaction
+        }
+      }
+
+      const response = await matrixClient.value.sendEvent(roomId, 'm.reaction', content)
+      console.log('✅ 反应添加成功:', response)
+
+      return response
+    } catch (error) {
+      console.error('❌ 添加反应失败:', error)
+      throw error
+    }
+  }
+
+  const removeReaction = async (roomId: string, eventId: string, reaction: string) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log(`👎 移除反应: ${roomId}/${eventId} -> ${reaction}`)
+
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      // 查找对应的反应事件
+      const relations = room.getUnfilteredTimelineSet?.()?.relations?.getChildEventsForEvent?.(
+        eventId, 'm.annotation', 'm.reaction'
+      )
+
+      const reactionEvent = relations?.find((event: any) => {
+        const content = event.getContent()
+        return content['m.relates_to']?.key === reaction && 
+               event.getSender() === matrixClient.value.getUserId()
+      })
+
+      if (reactionEvent) {
+        const response = await matrixClient.value.redactEvent(roomId, reactionEvent.getId())
+        console.log('✅ 反应移除成功:', response)
+        return response
+      } else {
+        console.warn('未找到对应的反应事件')
+        return null
+      }
+    } catch (error) {
+      console.error('❌ 移除反应失败:', error)
+      throw error
+    }
+  }
+
+  // 消息编辑
+  const editMessage = async (roomId: string, eventId: string, newContent: string) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log(`✏️ 编辑消息: ${roomId}/${eventId}`)
+
+      const content = {
+        msgtype: 'm.text',
+        body: `* ${newContent}`,
+        'm.new_content': {
+          msgtype: 'm.text',
+          body: newContent
+        },
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: eventId
+        }
+      }
+
+      const response = await matrixClient.value.sendEvent(roomId, 'm.room.message', content)
+      console.log('✅ 消息编辑成功:', response)
+
+      return response
+    } catch (error) {
+      console.error('❌ 编辑消息失败:', error)
+      throw error
+    }
+  }
+
+  // 删除消息
+  const deleteMessage = async (roomId: string, eventId: string, reason?: string) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log(`🗑️ 删除消息: ${roomId}/${eventId}`)
+
+      const response = await matrixClient.value.redactEvent(roomId, eventId, reason)
+      console.log('✅ 消息删除成功:', response)
+
+      return response
+    } catch (error) {
+      console.error('❌ 删除消息失败:', error)
+      throw error
+    }
+  }
+
+  // 空间功能
+  const createSpace = async (name: string, topic?: string, isPublic: boolean = false) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log('🌌 创建空间:', name)
+
+      const createOptions = {
+        name,
+        topic,
+        visibility: isPublic ? 'public' : 'private',
+        preset: isPublic ? 'public_chat' : 'private_chat',
+        creation_content: {
+          type: 'm.space'
+        },
+        initial_state: [
+          {
+            type: 'm.room.history_visibility',
+            content: {
+              history_visibility: 'world_readable'
+            }
+          }
+        ]
+      }
+
+      const response = await matrixClient.value.createRoom(createOptions)
+      console.log('✅ 空间创建成功:', response)
+
+      return response
+    } catch (error) {
+      console.error('❌ 创建空间失败:', error)
+      throw error
+    }
+  }
+
+  const addRoomToSpace = async (spaceId: string, roomId: string) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log(`🌌 添加房间到空间: ${roomId} -> ${spaceId}`)
+
+      const content = {
+        via: [matrixClient.value.getDomain?.() || 'matrix.org']
+      }
+
+      const response = await matrixClient.value.sendStateEvent(
+        spaceId, 
+        'm.space.child', 
+        content, 
+        roomId
+      )
+      
+      console.log('✅ 房间添加到空间成功:', response)
+      return response
+    } catch (error) {
+      console.error('❌ 添加房间到空间失败:', error)
+      throw error
+    }
+  }
+
+  // 房间管理
+  const createRoom = async (options: {
+    name: string
+    topic?: string
+    isPublic?: boolean
+    isDirect?: boolean
+    inviteUsers?: string[]
+    encrypted?: boolean
+  }) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log('🏠 创建房间:', options.name)
+
+      const createOptions: any = {
+        name: options.name,
+        topic: options.topic,
+        visibility: options.isPublic ? 'public' : 'private',
+        preset: options.isDirect ? 'trusted_private_chat' : 
+                options.isPublic ? 'public_chat' : 'private_chat',
+        is_direct: options.isDirect || false,
+        invite: options.inviteUsers || []
+      }
+
+      if (options.encrypted) {
+        createOptions.initial_state = [
+          {
+            type: 'm.room.encryption',
+            content: {
+              algorithm: 'm.megolm.v1.aes-sha2'
+            }
+          }
+        ]
+      }
+
+      const response = await matrixClient.value.createRoom(createOptions)
+      console.log('✅ 房间创建成功:', response)
+
+      // 刷新房间列表
+      setTimeout(() => {
+        updateRoomsFromClient(matrixClient.value)
+      }, 1000)
+
+      return response
+
+    } catch (err: any) {
+      const errorMessage = MatrixErrorHandler.handle(err, '创建房间')
+      error.value = errorMessage
+      console.error('❌ 创建房间失败:', err)
+      throw new Error(errorMessage)
+    }
+  }
+
+  const joinRoom = async (roomIdOrAlias: string) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log('🚪 加入房间:', roomIdOrAlias)
+
+      const response = await matrixClient.value.joinRoom(roomIdOrAlias)
+      console.log('✅ 房间加入成功:', response)
+
+      // 刷新房间列表
+      setTimeout(() => {
+        updateRoomsFromClient(matrixClient.value)
+      }, 1000)
+
+      return response
+
+    } catch (err: any) {
+      const errorMessage = MatrixErrorHandler.handle(err, '加入房间')
+      error.value = errorMessage
+      console.error('❌ 加入房间失败:', err)
+      throw new Error(errorMessage)
+    }
+  }
+
+  const leaveRoom = async (roomId: string) => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix 客户端未初始化')
+      }
+
+      console.log('🚪 离开房间:', roomId)
+
+      const response = await matrixClient.value.leave(roomId)
+      console.log('✅ 房间离开成功:', response)
+
+      // 从本地移除房间
+      const roomIndex = rooms.findIndex(r => r.id === roomId)
+      if (roomIndex >= 0) rooms.splice(roomIndex, 1)
+      
+      const spaceIndex = spaces.findIndex(r => r.id === roomId)
+      if (spaceIndex >= 0) spaces.splice(spaceIndex, 1)
+      
+      const dmIndex = directMessages.findIndex(r => r.id === roomId)
+      if (dmIndex >= 0) directMessages.splice(dmIndex, 1)
+      
+      messages.delete(roomId)
+      threads.delete(roomId)
+
+      return response
+
+    } catch (err: any) {
+      const errorMessage = MatrixErrorHandler.handle(err, '离开房间')
+      error.value = errorMessage
+      console.error('❌ 离开房间失败:', err)
+      throw new Error(errorMessage)
+    }
+  }
+
+  // 性能和监控
+  const getPerformanceMetrics = (): PerformanceMetrics => {
+    return MatrixPerformanceManager.getMetrics()
+  }
+
+  const logPerformanceReport = () => {
+    MatrixPerformanceManager.logPerformanceReport()
+  }
+
+  // 辅助方法增强
+  const setCurrentRoomEnhanced = (roomId: string | null) => {
+    currentRoomId.value = roomId
+    
+    if (roomId && !messages.has(roomId)) {
+      fetchMatrixMessages(roomId)
+    }
+    
+    if (roomId) {
+      markRoomAsRead(roomId)
+    }
+  }
+
+  const setCurrentThreadEnhanced = (threadId: string | null) => {
+    currentThreadId.value = threadId
+    
+    if (threadId && !threads.has(threadId)) {
+      const [roomId] = threadId.split('/')
+      if (roomId) {
+        fetchThreadMessages(roomId, threadId)
+      }
+    }
+  }
+
   // 返回接口
   return {
     // 状态
@@ -1000,21 +2238,45 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
     spaces: readonly(spaces),
     directMessages: readonly(directMessages),
     messages: readonly(messages),
+    threads: readonly(threads),
+    reactions: readonly(reactions),
+    typing: readonly(typing),
+    presence: readonly(presence),
+    voipCalls: readonly(voipCalls),
+    widgets: readonly(widgets),
     currentRoomId: readonly(currentRoomId),
+    currentThreadId: readonly(currentThreadId),
     loading: readonly(loading),
     error: readonly(error),
     clientInitializing: readonly(clientInitializing),
     matrixClient: readonly(matrixClient),
+    cryptoStatus: readonly(cryptoStatus),
+    performanceMetrics: readonly(performanceMetrics),
 
     // 计算属性
     currentRoom,
     currentMessages,
+    currentThread,
     sortedRooms,
+    sortedSpaces,
+    sortedDirectMessages,
     totalUnreadCount,
+    totalNotificationCount,
+    totalHighlightCount,
     isConnected,
     isLoggedIn,
     isSyncing,
+    isCatchingUp,
+    syncProgress,
     homeserver,
+    encryptionReady,
+    crossSigningReady,
+    keyBackupReady,
+    deviceVerified,
+    supportsThreads,
+    supportsSpaces,
+    supportsVoip,
+    supportsSlidingSync,
 
     // 主要方法
     initializeMatrix,
@@ -1025,10 +2287,29 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
     sendFileMessage,
     logout,
 
+    // 高级功能
+    setupCrossSigning,
+    setupKeyBackup,
+    verifyDevice,
+    sendThreadReply,
+    fetchThreadMessages,
+    addReaction,
+    removeReaction,
+    editMessage,
+    deleteMessage,
+    createSpace,
+    addRoomToSpace,
+    createRoom,
+    joinRoom,
+    leaveRoom,
+
     // 辅助方法
-    setCurrentRoom,
+    setCurrentRoom: setCurrentRoomEnhanced,
+    setCurrentThread: setCurrentThreadEnhanced,
     markRoomAsRead,
     clearError,
+    getPerformanceMetrics,
+    logPerformanceReport,
 
     // 工具方法
     formatFileSize,
@@ -1037,5 +2318,11 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
   }
 })
 
-// 导出客户端管理器供外部使用
-export { MatrixClientManager }
+// 导出管理器供外部使用
+export { 
+  MatrixClientManager,
+  MatrixCryptoManager,
+  MatrixReconnectionManager,
+  MatrixStorageManager,
+  MatrixPerformanceManager
+}

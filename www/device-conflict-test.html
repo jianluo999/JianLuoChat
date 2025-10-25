@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix设备冲突测试工具</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid;
+        }
+        .status.success {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .status.warning {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+        .status.error {
+            background: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+        .status.info {
+            background: #d1ecf1;
+            border-color: #17a2b8;
+            color: #0c5460;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button.danger {
+            background: #dc3545;
+        }
+        button.danger:hover {
+            background: #c82333;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Matrix设备冲突测试工具</h1>
+        <p>这个工具可以帮助检测和修复Matrix客户端的设备冲突问题。</p>
+
+        <div class="section">
+            <h3>📊 当前状态检查</h3>
+            <button onclick="checkCurrentStatus()">检查当前状态</button>
+            <div id="currentStatus"></div>
+        </div>
+
+        <div class="section">
+            <h3>🧹 清理操作</h3>
+            <button onclick="clearDeviceData()">清理设备数据</button>
+            <button onclick="clearAllData()" class="danger">清理所有数据</button>
+            <button onclick="clearWasmData()">清理WASM数据</button>
+            <div id="clearStatus"></div>
+        </div>
+
+        <div class="section">
+            <h3>🔍 冲突检测</h3>
+            <button onclick="simulateConflict()">模拟设备冲突</button>
+            <button onclick="testConflictDetection()">测试冲突检测</button>
+            <div id="conflictStatus"></div>
+        </div>
+
+        <div class="section">
+            <h3>📋 系统信息</h3>
+            <button onclick="showSystemInfo()">显示系统信息</button>
+            <div id="systemInfo"></div>
+        </div>
+
+        <div class="section">
+            <h3>📝 操作日志</h3>
+            <button onclick="clearLog()">清理日志</button>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        // 日志函数
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}\n`;
+            logDiv.textContent += logEntry;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('log').textContent = '';
+        }
+
+        function showStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        // 检查当前状态
+        function checkCurrentStatus() {
+            log('🔍 开始检查当前状态...');
+            
+            const deviceId = localStorage.getItem('matrix-device-id');
+            const loginInfo = localStorage.getItem('matrix-login-info');
+            const hasMatrixData = !!deviceId || !!loginInfo;
+            
+            let statusHtml = '<h4>LocalStorage状态:</h4>';
+            statusHtml += `<p>设备ID: ${deviceId || '未设置'}</p>`;
+            statusHtml += `<p>登录信息: ${loginInfo ? '已保存' : '未保存'}</p>`;
+            
+            // 检查IndexedDB
+            if ('indexedDB' in window) {
+                indexedDB.databases().then(databases => {
+                    const matrixDbs = databases.filter(db => 
+                        db.name && (db.name.includes('matrix') || db.name.includes('crypto'))
+                    );
+                    statusHtml += `<h4>IndexedDB状态:</h4>`;
+                    statusHtml += `<p>Matrix相关数据库: ${matrixDbs.length}个</p>`;
+                    if (matrixDbs.length > 0) {
+                        statusHtml += '<ul>';
+                        matrixDbs.forEach(db => {
+                            statusHtml += `<li>${db.name} (版本: ${db.version})</li>`;
+                        });
+                        statusHtml += '</ul>';
+                    }
+                    
+                    showStatus('currentStatus', statusHtml, hasMatrixData ? 'info' : 'warning');
+                    log(`✅ 状态检查完成 - 设备ID: ${deviceId}, 数据库: ${matrixDbs.length}个`);
+                }).catch(error => {
+                    log(`❌ 检查IndexedDB失败: ${error.message}`, 'error');
+                    showStatus('currentStatus', statusHtml + '<p>IndexedDB检查失败</p>', 'error');
+                });
+            } else {
+                showStatus('currentStatus', statusHtml + '<p>浏览器不支持IndexedDB</p>', 'warning');
+            }
+        }
+
+        // 清理设备数据
+        async function clearDeviceData() {
+            log('🧹 开始清理设备数据...');
+            
+            try {
+                // 清理localStorage
+                localStorage.removeItem('matrix-device-id');
+                localStorage.removeItem('matrix-login-info');
+                sessionStorage.removeItem('matrix-device-id');
+                
+                log('✅ localStorage清理完成');
+                showStatus('clearStatus', '设备数据清理完成', 'success');
+            } catch (error) {
+                log(`❌ 清理设备数据失败: ${error.message}`, 'error');
+                showStatus('clearStatus', `清理失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 清理所有数据
+        async function clearAllData() {
+            if (!confirm('确定要清理所有Matrix相关数据吗？这将删除所有本地存储的数据。')) {
+                return;
+            }
+            
+            log('🗑️ 开始清理所有数据...');
+            
+            try {
+                // 清理localStorage
+                await clearDeviceData();
+                
+                // 清理IndexedDB
+                if ('indexedDB' in window) {
+                    const databases = await indexedDB.databases();
+                    const matrixDbs = databases.filter(db => 
+                        db.name && (db.name.includes('matrix') || db.name.includes('crypto') || db.name.includes('jianluochat'))
+                    );
+                    
+                    for (const db of matrixDbs) {
+                        log(`🗑️ 删除数据库: ${db.name}`);
+                        indexedDB.deleteDatabase(db.name);
+                    }
+                    
+                    log(`✅ 删除了 ${matrixDbs.length} 个数据库`);
+                }
+                
+                showStatus('clearStatus', '所有数据清理完成，建议刷新页面', 'success');
+                log('✅ 所有数据清理完成');
+            } catch (error) {
+                log(`❌ 清理所有数据失败: ${error.message}`, 'error');
+                showStatus('clearStatus', `清理失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 清理WASM数据
+        function clearWasmData() {
+            log('🧹 开始清理WASM数据...');
+            
+            try {
+                // 清理全局WASM相关变量
+                const globalKeys = Object.keys(window);
+                let clearedCount = 0;
+                
+                for (const key of globalKeys) {
+                    if (key.includes('wasm') || key.includes('crypto') || key.includes('matrix')) {
+                        try {
+                            delete window[key];
+                            clearedCount++;
+                        } catch (error) {
+                            // 忽略无法删除的属性
+                        }
+                    }
+                }
+                
+                log(`✅ 清理了 ${clearedCount} 个全局变量`);
+                showStatus('clearStatus', `WASM数据清理完成，清理了${clearedCount}个变量`, 'success');
+            } catch (error) {
+                log(`❌ 清理WASM数据失败: ${error.message}`, 'error');
+                showStatus('clearStatus', `清理失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 显示系统信息
+        function showSystemInfo() {
+            log('📋 收集系统信息...');
+            
+            const info = {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                language: navigator.language,
+                cookieEnabled: navigator.cookieEnabled,
+                onLine: navigator.onLine,
+                indexedDBSupported: 'indexedDB' in window,
+                webAssemblySupported: 'WebAssembly' in window,
+                serviceWorkerSupported: 'serviceWorker' in navigator,
+                timestamp: new Date().toISOString()
+            };
+            
+            let infoHtml = '<h4>浏览器信息:</h4>';
+            for (const [key, value] of Object.entries(info)) {
+                infoHtml += `<p><strong>${key}:</strong> ${value}</p>`;
+            }
+            
+            showStatus('systemInfo', infoHtml, 'info');
+            log('✅ 系统信息收集完成');
+        }
+
+        // 模拟设备冲突
+        function simulateConflict() {
+            log('🎭 模拟设备冲突...');
+            
+            // 创建多个相同的设备ID
+            localStorage.setItem('matrix-device-id', 'jianluochat_web_client');
+            
+            // 模拟错误
+            const mockError = new Error('One time key signed_curve25519:AAAAAAAAAA0 already exists');
+            
+            log(`❌ 模拟错误: ${mockError.message}`);
+            showStatus('conflictStatus', `模拟的设备冲突: ${mockError.message}`, 'error');
+        }
+
+        // 测试冲突检测
+        function testConflictDetection() {
+            log('🔍 测试冲突检测功能...');
+            
+            const testErrors = [
+                'One time key signed_curve25519:AAAAAAAAAA0 already exists',
+                'Our own device might have been deleted',
+                'null pointer passed to rust',
+                'WebAssembly instantiation failed'
+            ];
+            
+            let resultHtml = '<h4>冲突检测测试结果:</h4>';
+            
+            testErrors.forEach((errorMsg, index) => {
+                const mockError = { message: errorMsg };
+                // 这里应该调用实际的冲突检测函数，但由于我们在静态页面中，只能模拟
+                const conflictType = errorMsg.includes('key') ? 'key_exists' :
+                                   errorMsg.includes('device') ? 'device_deleted' :
+                                   errorMsg.includes('null pointer') ? 'multiple_instances' : 'unknown';
+                
+                resultHtml += `<p>${index + 1}. "${errorMsg}" → 检测为: <strong>${conflictType}</strong></p>`;
+                log(`🔍 测试 ${index + 1}: ${errorMsg} → ${conflictType}`);
+            });
+            
+            showStatus('conflictStatus', resultHtml, 'info');
+            log('✅ 冲突检测测试完成');
+        }
+
+        // 页面加载时自动检查状态
+        window.addEventListener('load', () => {
+            log('🚀 Matrix设备冲突测试工具已加载');
+            checkCurrentStatus();
+        });
+    </script>
+</body>
+</html>
