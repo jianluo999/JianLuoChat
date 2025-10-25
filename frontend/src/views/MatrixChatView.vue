@@ -65,6 +65,31 @@
             <span v-if="pendingInvitations > 0" class="notification-badge">{{ pendingInvitations }}</span>
           </button>
           
+          <!-- 加密设置按钮 -->
+          <button
+            v-if="matrixStore.encryptionReady"
+            @click="showEncryptionSetup = true"
+            class="header-button encryption-button"
+            :class="encryptionStatusClass"
+            :title="encryptionStatusText"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M12,17A2,2 0 0,0 14,15C14,13.89 13.1,13 12,13A2,2 0 0,0 10,15A2,2 0 0,0 12,17M18,8A2,2 0 0,1 20,10V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V10C4,8.89 4.9,8 6,8H7V6A5,5 0 0,1 12,1A5,5 0 0,1 17,6V8H18M12,3A3,3 0 0,0 9,6V8H15V6A3,3 0 0,0 12,3Z"/>
+            </svg>
+            <span v-if="!matrixStore.crossSigningReady" class="warning-dot"></span>
+          </button>
+
+          <!-- 性能监控按钮 -->
+          <button
+            @click="showPerformanceMonitor = !showPerformanceMonitor"
+            class="header-button performance-button"
+            title="性能监控"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M3,3V21H21V19H5V3H3M9,17H7V10H9V17M13,17H11V7H13V17M17,17H15V13H17V17Z"/>
+            </svg>
+          </button>
+
           <button
             @click="showSettings = true"
             class="header-button"
@@ -72,6 +97,18 @@
           >
             <svg viewBox="0 0 24 24">
               <path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.22,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.22,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/>
+            </svg>
+          </button>
+
+          <!-- v39 高级功能按钮 -->
+          <button
+            @click="openV39Demo"
+            class="header-button v39-features-button"
+            :class="{ active: showPerformanceMonitor }"
+            title="Matrix v39 高级功能"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4M11,16.5L6.5,12L7.91,10.59L11,13.67L16.59,8.09L18,9.5L11,16.5Z"/>
             </svg>
           </button>
 
@@ -109,10 +146,31 @@
 
         <!-- 右侧：消息区域 -->
         <div class="matrix-message-panel">
-          <MatrixMessageArea 
+          <MatrixMessageAreaV39 
             v-if="selectedRoom"
             :room-id="selectedRoom"
+            :replying-to="replyingToMessage"
+            :thread-root="threadRootMessage"
+            :editing-message="editingMessage"
             @user-clicked="handleUserClicked"
+            @message-reply="handleMessageReply"
+            @message-edit="handleMessageEdit"
+            @thread-start="handleThreadStart"
+            @reaction-add="handleReactionAdd"
+            @reaction-remove="handleReactionRemove"
+            @message-delete="handleMessageDelete"
+          />
+          <MatrixMessageInputV39
+            v-if="selectedRoom"
+            :room-id="selectedRoom"
+            :replying-to="replyingToMessage"
+            :thread-root="threadRootMessage"
+            :editing-message="editingMessage"
+            @message-sent="handleMessageSent"
+            @reply-cancel="replyingToMessage = null"
+            @thread-cancel="threadRootMessage = null"
+            @edit-cancel="editingMessage = null"
+            @edit-save="handleEditSave"
           />
           <div v-else class="no-room-selected">
             <div class="welcome-container">
@@ -246,6 +304,199 @@
       @room-selected="handleRoomSelected"
     />
 
+    <!-- 加密设置模态框 -->
+    <div v-if="showEncryptionSetup" class="modal-overlay" @click="showEncryptionSetup = false">
+      <div class="encryption-modal" @click.stop>
+        <div class="modal-header">
+          <h3>🔐 端到端加密设置</h3>
+          <button @click="showEncryptionSetup = false" class="close-btn">×</button>
+        </div>
+        <div class="encryption-content">
+          <div class="encryption-status">
+            <div class="status-item">
+              <span class="status-label">加密引擎:</span>
+              <span :class="['status-value', matrixStore.encryptionReady ? 'ready' : 'not-ready']">
+                {{ matrixStore.encryptionReady ? '✅ 已就绪' : '❌ 未就绪' }}
+              </span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">交叉签名:</span>
+              <span :class="['status-value', matrixStore.crossSigningReady ? 'ready' : 'not-ready']">
+                {{ matrixStore.crossSigningReady ? '✅ 已设置' : '⚠️ 未设置' }}
+              </span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">密钥备份:</span>
+              <span :class="['status-value', matrixStore.keyBackupEnabled ? 'ready' : 'not-ready']">
+                {{ matrixStore.keyBackupEnabled ? '✅ 已启用' : '❌ 未启用' }}
+              </span>
+            </div>
+          </div>
+          
+          <div class="encryption-actions">
+            <button 
+              v-if="!matrixStore.crossSigningReady"
+              @click="setupCrossSigning"
+              class="encryption-btn primary"
+            >
+              设置交叉签名
+            </button>
+            <button 
+              v-if="!matrixStore.keyBackupEnabled"
+              @click="setupKeyBackup"
+              class="encryption-btn secondary"
+            >
+              启用密钥备份
+            </button>
+            <button 
+              @click="verifyDevice"
+              class="encryption-btn secondary"
+            >
+              验证设备
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- v39 高级功能面板 -->
+    <div v-if="showPerformanceMonitor" class="v39-features-panel">
+      <div class="panel-header">
+        <h4>� 性Matrix v39 高级功能</h4>
+        <button @click="showPerformanceMonitor = false" class="close-btn">×</button>
+      </div>
+      
+      <!-- 功能标签页 -->
+      <div class="feature-tabs">
+        <button 
+          class="tab-btn"
+          :class="{ active: activeFeatureTab === 'performance' }"
+          @click="activeFeatureTab = 'performance'"
+        >
+          📊 性能
+        </button>
+        <button 
+          class="tab-btn"
+          :class="{ active: activeFeatureTab === 'encryption' }"
+          @click="activeFeatureTab = 'encryption'"
+        >
+          🔐 加密
+        </button>
+        <button 
+          class="tab-btn"
+          :class="{ active: activeFeatureTab === 'features' }"
+          @click="activeFeatureTab = 'features'"
+        >
+          ✨ 功能
+        </button>
+      </div>
+
+      <!-- 性能监控 -->
+      <div v-if="activeFeatureTab === 'performance'" class="tab-content">
+        <div class="performance-metrics">
+          <div class="metric-item">
+            <span class="metric-label">内存使用:</span>
+            <span class="metric-value">{{ formatMemoryUsage() }}</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">网络延迟:</span>
+            <span class="metric-value">{{ getNetworkLatency() }}ms</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">同步状态:</span>
+            <span class="metric-value">{{ getSyncStatus() }}</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">消息缓存:</span>
+            <span class="metric-value">{{ getMessageCacheSize() }}</span>
+          </div>
+        </div>
+        <div class="performance-actions">
+          <button @click="handlePerformanceReport" class="perf-btn">生成报告</button>
+          <button @click="clearCache" class="perf-btn">清理缓存</button>
+        </div>
+      </div>
+
+      <!-- 加密管理 -->
+      <div v-if="activeFeatureTab === 'encryption'" class="tab-content">
+        <div class="encryption-status-grid">
+          <div class="status-item">
+            <span class="status-label">加密引擎:</span>
+            <span :class="['status-value', matrixStore.encryptionReady ? 'ready' : 'not-ready']">
+              {{ matrixStore.encryptionReady ? '✅ 已启用' : '❌ 未启用' }}
+            </span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">交叉签名:</span>
+            <span :class="['status-value', matrixStore.crossSigningReady ? 'ready' : 'not-ready']">
+              {{ matrixStore.crossSigningReady ? '✅ 已设置' : '⚠️ 未设置' }}
+            </span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">密钥备份:</span>
+            <span :class="['status-value', matrixStore.keyBackupEnabled ? 'ready' : 'not-ready']">
+              {{ matrixStore.keyBackupEnabled ? '✅ 已启用' : '❌ 未启用' }}
+            </span>
+          </div>
+        </div>
+        <div class="encryption-actions">
+          <button 
+            v-if="!matrixStore.crossSigningReady"
+            @click="setupCrossSigning"
+            class="perf-btn primary"
+          >
+            设置交叉签名
+          </button>
+          <button 
+            v-if="!matrixStore.keyBackupEnabled"
+            @click="setupKeyBackup"
+            class="perf-btn"
+          >
+            启用密钥备份
+          </button>
+          <button @click="verifyDevice" class="perf-btn">验证设备</button>
+        </div>
+      </div>
+
+      <!-- 新功能展示 -->
+      <div v-if="activeFeatureTab === 'features'" class="tab-content">
+        <div class="features-list">
+          <div class="feature-item">
+            <div class="feature-icon">🧵</div>
+            <div class="feature-info">
+              <h5>线程支持</h5>
+              <p>支持消息线程回复</p>
+            </div>
+            <div class="feature-status">{{ matrixStore.supportsThreads ? '✅' : '❌' }}</div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">👍</div>
+            <div class="feature-info">
+              <h5>消息反应</h5>
+              <p>Emoji 反应系统</p>
+            </div>
+            <div class="feature-status">✅</div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">✏️</div>
+            <div class="feature-info">
+              <h5>消息编辑</h5>
+              <p>编辑和删除消息</p>
+            </div>
+            <div class="feature-status">✅</div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🌌</div>
+            <div class="feature-info">
+              <h5>空间管理</h5>
+              <p>Matrix 空间支持</p>
+            </div>
+            <div class="feature-status">{{ matrixStore.supportsSpaces ? '✅' : '❌' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 公共房间探索器 -->
     <div v-if="showPublicRoomsExplorer" class="modal-overlay" @click="showPublicRoomsExplorer = false">
       <div class="public-rooms-modal" @click.stop>
@@ -263,21 +514,22 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useMatrixStore } from '@/stores/matrix'
+import { useMatrixV39Store } from '@/stores/matrix-v39-clean'
 import { invitationAPI, roomAPI } from '@/services/api'
 
 // 组件导入
 import MatrixRealLogin from '@/components/MatrixRealLogin.vue'
 import MatrixNavigation from '@/components/MatrixNavigation.vue'
 import MatrixRoomListOptimized from '@/components/MatrixRoomListOptimized.vue'
-import MatrixMessageArea from '@/components/MatrixMessageArea.vue'
+import MatrixMessageAreaV39 from '@/components/MatrixMessageAreaV39.vue'
+import MatrixMessageInputV39 from '@/components/MatrixMessageInputV39.vue'
 import MatrixUserID from '@/components/MatrixUserID.vue'
 import MatrixChatDemo from '@/components/MatrixChatDemo.vue'
 import MatrixRoomBrowser from '@/components/MatrixRoomBrowser.vue'
 import PublicRoomsExplorer from '@/components/PublicRoomsExplorer.vue'
 
-// Store
-const matrixStore = useMatrixStore()
+// Store - 使用新的 v39 版本
+const matrixStore = useMatrixV39Store()
 
 // 界面状态
 const selectedServer = ref(localStorage.getItem('matrix-selected-server') || 'matrix.org')
@@ -303,6 +555,27 @@ const newRoom = ref({
 
 // 邀请计数
 const pendingInvitations = ref(0)
+
+// v39 新功能状态
+const replyingToMessage = ref<any>(null)
+const threadRootMessage = ref<any>(null)
+const editingMessage = ref<any>(null)
+const showEncryptionSetup = ref(false)
+const showPerformanceMonitor = ref(false)
+const activeFeatureTab = ref('performance')
+
+// 加密状态计算属性
+const encryptionStatusClass = computed(() => {
+  if (!matrixStore.encryptionReady) return 'encryption-not-ready'
+  if (!matrixStore.crossSigningReady) return 'encryption-warning'
+  return 'encryption-ready'
+})
+
+const encryptionStatusText = computed(() => {
+  if (!matrixStore.encryptionReady) return '加密未就绪'
+  if (!matrixStore.crossSigningReady) return '需要设置交叉签名'
+  return '加密已就绪'
+})
 
 // JWT认证状态
 const hasJwtToken = computed(() => {
@@ -385,19 +658,175 @@ const createRoom = async () => {
   if (!newRoom.value.name.trim()) return
   
   try {
-    await roomAPI.createRoom({
+    // 使用新的 v39 创建房间功能
+    await matrixStore.createRoom({
       name: newRoom.value.name.trim(),
-      type: newRoom.value.isPublic ? 'public' : 'private'
+      topic: '',
+      isPublic: newRoom.value.isPublic,
+      encrypted: newRoom.value.encrypted
     })
     
     showCreateRoom.value = false
     newRoom.value = { name: '', isPublic: false, encrypted: true }
     
     // 刷新房间列表
-    await matrixStore.fetchRooms()
+    await matrixStore.fetchMatrixRooms()
   } catch (error) {
     console.error('Failed to create room:', error)
   }
+}
+
+// v39 新功能事件处理
+const handleMessageReply = (message: any) => {
+  replyingToMessage.value = message
+  console.log('回复消息:', message)
+}
+
+const handleMessageEdit = (message: any) => {
+  editingMessage.value = message
+  console.log('编辑消息:', message)
+}
+
+const handleThreadStart = (message: any) => {
+  threadRootMessage.value = message
+  console.log('开始线程:', message)
+}
+
+const handleMessageSent = async (content: string) => {
+  console.log('消息已发送:', content)
+  // 清除回复/编辑状态
+  replyingToMessage.value = null
+  threadRootMessage.value = null
+  editingMessage.value = null
+  
+  // 刷新消息列表
+  if (selectedRoom.value) {
+    try {
+      await matrixStore.fetchMatrixMessages(selectedRoom.value)
+    } catch (error) {
+      console.error('刷新消息失败:', error)
+    }
+  }
+}
+
+const handleEditSave = async (messageId: string, newContent: string) => {
+  try {
+    await matrixStore.editMessage(selectedRoom.value, messageId, newContent)
+    console.log('消息编辑保存:', messageId, newContent)
+    editingMessage.value = null
+  } catch (error) {
+    console.error('编辑消息失败:', error)
+  }
+}
+
+// v39 高级功能处理函数
+const handleReactionAdd = async (eventId: string, reaction: string) => {
+  try {
+    await matrixStore.addReaction(selectedRoom.value, eventId, reaction)
+  } catch (error) {
+    console.error('添加反应失败:', error)
+  }
+}
+
+const handleReactionRemove = async (eventId: string, reaction: string) => {
+  try {
+    await matrixStore.removeReaction(selectedRoom.value, eventId, reaction)
+  } catch (error) {
+    console.error('移除反应失败:', error)
+  }
+}
+
+const handleMessageDelete = async (eventId: string) => {
+  if (confirm('确定要删除这条消息吗？')) {
+    try {
+      await matrixStore.redactMessage(selectedRoom.value, eventId)
+    } catch (error) {
+      console.error('删除消息失败:', error)
+    }
+  }
+}
+
+const handleEncryptionSetup = async () => {
+  try {
+    showEncryptionSetup.value = true
+    // 这里可以打开加密设置页面或模态框
+  } catch (error) {
+    console.error('打开加密设置失败:', error)
+  }
+}
+
+const handlePerformanceReport = () => {
+  const metrics = matrixStore.getPerformanceMetrics()
+  console.log('性能指标:', metrics)
+  matrixStore.logPerformanceReport()
+}
+
+// 加密设置相关函数
+const setupCrossSigning = async () => {
+  try {
+    const password = prompt('请输入您的Matrix密码以设置交叉签名:')
+    if (password) {
+      await matrixStore.setupCrossSigning(password)
+      console.log('交叉签名设置成功')
+    }
+  } catch (error) {
+    console.error('设置交叉签名失败:', error)
+    alert('设置交叉签名失败: ' + error.message)
+  }
+}
+
+const setupKeyBackup = async () => {
+  try {
+    await matrixStore.setupKeyBackup()
+    console.log('密钥备份设置成功')
+  } catch (error) {
+    console.error('设置密钥备份失败:', error)
+    alert('设置密钥备份失败: ' + error.message)
+  }
+}
+
+const verifyDevice = async () => {
+  try {
+    // 这里可以打开设备验证流程
+    console.log('开始设备验证流程')
+    alert('设备验证功能正在开发中')
+  } catch (error) {
+    console.error('设备验证失败:', error)
+  }
+}
+
+// 性能监控相关函数
+const formatMemoryUsage = () => {
+  const metrics = matrixStore.getPerformanceMetrics()
+  return metrics?.memoryUsage ? `${(metrics.memoryUsage / 1024 / 1024).toFixed(1)}MB` : 'N/A'
+}
+
+const getNetworkLatency = () => {
+  const metrics = matrixStore.getPerformanceMetrics()
+  return metrics?.networkLatency || 0
+}
+
+const getSyncStatus = () => {
+  return matrixStore.syncState || 'STOPPED'
+}
+
+const getMessageCacheSize = () => {
+  const metrics = matrixStore.getPerformanceMetrics()
+  return metrics?.messageCacheSize || 0
+}
+
+const clearCache = async () => {
+  try {
+    await matrixStore.clearCache()
+    console.log('缓存已清理')
+  } catch (error) {
+    console.error('清理缓存失败:', error)
+  }
+}
+
+const openV39Demo = () => {
+  // 切换显示高级功能面板
+  showPerformanceMonitor.value = !showPerformanceMonitor.value
 }
 
 const loadPendingInvitations = async () => {
@@ -1177,5 +1606,338 @@ onMounted(async () => {
   0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7); }
   70% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }
   100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }
+}
+
+/* 加密按钮状态样式 */
+.encryption-button {
+  position: relative;
+}
+
+.encryption-button.encryption-ready {
+  background: rgba(76, 175, 80, 0.2);
+  border: 1px solid rgba(76, 175, 80, 0.5);
+}
+
+.encryption-button.encryption-warning {
+  background: rgba(255, 193, 7, 0.2);
+  border: 1px solid rgba(255, 193, 7, 0.5);
+}
+
+.encryption-button.encryption-not-ready {
+  background: rgba(244, 67, 54, 0.2);
+  border: 1px solid rgba(244, 67, 54, 0.5);
+}
+
+.warning-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  background: #ff9800;
+  border-radius: 50%;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.3; }
+}
+
+/* 性能监控按钮样式 */
+.performance-button {
+  background: rgba(33, 150, 243, 0.2);
+  border: 1px solid rgba(33, 150, 243, 0.5);
+}
+
+.performance-button:hover {
+  background: rgba(33, 150, 243, 0.3);
+}
+
+/* v39 演示按钮样式 */
+.v39-demo-button {
+  background: linear-
+
+/* 加密设置模态框样式 */
+.encryption-modal {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 2px solid #4caf50;
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 600px;
+  width: 90%;
+  color: #e0e6ed;
+}
+
+.encryption-content {
+  margin-top: 24px;
+}
+
+.encryption-status {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-item:last-child {
+  border-bottom: none;
+}
+
+.status-label {
+  font-weight: 500;
+  color: #b0bec5;
+}
+
+.status-value {
+  font-weight: 600;
+}
+
+.status-value.ready {
+  color: #4caf50;
+}
+
+.status-value.not-ready {
+  color: #ff6b6b;
+}
+
+.encryption-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.encryption-btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.encryption-btn.primary {
+  background: #4caf50;
+  color: white;
+}
+
+.encryption-btn.secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e0e6ed;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.encryption-btn:hover {
+  transform: translateY(-2px);
+}
+
+/* v39 高级功能按钮样式 */
+.v39-features-button {
+  background: rgba(0, 255, 136, 0.2);
+  border: 1px solid rgba(0, 255, 136, 0.5);
+}
+
+.v39-features-button:hover {
+  background: rgba(0, 255, 136, 0.3);
+}
+
+.v39-features-button.active {
+  background: rgba(0, 255, 136, 0.4);
+  border-color: #00ff88;
+}
+
+/* v39 高级功能面板样式 */
+.v39-features-panel {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  width: 380px;
+  max-height: 600px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 2px solid #00ff88;
+  border-radius: 12px;
+  padding: 20px;
+  z-index: 999;
+  color: #e0e6ed;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow-y: auto;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.panel-header h4 {
+  margin: 0;
+  color: #2196f3;
+  font-size: 1.1rem;
+}
+
+.performance-metrics {
+  margin-bottom: 16px;
+}
+
+.metric-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.metric-item:last-child {
+  border-bottom: none;
+}
+
+.metric-label {
+  font-size: 0.9rem;
+  color: #b0bec5;
+}
+
+.metric-value {
+  font-weight: 600;
+  color: #2196f3;
+}
+
+.performance-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.perf-btn {
+  flex: 1;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(33, 150, 243, 0.2);
+  color: #2196f3;
+  border: 1px solid rgba(33, 150, 243, 0.3);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.3s ease;
+}
+
+.perf-btn:hover {
+  background: rgba(33, 150, 243, 0.3);
+  transform: translateY(-1px);
+}
+
+/* 功能标签页样式 */
+.feature-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 8px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #e0e6ed;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.3s ease;
+}
+
+.tab-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tab-btn.active {
+  background: rgba(0, 255, 136, 0.2);
+  border-color: #00ff88;
+  color: #00ff88;
+}
+
+.tab-content {
+  min-height: 200px;
+}
+
+/* 加密状态网格 */
+.encryption-status-grid {
+  margin-bottom: 16px;
+}
+
+.encryption-status-grid .status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.encryption-status-grid .status-item:last-child {
+  border-bottom: none;
+}
+
+.encryption-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.perf-btn.primary {
+  background: rgba(0, 255, 136, 0.2);
+  border-color: #00ff88;
+  color: #00ff88;
+}
+
+/* 功能列表样式 */
+.features-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.feature-icon {
+  font-size: 1.5rem;
+  width: 32px;
+  text-align: center;
+}
+
+.feature-info {
+  flex: 1;
+}
+
+.feature-info h5 {
+  margin: 0 0 4px 0;
+  font-size: 0.9rem;
+  color: #e0e6ed;
+}
+
+.feature-info p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #b0bec5;
+}
+
+.feature-status {
+  font-size: 1.2rem;
 }
 </style>
