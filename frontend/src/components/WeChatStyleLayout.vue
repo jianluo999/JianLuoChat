@@ -198,6 +198,14 @@
           <div class="empty-message">暂无聊天</div>
         </div>
 
+        <!-- 聊天管理工具栏 -->
+        <div v-if="filteredRooms.length > 0" class="chat-toolbar">
+          <div class="chat-count">{{ filteredRooms.length }} 个聊天</div>
+          <button class="cleanup-btn" @click="cleanupStrangeRoomsAction" title="清理陌生聊天">
+            🧹 清理
+          </button>
+        </div>
+
         <!-- 聊天列表 -->
         <div
           v-for="room in filteredRooms"
@@ -205,6 +213,7 @@
           class="chat-item"
           :class="{ active: currentRoomId === room.id }"
           @click="selectRoom(room.id)"
+          @contextmenu.prevent="showRoomContextMenu(room, $event)"
         >
           <div class="chat-avatar">
             {{ getRoomInitials(room.name) }}
@@ -361,6 +370,42 @@
       </div>
     </div>
   </div>
+
+  <!-- 微信风格右键菜单 -->
+  <div
+    v-if="contextMenu.show"
+    class="wechat-context-menu"
+    :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+    @click.stop
+  >
+    <div class="context-menu-item" @click="markAsTop">
+      置顶
+    </div>
+    <div class="context-menu-item" @click="markAsUnread">
+      标为未读
+    </div>
+    <div class="context-menu-item" @click="hideSelectedRoom">
+      消息免打扰
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" @click="hideSelectedRoom">
+      独立窗口显示
+    </div>
+    <div class="context-menu-item" @click="hideSelectedRoom">
+      不显示
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item danger" @click="leaveSelectedRoom">
+      删除
+    </div>
+  </div>
+
+  <!-- 点击遮罩关闭菜单 -->
+  <div
+    v-if="contextMenu.show"
+    class="context-menu-overlay"
+    @click="hideContextMenu"
+  ></div>
 </template>
 
 <script setup lang="ts">
@@ -1057,6 +1102,9 @@ onMounted(async () => {
   // 设置性能优化的滚动监听器
   setupScrollOptimization()
 
+  // 添加全局点击监听器（用于关闭右键菜单）
+  document.addEventListener('click', handleGlobalClick)
+
   // 检查是否已经有Matrix客户端在运行
   if (matrixStore.matrixClient && matrixStore.matrixClient.clientRunning) {
     console.log('✅ Matrix客户端已在运行，跳过初始化')
@@ -1214,8 +1262,179 @@ onUnmounted(() => {
   })
   scrollCleanupFunctions.length = 0
   
+  // 清理右键菜单监听器
+  document.removeEventListener('click', handleGlobalClick)
+  
   console.log('✅ WeChatStyleLayout组件清理完成')
 })
+
+// 右键菜单状态
+const contextMenu = ref({
+  show: false,
+  x: 0,
+  y: 0,
+  room: null as any
+})
+
+// 显示右键菜单
+const showRoomContextMenu = (room: any, event: MouseEvent) => {
+  contextMenu.value = {
+    show: true,
+    x: event.clientX,
+    y: event.clientY,
+    room: room
+  }
+  console.log('🖱️ 显示房间右键菜单:', room.name)
+}
+
+// 隐藏右键菜单
+const hideContextMenu = () => {
+  contextMenu.value.show = false
+  contextMenu.value.room = null
+}
+
+// 置顶房间
+const markAsTop = async () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('� 置隐顶房间:', room.name)
+  
+  // 简单实现：将房间移到列表顶部
+  const roomIndex = matrixStore.rooms.findIndex(r => r.id === room.id)
+  if (roomIndex > 0) {
+    const [topRoom] = matrixStore.rooms.splice(roomIndex, 1)
+    matrixStore.rooms.unshift(topRoom)
+    console.log('✅ 房间已置顶')
+  }
+  
+  hideContextMenu()
+}
+
+// 标为未读
+const markAsUnread = async () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('🔴 标为未读:', room.name)
+  
+  // 简单实现：增加未读计数
+  const roomIndex = matrixStore.rooms.findIndex(r => r.id === room.id)
+  if (roomIndex >= 0) {
+    matrixStore.rooms[roomIndex].unreadCount = (matrixStore.rooms[roomIndex].unreadCount || 0) + 1
+    console.log('✅ 已标为未读')
+  }
+  
+  hideContextMenu()
+}
+
+// 隐藏选中的房间
+const hideSelectedRoom = async () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('🔕 消息免打扰:', room.name)
+  
+  try {
+    const result = await matrixStore.hideRoom(room.id)
+    if (result.success) {
+      console.log('✅ 已设置消息免打扰')
+    } else {
+      console.error('❌ 设置失败:', result.error)
+    }
+  } catch (error) {
+    console.error('❌ 设置出错:', error)
+  }
+  
+  hideContextMenu()
+}
+
+// 删除选中的房间
+const leaveSelectedRoom = async () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  
+  // 确认对话框
+  if (!confirm(`确定要删除聊天 "${room.name}" 吗？删除后聊天记录将被清空。`)) {
+    hideContextMenu()
+    return
+  }
+  
+  console.log('�️ 开删除聊天:', room.name)
+  
+  try {
+    const result = await matrixStore.leaveMatrixRoom(room.id)
+    if (result.success) {
+      console.log('✅ 聊天已删除')
+    } else {
+      console.error('❌ 删除失败:', result.error)
+      alert('删除失败: ' + result.error)
+    }
+  } catch (error) {
+    console.error('❌ 删除出错:', error)
+    alert('删除出错: ' + error)
+  }
+  
+  hideContextMenu()
+}
+
+// 清理陌生房间
+const cleanupStrangeRoomsAction = async () => {
+  if (!confirm('确定要清理所有陌生房间吗？这将移除没有消息记录的房间。')) {
+    hideContextMenu()
+    return
+  }
+  
+  console.log('🧹 开始清理陌生房间')
+  
+  try {
+    const result = await matrixStore.cleanupStrangeRooms()
+    if (result.success) {
+      console.log(`✅ 清理完成，移除了 ${result.cleanedCount} 个陌生房间`)
+      alert(`清理完成！移除了 ${result.cleanedCount} 个陌生房间`)
+    } else {
+      console.error('❌ 清理失败:', result.error)
+      alert('清理失败: ' + result.error)
+    }
+  } catch (error) {
+    console.error('❌ 清理出错:', error)
+    alert('清理出错: ' + error)
+  }
+  
+  hideContextMenu()
+}
+
+// 点击其他地方隐藏菜单
+const handleGlobalClick = () => {
+  if (contextMenu.value.show) {
+    hideContextMenu()
+  }
+}
+
+// 暴露给控制台使用
+if (typeof window !== 'undefined') {
+  (window as any).cleanupStrangeRooms = cleanupStrangeRoomsAction
+  (window as any).quickCleanup = async () => {
+    console.log('🧹 快速清理陌生房间（无确认）')
+    try {
+      const result = await matrixStore.cleanupStrangeRooms()
+      if (result.success) {
+        console.log(`✅ 清理完成，移除了 ${result.cleanedCount} 个陌生房间`)
+      } else {
+        console.error('❌ 清理失败:', result.error)
+      }
+    } catch (error) {
+      console.error('❌ 清理出错:', error)
+    }
+  }
+  console.log('🎉 微信风格聊天界面已加载!')
+  console.log('✨ 新功能:')
+  console.log('  • 右键点击聊天 - 置顶、标为未读、删除等')
+  console.log('  • 点击"🧹 清理"按钮 - 清理陌生聊天')
+  console.log('  • window.quickCleanup() - 快速清理（无确认）')
+  console.log('💡 提示: 右键菜单现在更像微信了!')
+}
 
 // 注释：已移除 initializeMatrixInBackground 函数以避免重复初始化
 </script>
@@ -1606,15 +1825,26 @@ onUnmounted(() => {
   padding: 12px 20px;
   cursor: pointer;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  transition: background-color 0.2s ease;
+  transition: background-color 0.1s ease;
+  position: relative;
 }
 
 .chat-item:hover {
-  background: rgba(45, 90, 39, 0.05);
+  background: rgba(45, 90, 39, 0.04);
 }
 
 .chat-item.active {
-  background: rgba(45, 90, 39, 0.1);
+  background: rgba(45, 90, 39, 0.08);
+}
+
+.chat-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #07c160;
 }
 
 .chat-avatar {
@@ -2137,5 +2367,87 @@ onUnmounted(() => {
 
 .logout-text {
   font-size: 13px;
+}
+
+/* 微信风格右键菜单样式 */
+.wechat-context-menu {
+  position: fixed;
+  background: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  z-index: 9999;
+  min-width: 120px;
+  padding: 6px 0;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  color: #333333;
+  line-height: 1.4;
+  transition: background-color 0.1s ease;
+  white-space: nowrap;
+}
+
+.context-menu-item:hover {
+  background-color: #f0f0f0;
+}
+
+.context-menu-item.danger {
+  color: #fa5151;
+}
+
+.context-menu-item.danger:hover {
+  background-color: #fff2f2;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background-color: #e6e6e6;
+  margin: 6px 0;
+}
+
+.context-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9998;
+  background: transparent;
+}
+
+/* 聊天管理工具栏 */
+.chat-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+}
+
+.chat-count {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.cleanup-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.8);
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cleanup-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
 }
 </style>

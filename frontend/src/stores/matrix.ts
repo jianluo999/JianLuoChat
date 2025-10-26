@@ -2041,6 +2041,144 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
+  /**
+   * 离开房间
+   */
+  const leaveMatrixRoom = async (roomId: string) => {
+    try {
+      loading.value = true
+      console.log(`🚪 离开房间: ${roomId}`)
+
+      if (!matrixClient.value) {
+        throw new Error('Matrix客户端未初始化')
+      }
+
+      // 调用Matrix客户端离开房间
+      await matrixClient.value.leave(roomId)
+      console.log(`✅ 成功离开房间: ${roomId}`)
+
+      // 从本地房间列表中移除
+      const roomIndex = rooms.value.findIndex(room => room.id === roomId)
+      if (roomIndex !== -1) {
+        rooms.value.splice(roomIndex, 1)
+        console.log(`🗑️ 已从本地列表移除房间: ${roomId}`)
+      }
+
+      // 清理相关消息
+      messages.value.delete(roomId)
+      console.log(`🧹 已清理房间消息: ${roomId}`)
+
+      // 保存更新后的房间列表
+      saveRoomsToStorage()
+
+      // 如果当前选中的是被删除的房间，清除选择
+      if (currentRoomId.value === roomId) {
+        currentRoomId.value = null
+        console.log(`🔄 已清除当前房间选择`)
+      }
+
+      return { success: true }
+
+    } catch (err: any) {
+      error.value = 'Failed to leave room'
+      console.error('离开房间失败:', err)
+      return { success: false, error: err.message }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * 隐藏房间（不离开，只是从列表中隐藏）
+   */
+  const hideRoom = (roomId: string) => {
+    try {
+      console.log(`👁️ 隐藏房间: ${roomId}`)
+      
+      // 从本地房间列表中移除
+      const roomIndex = rooms.value.findIndex(room => room.id === roomId)
+      if (roomIndex !== -1) {
+        const hiddenRoom = rooms.value[roomIndex]
+        rooms.value.splice(roomIndex, 1)
+        console.log(`🙈 已隐藏房间: ${hiddenRoom.name || roomId}`)
+        
+        // 保存到隐藏列表
+        const hiddenRooms = JSON.parse(localStorage.getItem('hidden-rooms') || '[]')
+        hiddenRooms.push(roomId)
+        localStorage.setItem('hidden-rooms', JSON.stringify(hiddenRooms))
+      }
+
+      // 清理相关消息
+      messages.value.delete(roomId)
+
+      // 保存更新后的房间列表
+      saveRoomsToStorage()
+
+      // 如果当前选中的是被隐藏的房间，清除选择
+      if (currentRoomId.value === roomId) {
+        currentRoomId.value = null
+      }
+
+      return { success: true }
+
+    } catch (err: any) {
+      console.error('隐藏房间失败:', err)
+      return { success: false, error: err.message }
+    }
+  }
+
+  /**
+   * 清理缓存的陌生房间
+   */
+  const cleanupStrangeRooms = () => {
+    try {
+      console.log('🧹 开始清理陌生房间...')
+      
+      const beforeCount = rooms.value.length
+      
+      // 保留文件传输助手和有消息的房间
+      rooms.value = rooms.value.filter(room => {
+        // 保留文件传输助手
+        if (room.isFileTransferRoom) {
+          return true
+        }
+        
+        // 保留有消息的房间
+        const roomMessages = messages.value.get(room.id)
+        if (roomMessages && roomMessages.length > 0) {
+          return true
+        }
+        
+        // 保留有未读消息的房间
+        if (room.unreadCount && room.unreadCount > 0) {
+          return true
+        }
+        
+        // 保留成员数大于2的房间（可能是群聊）
+        if (room.memberCount && room.memberCount > 2) {
+          return true
+        }
+        
+        console.log(`🗑️ 清理陌生房间: ${room.name || room.id}`)
+        return false
+      })
+      
+      const afterCount = rooms.value.length
+      const cleanedCount = beforeCount - afterCount
+      
+      console.log(`✅ 清理完成，移除了 ${cleanedCount} 个陌生房间`)
+      
+      // 保存清理后的房间列表
+      saveRoomsToStorage()
+      
+      return { success: true, cleanedCount }
+      
+    } catch (err: any) {
+      console.error('清理陌生房间失败:', err)
+      return { success: false, error: err.message }
+    }
+  }
+
   const createMatrixRoom = async (name: string, isPublic: boolean = false) => {
     try {
       loading.value = true
@@ -3510,6 +3648,9 @@ export const useMatrixStore = defineStore('matrix', () => {
     disconnect,
     loadMoreHistoryMessages,
     smartAutoLoadHistory, // 新增智能自动加载函数
+    leaveMatrixRoom, // 离开房间
+    hideRoom, // 隐藏房间
+    cleanupStrangeRooms, // 清理陌生房间
     
     // 消息功能增强
     editMessage,
