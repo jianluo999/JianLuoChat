@@ -116,6 +116,14 @@ watch(() => globalLoginProgress.progressState.isActive, (isActive) => {
   }
 })
 
+// 暴露测试函数到全局（开发环境）
+if (import.meta.env.DEV) {
+  (window as any).testLoginProgress = () => {
+    console.log('🧪 启动登录进度条测试')
+    globalLoginProgress.simulateLoginSteps()
+  }
+}
+
 onMounted(() => {
   // 设置 axios 基础配置
   axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'

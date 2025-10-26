@@ -1690,7 +1690,8 @@ const leaveSelectedRoom = async () => {
 
 // 清理陌生房间
 const cleanupStrangeRoomsAction = async () => {
-  if (!confirm('确定要清理所有陌生房间吗？这将移除没有消息记录的房间。')) {
+  // 默认选择"否"，不再弹出确认对话框
+  if (false) {
     hideContextMenu()
     return
   }
@@ -2126,7 +2127,11 @@ const handleGlobalClick = () => {
 
 // 暴露给控制台使用
 if (typeof window !== 'undefined') {
-  (window as any).cleanupStrangeRooms = cleanupStrangeRoomsAction
+  // 修改全局清理函数，默认选择"否"
+  (window as any).cleanupStrangeRooms = async () => {
+    console.log('🧹 跳过清理陌生房间（默认选择否）')
+    return { success: false, error: '用户选择取消' }
+  }
   (window as any).quickCleanup = async () => {
     console.log('🧹 快速清理陌生房间（无确认）')
     try {
