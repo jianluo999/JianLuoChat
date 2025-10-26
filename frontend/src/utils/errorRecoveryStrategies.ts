@@ -33,14 +33,26 @@ export const networkErrorRecovery: ErrorRecoveryStrategy = {
       return false
     }
 
+    // 检查是否是已知的CORS或连接失败的服务器，避免无效重试
+    const knownFailedServers = ['mozilla.org', 'kde.org', 'matrix.jianluochat.com']
+    const isKnownFailure = knownFailedServers.some(server => 
+      networkError.url?.includes(server)
+    )
+    
+    if (isKnownFailure) {
+      console.debug(`⏭️ 跳过已知失败服务器的重试: ${networkError.url}`)
+      return false
+    }
+
     // 等待一段时间后重试
     const delay = Math.min(1000 * Math.pow(2, networkError.retryCount), 10000)
     await new Promise(resolve => setTimeout(resolve, delay))
 
     try {
-      // 这里应该重新发起原始请求
-      // 由于我们没有原始请求的完整信息，这里只是示例
-      console.log(`Retrying network request to ${networkError.url}`)
+      // 只对可能成功的请求进行重试日志
+      if (import.meta.env.DEV) {
+        console.log(`Retrying network request to ${networkError.url}`)
+      }
       
       // 实际实现中，应该从请求缓存中获取原始请求并重新发送
       // const response = await fetch(networkError.url, originalRequestOptions)

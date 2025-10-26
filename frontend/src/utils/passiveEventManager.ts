@@ -18,6 +18,8 @@ interface EventListenerInfo {
 class PassiveEventManager {
   private listeners: Map<string, EventListenerInfo> = new Map()
   private throttledHandlers: Map<string, EventListener> = new Map()
+  private hasShownOptimizationWarning = false
+  private lastReportedFPS?: number
   private debouncedHandlers: Map<string, EventListener> = new Map()
   private isMonitoring: boolean = false
 
@@ -222,11 +224,15 @@ class PassiveEventManager {
     
     const problematicEvents = ['wheel', 'touchstart', 'touchmove', 'scroll']
     
-    problematicEvents.forEach(eventType => {
-      if (import.meta.env.DEV) {
+    // 只在首次加载时显示一次警告，避免重复日志
+    if (import.meta.env.DEV && !this.hasShownOptimizationWarning) {
+      console.group('🔍 事件监听器优化检查')
+      problematicEvents.forEach(eventType => {
         console.warn(`⚠️ 建议检查 ${eventType} 事件监听器是否使用了被动模式`)
-      }
-    })
+      })
+      console.groupEnd()
+      this.hasShownOptimizationWarning = true
+    }
   }
 
   /**
@@ -359,24 +365,29 @@ class PassiveEventManager {
         lastTime = currentTime
         lastFPS = fps
         
-        // 如果FPS低于45，认为是性能问题
-        if (fps < 45) {
+        // 如果FPS低于30，认为是严重性能问题（提高阈值减少噪音）
+        if (fps < 30) {
           jankCount++
           
-          errorHandler.handlePerformanceError({
-            message: `Low FPS detected: ${fps}`,
-            metric: 'scroll_jank',
-            value: fps,
-            threshold: 45,
-            context: {
-              jankCount,
-              timestamp: currentTime
-            }
-          })
+          // 限制FPS报告频率，避免过多日志
+          if (jankCount <= 5 || jankCount % 10 === 0) {
+            errorHandler.handlePerformanceError({
+              message: `Low FPS detected: ${fps}`,
+              metric: 'scroll_jank',
+              value: fps,
+              threshold: 30,
+              context: {
+                jankCount,
+                timestamp: currentTime
+              }
+            })
+          }
         }
         
-        if (import.meta.env.DEV) {
+        // 只在开发环境且FPS变化较大时输出日志
+        if (import.meta.env.DEV && Math.abs(fps - (this.lastReportedFPS || fps)) > 10) {
           console.debug(`📊 FPS: ${fps}, Jank Count: ${jankCount}`)
+          this.lastReportedFPS = fps
         }
       }
       

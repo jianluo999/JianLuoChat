@@ -106,17 +106,23 @@ function setupPerformanceMonitoring(): void {
   // 监控长任务
   if ('PerformanceObserver' in window) {
     try {
+      let longTaskCount = 0
+      const MAX_LONG_TASK_REPORTS = 10 // 限制报告数量
+      
       const longTaskObserver = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          if (entry.duration > 50) { // 超过50ms的任务
+          // 提高阈值到100ms，减少噪音
+          if (entry.duration > 100 && longTaskCount < MAX_LONG_TASK_REPORTS) {
+            longTaskCount++
             errorHandler.handlePerformanceError({
-              message: `Long task detected: ${entry.duration}ms`,
+              message: `Long task detected: ${entry.duration}ms (${longTaskCount}/${MAX_LONG_TASK_REPORTS})`,
               metric: 'scroll_jank',
               value: entry.duration,
-              threshold: 50,
+              threshold: 100,
               context: {
                 entryType: entry.entryType,
-                startTime: entry.startTime
+                startTime: entry.startTime,
+                reportCount: longTaskCount
               }
             })
           }

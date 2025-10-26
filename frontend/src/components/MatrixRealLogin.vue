@@ -96,6 +96,7 @@
 <script>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useMatrixV39Store } from '@/stores/matrix-v39-clean'
+import { useMatrixProgressiveOptimization } from '@/stores/matrix-progressive-optimization'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
@@ -105,6 +106,7 @@ export default {
   setup(props, { emit }) {
     const { t } = useI18n()
     const matrixStore = useMatrixV39Store()
+    const optimizationStore = useMatrixProgressiveOptimization()
     const router = useRouter()
     
     const username = ref('')
@@ -141,25 +143,88 @@ export default {
       error.value = ''
 
       try {
-        // 使用新的 matrix-v39-clean store 的 matrixLogin 方法
-        const result = await matrixStore.matrixLogin(username.value, password.value, homeserver.value)
+        console.log('🔄 [真实登录] 启动冗余登录策略...')
         
-        if (result.success) {
+        // 策略1: 尝试冗余快速登录
+        let loginSuccess = false
+        let loginResult = null
+        
+        if (optimizationStore.optimizationEnabled) {
+          console.log('🚀 [真实登录] 尝试冗余快速登录...')
+          
+          const quickResult = await optimizationStore.quickLogin(
+            username.value, 
+            password.value, 
+            homeserver.value.startsWith('http') ? homeserver.value : `https://${homeserver.value}`
+          )
+          
+          if (quickResult.success) {
+            console.log(`✅ [真实登录] 冗余快速登录成功，方法: ${quickResult.method}`)
+            loginSuccess = true
+            loginResult = {
+              success: true,
+              user: quickResult.user,
+              method: 'redundant_quick'
+            }
+            
+            // 启动渐进式初始化
+            optimizationStore.progressiveInitialize()
+          } else {
+            console.warn(`⚠️ [真实登录] 冗余快速登录失败，尝试了 ${quickResult.attempts || 0} 个服务器`)
+          }
+        }
+        
+        // 策略2: 如果快速登录失败，使用原有的完整登录
+        if (!loginSuccess) {
+          console.log('🔄 [真实登录] 使用原有完整登录流程...')
+          
+          const result = await matrixStore.matrixLogin(username.value, password.value, homeserver.value)
+          
+          if (result.success) {
+            console.log('✅ [真实登录] 原有登录流程成功')
+            loginSuccess = true
+            loginResult = {
+              ...result,
+              method: 'original_full'
+            }
+          } else {
+            throw new Error(result.error || '登录失败')
+          }
+        }
+        
+        // 处理登录成功
+        if (loginSuccess && loginResult) {
           emit('login-success', {
-            userId: result.user?.id,
-            homeserver: homeserver.value
+            userId: loginResult.user?.id,
+            homeserver: homeserver.value,
+            method: loginResult.method
           })
 
-          // 立即跳转到聊天页面
-          console.log('登录成功，立即跳转到聊天页面...')
+          console.log(`🎉 [真实登录] 登录成功，方法: ${loginResult.method}，跳转到聊天页面...`)
           router.push('/chat')
         } else {
-          error.value = result.error || '登录失败'
+          throw new Error('所有登录方法都失败')
         }
 
       } catch (err) {
-        console.error('Matrix login failed:', err)
+        console.error('❌ [真实登录] 登录失败:', err)
         
+        // 尝试自动修复系统
+        if (optimizationStore.optimizationEnabled) {
+          console.log('🔧 [真实登录] 尝试自动修复系统...')
+          try {
+            const repairResult = await optimizationStore.autoRepairSystem()
+            if (repairResult.repaired) {
+              console.log(`✅ [真实登录] 自动修复完成: ${repairResult.actions.join(', ')}`)
+              error.value = '系统已自动修复，请重试登录'
+              return
+            }
+          } catch (repairError) {
+            console.warn('⚠️ [真实登录] 自动修复失败:', repairError)
+          }
+        }
+        
+        // 错误处理
         if (err.errcode === 'M_FORBIDDEN') {
           error.value = t('matrix.realLogin.errors.invalidCredentials')
         } else if (err.errcode === 'M_USER_DEACTIVATED') {

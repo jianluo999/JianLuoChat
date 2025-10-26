@@ -897,8 +897,11 @@ export const useMatrixStore = defineStore('matrix', () => {
       }
 
       // 创建优化的客户端配置 - 极简配置以提高性能
+      // 确保homeserver URL格式正确，避免双重https://前缀
+      const baseUrl = homeserver.startsWith('http') ? homeserver : `https://${homeserver}`
+      
       const client = createClient({
-        baseUrl: `https://${homeserver}`,
+        baseUrl: baseUrl,
         accessToken: accessToken,
         userId: userId,
         deviceId: deviceId,

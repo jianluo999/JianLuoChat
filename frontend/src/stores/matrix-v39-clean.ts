@@ -573,8 +573,7 @@ class MatrixReconnectionManager {
     try {
       // 尝试连接到 Matrix 服务器检查连通性
       const response = await fetch('https://matrix.org/_matrix/client/versions', {
-        method: 'GET',
-        timeout: 5000
+        method: 'GET'
       })
       return response.ok
     } catch {
@@ -1216,97 +1215,6 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
 
       // 分批处理房间，避免长时间阻塞主线程
       await processRoomsInBatches(clientRooms, convertedRooms, convertedSpaces, convertedDMs, client)
-        try {
-          const joinRule = room.getJoinRule()
-          const isSpace = room.isSpaceRoom?.() || false
-          const isDirect = client.isRoomDirect?.(room.roomId) || false
-          const powerLevelsEvent = room.currentState?.getStateEvents('m.room.power_levels', '')
-          const powerLevels = powerLevelsEvent?.getContent() || {}
-
-          const matrixRoom: MatrixRoom = {
-            id: room.roomId,
-            name: room.name || room.roomId,
-            alias: room.getCanonicalAlias(),
-            topic: room.currentState?.getStateEvents('m.room.topic', '')?.getContent()?.topic || '',
-            type: isSpace ? 'space' : isDirect ? 'dm' : (joinRule === 'public' ? 'public' : 'private'),
-            isPublic: joinRule === 'public',
-            isDirect,
-            isSpace,
-            memberCount: room.currentState?.getJoinedMemberCount() || 0,
-            joinedMemberCount: room.getJoinedMemberCount() || 0,
-            invitedMemberCount: room.getInvitedMemberCount() || 0,
-            members: [],
-            unreadCount: room.getUnreadNotificationCount() || 0,
-            notificationCount: room.getUnreadNotificationCount() || 0,
-            highlightCount: room.getUnreadNotificationCount('highlight') || 0,
-            encrypted: room.hasEncryptionStateEvent(),
-            encryptionAlgorithm: room.hasEncryptionStateEvent() ? 'm.megolm.v1.aes-sha2' : undefined,
-            avatarUrl: room.getAvatarUrl?.(client.baseUrl, 96, 96, 'scale'),
-            canonicalAlias: room.getCanonicalAlias(),
-            altAliases: room.getAltAliases() || [],
-            powerLevels: {
-              users: powerLevels.users || {},
-              usersDefault: powerLevels.users_default || 0,
-              events: powerLevels.events || {},
-              eventsDefault: powerLevels.events_default || 0,
-              stateDefault: powerLevels.state_default || 50,
-              ban: powerLevels.ban || 50,
-              kick: powerLevels.kick || 50,
-              redact: powerLevels.redact || 50,
-              invite: powerLevels.invite || 50,
-              notifications: {
-                room: powerLevels.notifications?.room || 50
-              }
-            },
-            joinRule: joinRule || 'invite',
-            historyVisibility: room.getHistoryVisibility() || 'shared',
-            guestAccess: room.getGuestAccess() || 'can_join',
-            tags: room.tags || {},
-            accountData: {},
-            summary: room.summary ? {
-              heroes: room.summary.heroes || [],
-              joinedMemberCount: room.summary.joinedMemberCount || 0,
-              invitedMemberCount: room.summary.invitedMemberCount || 0
-            } : undefined,
-            typing: [],
-            receipts: {},
-            presence: {},
-            childRooms: [],
-            parentSpaces: [],
-            updatedAt: Date.now(),
-            createdAt: (() => {
-              try {
-                return room.getCreatedAt?.() || Date.now()
-              } catch (e) {
-                return Date.now()
-              }
-            })()
-          }
-
-          // 获取房间成员
-          const members = room.getJoinedMembers()
-          matrixRoom.members = members.map((member: any) => ({
-            userId: member.userId,
-            displayName: member.name,
-            avatarUrl: member.getAvatarUrl?.(client.baseUrl, 32, 32, 'scale'),
-            membership: member.membership,
-            powerLevel: powerLevels.users?.[member.userId] || powerLevels.users_default || 0,
-            presence: presence.get(member.userId)?.presence
-          }))
-
-          // 分类房间
-          if (isSpace) {
-            convertedSpaces.push(matrixRoom)
-          } else if (isDirect) {
-            convertedDMs.push(matrixRoom)
-          } else {
-            convertedRooms.push(matrixRoom)
-          }
-
-        } catch (roomError) {
-          console.warn(`处理房间 ${room.roomId} 失败:`, roomError)
-        }
-      })
 
       // 更新状态
       rooms.splice(0, rooms.length, ...convertedRooms)
@@ -1743,17 +1651,39 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       error.value = null
       
       const serverUrl = homeserver || 'matrix.jianluochat.com'
-      console.log(`🔐 尝试 Matrix 登录: ${username} @ ${serverUrl}`)
+      console.log(`🔐 [智能登录] 尝试 Matrix 登录: ${username} @ ${serverUrl}`)
 
-      // 检查并清理可能冲突的加密数据
-      const userId = `@${username}:${serverUrl.replace('https://', '').replace('http://', '')}`
-      const storedDeviceId = localStorage.getItem(`jianluochat-device-id-${username}`)
+      // 构造新用户ID
+      const newUserId = `@${username}:${serverUrl.replace('https://', '').replace('http://', '')}`
       
-      // 如果存在存储的设备ID，检查是否有加密数据冲突
-      if (storedDeviceId) {
-        console.log(`🔍 检查设备ID冲突: 存储的设备ID = ${storedDeviceId}`)
-        // 预防性清理，避免设备ID不匹配
-        await MatrixCryptoManager.clearCryptoStores(userId)
+      // 智能用户变化检测和清理
+      console.log('🔍 [智能登录] 检查用户变化和数据冲突...')
+      
+      const currentUserId = currentUser.value?.id || localStorage.getItem('matrix_user_id')
+      const isUserChange = currentUserId && currentUserId !== newUserId
+      
+      if (isUserChange) {
+        console.log(`🧹 [智能登录] 检测到用户变化 (${currentUserId} -> ${newUserId})，执行预清理...`)
+        
+        // 执行智能登出清理
+        await logout(newUserId)
+        
+        // 额外清理加密存储以避免设备ID冲突
+        await MatrixCryptoManager.clearCryptoStores(currentUserId)
+        
+        console.log('✅ [智能登录] 用户变化清理完成')
+      } else {
+        console.log('✅ [智能登录] 同用户登录或首次登录')
+        
+        // 检查并清理可能冲突的加密数据
+        const storedDeviceId = localStorage.getItem(`jianluochat-device-id-${username}`)
+        
+        // 如果存在存储的设备ID，检查是否有加密数据冲突
+        if (storedDeviceId) {
+          console.log(`🔍 [智能登录] 检查设备ID冲突: 存储的设备ID = ${storedDeviceId}`)
+          // 预防性清理，避免设备ID不匹配
+          await MatrixCryptoManager.clearCryptoStores(newUserId)
+        }
       }
 
       // 加载 SDK
@@ -1827,7 +1757,7 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
         ...connection.value,
         connected: true,
         homeserver: serverUrl,
-        userId,
+        userId: loggedInUserId,
         accessToken,
         deviceId,
         cryptoReady: cryptoEnabled
@@ -1835,7 +1765,7 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       
       // 设置当前用户
       currentUser.value = {
-        id: userId,
+        id: loggedInUserId,
         username,
         displayName: username,
         devices: [],
@@ -2093,9 +2023,15 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
     }
   }
 
-  const logout = async () => {
+  const logout = async (newUserId?: string) => {
     try {
-      console.log('🚪 Matrix 登出...')
+      console.log('🚪 [智能登出] 开始智能登出流程...')
+
+      // 获取当前用户信息
+      const currentUserId = currentUser.value?.id || localStorage.getItem('matrix_user_id')
+      const isUserChange = newUserId && currentUserId && currentUserId !== newUserId
+      
+      console.log(`👤 [智能登出] 用户信息: 当前=${currentUserId}, 新用户=${newUserId}, 用户变化=${isUserChange}`)
 
       if (matrixClient.value) {
         // 清理客户端
@@ -2129,26 +2065,114 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       directMessages.splice(0, directMessages.length)
       messages.clear()
       
-      // 清除存储
-      localStorage.removeItem('matrix-v39-login-info')
-      localStorage.removeItem('matrix_access_token')
-      localStorage.removeItem('matrix_login_info')
-      
-      // 清理设备ID相关存储
-      const keysToRemove = []
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i)
-        if (key && key.startsWith('jianluochat-device-id-')) {
-          keysToRemove.push(key)
-        }
+      if (isUserChange) {
+        console.log('🧹 [智能登出] 检测到用户变化，执行完全清理...')
+        await performFullLogoutCleanup(currentUserId)
+      } else {
+        console.log('💾 [智能登出] 同用户或正常登出，执行保护性清理...')
+        await performProtectiveLogoutCleanup(currentUserId)
       }
-      keysToRemove.forEach(key => localStorage.removeItem(key))
       
-      console.log('✅ Matrix 登出完成')
+      // 调用渐进式优化的智能退出
+      try {
+        const { useMatrixProgressiveOptimization } = await import('./matrix-progressive-optimization')
+        const progressiveStore = useMatrixProgressiveOptimization()
+        await progressiveStore.smartLogout(newUserId)
+      } catch (error) {
+        console.warn('⚠️ [智能登出] 渐进式优化退出失败:', error)
+      }
+      
+      console.log('✅ [智能登出] Matrix 智能登出完成')
 
     } catch (error) {
-      console.error('❌ 登出过程中出错:', error)
+      console.error('❌ [智能登出] 登出过程中出错:', error)
     }
+  }
+  
+  /**
+   * 执行完全登出清理 - 用户变化时
+   */
+  const performFullLogoutCleanup = async (userId: string | null) => {
+    console.log('🧹 [完全清理] 开始完全清理用户数据...')
+    
+    // 清除所有认证存储
+    const authKeys = [
+      'matrix-v39-login-info',
+      'matrix_access_token',
+      'matrix_login_info',
+      'matrix_user_id',
+      'matrix_device_id',
+      'matrix_homeserver'
+    ]
+    
+    authKeys.forEach(key => {
+      localStorage.removeItem(key)
+      console.log(`🗑️ [完全清理] 已清理: ${key}`)
+    })
+    
+    // 清理设备ID相关存储
+    const keysToRemove = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && (
+        key.startsWith('jianluochat-device-id-') ||
+        key.startsWith('matrix-') ||
+        key.includes('crypto') ||
+        key.includes('olm')
+      )) {
+        keysToRemove.push(key)
+      }
+    }
+    
+    keysToRemove.forEach(key => {
+      localStorage.removeItem(key)
+      console.log(`🗑️ [完全清理] 已清理动态数据: ${key}`)
+    })
+    
+    // 清理加密存储
+    if (userId) {
+      await MatrixCryptoManager.clearCryptoStores(userId)
+    }
+    
+    console.log('✅ [完全清理] 完全清理完成')
+  }
+  
+  /**
+   * 执行保护性登出清理 - 同用户时
+   */
+  const performProtectiveLogoutCleanup = async (userId: string | null) => {
+    console.log('💾 [保护性清理] 开始保护性清理...')
+    
+    // 只清理必要的认证信息，保留缓存数据
+    const essentialKeys = [
+      'matrix-v39-login-info',
+      'matrix_access_token'
+    ]
+    
+    essentialKeys.forEach(key => {
+      localStorage.removeItem(key)
+      console.log(`🗑️ [保护性清理] 已清理: ${key}`)
+    })
+    
+    // 更新其他存储的时间戳，标记为登出状态
+    const preserveKeys = ['matrix_login_info']
+    
+    preserveKeys.forEach(key => {
+      const data = localStorage.getItem(key)
+      if (data) {
+        try {
+          const parsed = JSON.parse(data)
+          parsed.last_logout = Date.now()
+          parsed.logout_type = 'protective'
+          localStorage.setItem(key, JSON.stringify(parsed))
+          console.log(`💾 [保护性清理] 已更新 ${key} 时间戳`)
+        } catch (e) {
+          console.warn(`⚠️ [保护性清理] 更新 ${key} 失败:`, e)
+        }
+      }
+    })
+    
+    console.log('✅ [保护性清理] 保护性清理完成')
   }
 
   const resetClientState = async () => {
@@ -2713,7 +2737,7 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       // 监听网络状态变化
       window.addEventListener('online', async () => {
         console.log('🌐 网络已恢复，尝试重连...')
-        if (matrixClient.value && connection.value.syncState === 'ERROR') {
+        if (matrixClient.value && connection.value.syncState.state === 'ERROR') {
           try {
             await matrixClient.value.startClient({
               initialSyncLimit: 20,
@@ -2727,8 +2751,11 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
 
       window.addEventListener('offline', () => {
         console.log('🌐 网络已断开')
-        connection.value.syncState = 'ERROR'
-        connection.value.syncError = '网络连接已断开'
+        connection.value.syncState = {
+          ...connection.value.syncState,
+          state: 'ERROR',
+          syncError: '网络连接已断开'
+        }
       })
     }
   }
