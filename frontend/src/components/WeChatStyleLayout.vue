@@ -54,9 +54,79 @@
       </div>
 
       <div class="sidebar-footer">
-        <!-- 设置图标 -->
-        <div class="nav-item" title="设置">
-          <span class="nav-icon">⚙️</span>
+        <!-- 横杠菜单按钮 -->
+        <div class="sidebar-menu" ref="sidebarMenuRef">
+          <div
+            class="nav-item menu-toggle-nav"
+            :class="{ active: showSidebarMenu }"
+            title="更多功能"
+            @click="toggleSidebarMenu"
+          >
+            <span class="nav-icon">☰</span>
+          </div>
+          
+          <!-- 功能菜单 -->
+          <div v-if="showSidebarMenu" class="sidebar-menu-panel">
+            <div class="menu-section">
+              <div class="menu-section-title">房间管理</div>
+              <button class="sidebar-menu-item" @click="showJoinRoomDialog">
+                <span class="item-icon">🏠</span>
+                <span class="item-text">加入房间</span>
+              </button>
+              <button class="sidebar-menu-item" @click="toggleExplore">
+                <span class="item-icon">🔍</span>
+                <span class="item-text">探索房间</span>
+              </button>
+              <button class="sidebar-menu-item" @click="refreshRooms">
+                <span class="item-icon">🔄</span>
+                <span class="item-text">刷新房间</span>
+              </button>
+            </div>
+            
+            <div class="menu-section">
+              <div class="menu-section-title">工具</div>
+              <button class="sidebar-menu-item" @click="forceCreateFileTransfer">
+                <span class="item-icon">📁</span>
+                <span class="item-text">文件助手</span>
+              </button>
+              <button class="sidebar-menu-item" @click="debugMatrixClient">
+                <span class="item-icon">🔧</span>
+                <span class="item-text">调试工具</span>
+              </button>
+              <button class="sidebar-menu-item" @click="testFastMessage">
+                <span class="item-icon">⚡</span>
+                <span class="item-text">测试消息</span>
+              </button>
+            </div>
+            
+            <div class="menu-section">
+              <div class="menu-section-title">安全</div>
+              <button class="sidebar-menu-item" @click="openEncryptionSettings">
+                <span class="item-icon">🔐</span>
+                <span class="item-text">加密设置</span>
+              </button>
+              <button class="sidebar-menu-item" @click="openDeviceVerification">
+                <span class="item-icon">🛡️</span>
+                <span class="item-text">设备验证</span>
+              </button>
+              <button class="sidebar-menu-item" @click="checkCryptoConflicts">
+                <span class="item-icon">⚠️</span>
+                <span class="item-text">检查冲突</span>
+              </button>
+            </div>
+            
+            <div class="menu-section">
+              <div class="menu-section-title">系统</div>
+              <button class="sidebar-menu-item" @click="forceSync">
+                <span class="item-icon">🔄</span>
+                <span class="item-text">强制同步</span>
+              </button>
+              <button class="sidebar-menu-item danger" @click="handleLogout">
+                <span class="item-icon">🚪</span>
+                <span class="item-text">退出登录</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -224,82 +294,16 @@
         </div>
       </div>
 
-      <!-- 底部功能菜单 -->
+      <!-- 底部退出按钮 -->
       <div class="chat-list-footer">
-        <!-- 横杠菜单按钮 -->
-        <div class="footer-menu" ref="footerMenuRef">
-          <button
-            class="menu-toggle-btn"
-            @click="toggleFooterMenu"
-            title="更多功能"
-            :class="{ active: showFooterMenu }"
-          >
-            <span class="menu-icon">☰</span>
-          </button>
-          
-          <!-- 功能菜单 -->
-          <div v-if="showFooterMenu" class="footer-menu-panel">
-            <div class="menu-section">
-              <div class="menu-section-title">房间管理</div>
-              <button class="footer-menu-item" @click="showJoinRoomDialog">
-                <span class="item-icon">🏠</span>
-                <span class="item-text">加入房间</span>
-              </button>
-              <button class="footer-menu-item" @click="toggleExplore">
-                <span class="item-icon">🔍</span>
-                <span class="item-text">探索房间</span>
-              </button>
-              <button class="footer-menu-item" @click="refreshRooms">
-                <span class="item-icon">🔄</span>
-                <span class="item-text">刷新房间</span>
-              </button>
-            </div>
-            
-            <div class="menu-section">
-              <div class="menu-section-title">工具</div>
-              <button class="footer-menu-item" @click="forceCreateFileTransfer">
-                <span class="item-icon">📁</span>
-                <span class="item-text">文件助手</span>
-              </button>
-              <button class="footer-menu-item" @click="debugMatrixClient">
-                <span class="item-icon">🔧</span>
-                <span class="item-text">调试工具</span>
-              </button>
-              <button class="footer-menu-item" @click="testFastMessage">
-                <span class="item-icon">⚡</span>
-                <span class="item-text">测试消息</span>
-              </button>
-            </div>
-            
-            <div class="menu-section">
-              <div class="menu-section-title">安全</div>
-              <button class="footer-menu-item" @click="openEncryptionSettings">
-                <span class="item-icon">🔐</span>
-                <span class="item-text">加密设置</span>
-              </button>
-              <button class="footer-menu-item" @click="openDeviceVerification">
-                <span class="item-icon">🛡️</span>
-                <span class="item-text">设备验证</span>
-              </button>
-              <button class="footer-menu-item" @click="checkCryptoConflicts">
-                <span class="item-icon">⚠️</span>
-                <span class="item-text">检查冲突</span>
-              </button>
-            </div>
-            
-            <div class="menu-section">
-              <div class="menu-section-title">系统</div>
-              <button class="footer-menu-item" @click="forceSync">
-                <span class="item-icon">🔄</span>
-                <span class="item-text">强制同步</span>
-              </button>
-              <button class="footer-menu-item danger" @click="handleLogout">
-                <span class="item-icon">🚪</span>
-                <span class="item-text">退出登录</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <button
+          class="logout-btn"
+          @click="handleLogout"
+          title="退出登录"
+        >
+          <span class="logout-icon">🚪</span>
+          <span class="logout-text">退出</span>
+        </button>
       </div>
     </div>
 
@@ -498,8 +502,8 @@ const publicRooms = ref<any[]>([])
 const isLoadingPublicRooms = ref(false)
 const showMoreMenu = ref(false)
 const moreActionsRef = ref<HTMLElement>()
-const showFooterMenu = ref(false)
-const footerMenuRef = ref<HTMLElement>()
+const showSidebarMenu = ref(false)
+const sidebarMenuRef = ref<HTMLElement>()
 
 
 
@@ -524,8 +528,8 @@ const toggleMoreMenu = () => {
   showMoreMenu.value = !showMoreMenu.value
 }
 
-const toggleFooterMenu = () => {
-  showFooterMenu.value = !showFooterMenu.value
+const toggleSidebarMenu = () => {
+  showSidebarMenu.value = !showSidebarMenu.value
 }
 
 // 点击外部关闭更多菜单
@@ -533,8 +537,8 @@ const handleClickOutside = (event: Event) => {
   if (moreActionsRef.value && !moreActionsRef.value.contains(event.target as Node)) {
     showMoreMenu.value = false
   }
-  if (footerMenuRef.value && !footerMenuRef.value.contains(event.target as Node)) {
-    showFooterMenu.value = false
+  if (sidebarMenuRef.value && !sidebarMenuRef.value.contains(event.target as Node)) {
+    showSidebarMenu.value = false
   }
 }
 
@@ -2070,8 +2074,8 @@ const handleGlobalClick = () => {
   if (contextMenu.value.show) {
     hideContextMenu()
   }
-  if (showFooterMenu.value) {
-    showFooterMenu.value = false
+  if (showSidebarMenu.value) {
+    showSidebarMenu.value = false
   }
 }
 
@@ -2220,6 +2224,60 @@ if (typeof window !== 'undefined') {
 
 .sidebar-footer {
   margin-top: auto;
+}
+
+.sidebar-menu {
+  position: relative;
+}
+
+.menu-toggle-nav {
+  position: relative;
+}
+
+.menu-toggle-nav.active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.sidebar-menu-panel {
+  position: absolute;
+  bottom: 100%;
+  left: 60px;
+  margin-bottom: 8px;
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.sidebar-menu-item {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #333;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+}
+
+.sidebar-menu-item:hover {
+  background: rgba(45, 90, 39, 0.05);
+}
+
+.sidebar-menu-item.danger {
+  color: #ff4444;
+}
+
+.sidebar-menu-item.danger:hover {
+  background: rgba(255, 68, 68, 0.05);
 }
 
 .nav-item {
@@ -3164,11 +3222,7 @@ if (typeof window !== 'undefined') {
   z-index: 5;
 }
 
-.footer-menu {
-  position: relative;
-}
-
-.menu-toggle-btn {
+.logout-btn {
   width: 100%;
   padding: 8px 12px;
   border: none;
@@ -3176,7 +3230,7 @@ if (typeof window !== 'undefined') {
   color: #666;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 400;
   display: flex;
   align-items: center;
@@ -3187,87 +3241,17 @@ if (typeof window !== 'undefined') {
   z-index: 10;
 }
 
-.menu-toggle-btn:hover {
+.logout-btn:hover {
   background: rgba(0, 0, 0, 0.08);
   color: #333;
 }
 
-.menu-toggle-btn.active {
-  background: rgba(45, 90, 39, 0.1);
-  color: #2d5a27;
-}
-
-.menu-icon {
-  font-size: 16px;
-  font-weight: bold;
-}
-
-.footer-menu-panel {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  margin-bottom: 8px;
-  background: white;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  max-height: 400px;
-  overflow-y: auto;
-  z-index: 1000;
-}
-
-.menu-section {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.menu-section:last-child {
-  border-bottom: none;
-}
-
-.menu-section-title {
-  padding: 8px 16px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #999;
-  background: rgba(0, 0, 0, 0.02);
-}
-
-.footer-menu-item {
-  width: 100%;
-  padding: 12px 16px;
-  border: none;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: #333;
+.logout-icon {
   font-size: 14px;
-  transition: background-color 0.2s ease;
 }
 
-.footer-menu-item:hover {
-  background: rgba(45, 90, 39, 0.05);
-}
-
-.footer-menu-item.danger {
-  color: #ff4444;
-}
-
-.footer-menu-item.danger:hover {
-  background: rgba(255, 68, 68, 0.05);
-}
-
-.item-icon {
-  font-size: 16px;
-  width: 20px;
-  text-align: center;
-}
-
-.item-text {
-  flex: 1;
+.logout-text {
+  font-size: 13px;
 }
 
 /* 微信风格右键菜单样式 */
