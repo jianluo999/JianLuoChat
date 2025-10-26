@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>修复Matrix加密设备ID不匹配问题</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .error-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .fix-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .button.danger {
+            background: #dc3545;
+        }
+        .button.danger:hover {
+            background: #c82333;
+        }
+        .button.success {
+            background: #28a745;
+        }
+        .button.success:hover {
+            background: #218838;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 10px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .status.warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        .diagnostic-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 Matrix加密设备ID不匹配修复工具</h1>
+            <p>解决 "the account in the store doesn't match the account in the constructor" 错误</p>
+        </div>
+
+        <div class="error-info">
+            <h3>🚨 问题描述</h3>
+            <p>您遇到的错误表明Matrix加密存储中的设备ID与当前使用的设备ID不匹配。这通常发生在：</p>
+            <ul>
+                <li>多次登录导致设备ID冲突</li>
+                <li>浏览器缓存问题</li>
+                <li>加密数据库损坏</li>
+                <li>设备ID生成逻辑变更</li>
+            </ul>
+        </div>
+
+        <div class="fix-section">
+            <h3>🔍 步骤1: 诊断问题</h3>
+            <p>首先检查当前的设备ID和加密存储状态</p>
+            <button class="button" onclick="diagnoseIssues()">开始诊断</button>
+            <div id="diagnostic-result"></div>
+        </div>
+
+        <div class="fix-section">
+            <h3>🧹 步骤2: 清理冲突数据</h3>
+            <p>清理所有冲突的设备ID和加密数据</p>
+            <button class="button danger" onclick="clearConflictData()">清理冲突数据</button>
+            <div id="clear-result"></div>
+        </div>
+
+        <div class="fix-section">
+            <h3>✅ 步骤3: 验证修复</h3>
+            <p>验证修复是否成功</p>
+            <button class="button success" onclick="verifyFix()">验证修复</button>
+            <button class="button" onclick="refreshPage()">刷新页面</button>
+            <div id="verify-result"></div>
+        </div>
+
+        <div class="fix-section">
+            <h3>📋 操作日志</h3>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let logElement = document.getElementById('log');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}\n`;
+            logElement.textContent += logMessage;
+            logElement.scrollTop = logElement.scrollHeight;
+            
+            console.log(message);
+        }
+
+        function showStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        async function diagnoseIssues() {
+            log('🔍 开始诊断设备ID和加密问题...');
+            showStatus('diagnostic-result', '正在诊断...', 'warning');
+            
+            try {
+                // 检查localStorage中的设备ID
+                const deviceIds = {};
+                const cryptoKeys = [];
+                
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key) {
+                        if (key.startsWith('jianluochat-device-id-')) {
+                            deviceIds[key] = localStorage.getItem(key);
+                        } else if (key.includes('crypto') || key.includes('matrix') || key.includes('device')) {
+                            cryptoKeys.push(key);
+                        }
+                    }
+                }
+                
+                log(`📱 发现设备ID: ${Object.keys(deviceIds).length} 个`);
+                Object.entries(deviceIds).forEach(([key, value]) => {
+                    log(`  ${key}: ${value}`);
+                });
+                
+                log(`🔐 发现加密相关键: ${cryptoKeys.length} 个`);
+                cryptoKeys.forEach(key => {
+                    log(`  ${key}`);
+                });
+                
+                // 检查IndexedDB
+                let databases = [];
+                if (window.indexedDB) {
+                    try {
+                        databases = await indexedDB.databases();
+                        const cryptoDbs = databases.filter(db => 
+                            db.name && (
+                                db.name.includes('matrix') ||
+                                db.name.includes('crypto') ||
+                                db.name.includes('jianluochat')
+                            )
+                        );
+                        
+                        log(`🗄️ 发现加密数据库: ${cryptoDbs.length} 个`);
+                        cryptoDbs.forEach(db => {
+                            log(`  ${db.name}`);
+                        });
+                    } catch (error) {
+                        log(`⚠️ 检查IndexedDB失败: ${error.message}`);
+                    }
+                }
+                
+                // 生成诊断报告
+                let diagnosticHtml = '<h4>诊断结果:</h4>';
+                
+                if (Object.keys(deviceIds).length === 0) {
+                    diagnosticHtml += '<div class="diagnostic-item">❌ 没有找到设备ID</div>';
+                } else if (Object.keys(deviceIds).length > 1) {
+                    diagnosticHtml += '<div class="diagnostic-item">⚠️ 发现多个设备ID，可能存在冲突</div>';
+                } else {
+                    diagnosticHtml += '<div class="diagnostic-item">✅ 设备ID数量正常</div>';
+                }
+                
+                if (cryptoKeys.length > 0) {
+                    diagnosticHtml += '<div class="diagnostic-item">⚠️ 发现加密相关数据，可能需要清理</div>';
+                }
+                
+                if (databases.length > 0) {
+                    diagnosticHtml += '<div class="diagnostic-item">⚠️ 发现加密数据库，可能需要清理</div>';
+                }
+                
+                showStatus('diagnostic-result', diagnosticHtml, 'warning');
+                log('✅ 诊断完成');
+                
+            } catch (error) {
+                log(`❌ 诊断失败: ${error.message}`);
+                showStatus('diagnostic-result', `诊断失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function clearConflictData() {
+            log('🧹 开始清理冲突数据...');
+            showStatus('clear-result', '正在清理...', 'warning');
+            
+            try {
+                let clearedCount = 0;
+                
+                // 清理localStorage
+                const keysToRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && (
+                        key.includes('device-id') ||
+                        key.includes('crypto') ||
+                        key.includes('matrix-sdk-crypto') ||
+                        key.includes('jianluochat-crypto') ||
+                        key.includes('matrix-login-info') ||
+                        key.includes('matrix_login_info') ||
+                        key.includes('matrix_access_token') ||
+                        key.includes('olm')
+                    )) {
+                        keysToRemove.push(key);
+                    }
+                }
+                
+                log(`🗑️ 清理localStorage键: ${keysToRemove.length} 个`);
+                keysToRemove.forEach(key => {
+                    localStorage.removeItem(key);
+                    log(`  已清理: ${key}`);
+                    clearedCount++;
+                });
+                
+                // 清理IndexedDB
+                if (window.indexedDB) {
+                    try {
+                        const databases = await indexedDB.databases();
+                        const cryptoDbs = databases.filter(db => 
+                            db.name && (
+                                db.name.includes('matrix') ||
+                                db.name.includes('crypto') ||
+                                db.name.includes('jianluochat') ||
+                                db.name.includes('olm')
+                            )
+                        );
+                        
+                        log(`🗑️ 清理IndexedDB数据库: ${cryptoDbs.length} 个`);
+                        
+                        for (const db of cryptoDbs) {
+                            if (db.name) {
+                                try {
+                                    await new Promise((resolve, reject) => {
+                                        const deleteReq = indexedDB.deleteDatabase(db.name);
+                                        deleteReq.onsuccess = () => {
+                                            log(`  已删除数据库: ${db.name}`);
+                                            clearedCount++;
+                                            resolve(true);
+                                        };
+                                        deleteReq.onerror = () => {
+                                            log(`  删除数据库失败: ${db.name}`);
+                                            reject(deleteReq.error);
+                                        };
+                                        deleteReq.onblocked = () => {
+                                            log(`  数据库删除被阻塞: ${db.name}`);
+                                            setTimeout(() => resolve(true), 2000);
+                                        };
+                                    });
+                                } catch (error) {
+                                    log(`⚠️ 删除数据库 ${db.name} 时出错: ${error.message}`);
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        log(`⚠️ 清理IndexedDB失败: ${error.message}`);
+                    }
+                }
+                
+                // 设置清理标记
+                localStorage.setItem('matrix-encryption-conflict-cleared', Date.now().toString());
+                
+                log(`✅ 清理完成，共清理 ${clearedCount} 项数据`);
+                showStatus('clear-result', `清理完成，共清理 ${clearedCount} 项数据`, 'success');
+                
+            } catch (error) {
+                log(`❌ 清理失败: ${error.message}`);
+                showStatus('clear-result', `清理失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function verifyFix() {
+            log('🔍 开始验证修复效果...');
+            showStatus('verify-result', '正在验证...', 'warning');
+            
+            try {
+                let issues = [];
+                
+                // 检查是否还有冲突数据
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && (
+                        key.includes('crypto') ||
+                        key.includes('matrix-sdk-crypto') ||
+                        key.includes('olm')
+                    )) {
+                        issues.push(`仍有加密数据: ${key}`);
+                    }
+                }
+                
+                // 检查设备ID
+                const deviceIdKeys = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith('jianluochat-device-id-')) {
+                        deviceIdKeys.push(key);
+                    }
+                }
+                
+                if (deviceIdKeys.length > 1) {
+                    issues.push(`仍有多个设备ID: ${deviceIdKeys.join(', ')}`);
+                }
+                
+                // 检查IndexedDB
+                if (window.indexedDB) {
+                    try {
+                        const databases = await indexedDB.databases();
+                        const cryptoDbs = databases.filter(db => 
+                            db.name && (
+                                db.name.includes('matrix-sdk-crypto') ||
+                                db.name.includes('jianluochat-crypto')
+                            )
+                        );
+                        
+                        if (cryptoDbs.length > 0) {
+                            issues.push(`仍有加密数据库: ${cryptoDbs.map(db => db.name).join(', ')}`);
+                        }
+                    } catch (error) {
+                        log(`⚠️ 检查IndexedDB时出错: ${error.message}`);
+                    }
+                }
+                
+                // 检查清理标记
+                const clearMark = localStorage.getItem('matrix-encryption-conflict-cleared');
+                
+                if (issues.length === 0 && clearMark) {
+                    log('✅ 验证通过！修复成功完成');
+                    showStatus('verify-result', 
+                        '✅ 验证通过！修复成功完成<br>' +
+                        '💡 建议操作：<br>' +
+                        '1. 刷新页面<br>' +
+                        '2. 重新登录Matrix账户<br>' +
+                        '3. 加密功能将使用新的设备ID重新初始化', 
+                        'success'
+                    );
+                } else {
+                    log('⚠️ 验证发现问题:');
+                    issues.forEach(issue => log(`  ${issue}`));
+                    
+                    showStatus('verify-result', 
+                        `⚠️ 验证发现问题：<br>${issues.join('<br>')}<br>` +
+                        '建议刷新页面后重试修复流程', 
+                        'warning'
+                    );
+                }
+                
+            } catch (error) {
+                log(`❌ 验证失败: ${error.message}`);
+                showStatus('verify-result', `验证失败: ${error.message}`, 'error');
+            }
+        }
+
+        function refreshPage() {
+            log('🔄 刷新页面...');
+            window.location.reload();
+        }
+
+        // 页面加载时显示初始信息
+        window.onload = function() {
+            log('🚀 Matrix加密设备ID不匹配修复工具已启动');
+            log('💡 请按照步骤依次执行：诊断 -> 清理 -> 验证 -> 刷新');
+        };
+    </script>
+</body>
+</html>

@@ -323,128 +323,7 @@ export const useMatrixStore = defineStore('matrix', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  // 加密初始化函数
-  const initializeEncryption = async (client: any) => {
-    try {
-      // 首先初始化加密环境
-      const { initializeCryptoEnvironment, getFriendlyErrorMessage, retryWithBackoff } = await import('@/utils/wasmLoader')
 
-      const envReady = await initializeCryptoEnvironment()
-      if (!envReady) {
-        console.warn('⚠️ 加密环境不满足要求，跳过加密初始化')
-        return false
-      }
-
-      // 检查客户端是否有加密方法
-      console.log('🔍 检查可用的加密方法:', {
-        initRustCrypto: typeof (client as any).initRustCrypto,
-        getCrypto: typeof client.getCrypto,
-        isCryptoEnabled: typeof (client as any).isCryptoEnabled === 'function' ? (client as any).isCryptoEnabled() : 'unknown'
-      })
-
-      // 确保在启动客户端之前初始化加密
-      if (typeof (client as any).initRustCrypto === 'function') {
-        console.log('🔧 正在初始化Rust加密引擎...')
-
-        // 使用重试机制初始化加密
-        const cryptoInitialized = await retryWithBackoff(async () => {
-          // 尝试多种配置策略
-          const cryptoConfigs = [
-            // 策略1: 使用IndexedDB
-            {
-              useIndexedDB: true,
-              cryptoDatabasePrefix: 'jianluochat-crypto',
-              storagePassword: undefined,
-              storageKey: undefined
-            },
-            // 策略2: 使用内存存储（如果IndexedDB失败）
-            {
-              useIndexedDB: false,
-              cryptoDatabasePrefix: undefined,
-              storagePassword: undefined,
-              storageKey: undefined
-            }
-          ]
-
-          let lastError: any = null
-
-          for (const config of cryptoConfigs) {
-            try {
-              console.log(`🔧 尝试加密配置:`, config)
-              await (client as any).initRustCrypto(config)
-              console.log('✅ Rust加密引擎初始化成功')
-              return true
-            } catch (configError: any) {
-              console.warn(`⚠️ 配置失败:`, configError.message)
-              lastError = configError
-
-              // 如果是WASM相关错误，尝试下一个配置
-              if (configError.message.includes('WebAssembly') ||
-                  configError.message.includes('wasm') ||
-                  configError.message.includes('MIME type')) {
-                continue
-              }
-
-              // 其他错误直接跳出
-              break
-            }
-          }
-
-          throw lastError || new Error('所有加密配置都失败了')
-        }, 2, 2000) // 最多重试2次，每次间隔2秒
-
-        if (!cryptoInitialized) {
-          return false
-        }
-
-        // 验证加密是否真正可用
-        const crypto = client.getCrypto()
-        if (crypto) {
-          console.log('✅ 加密API可用，支持的功能:', {
-            canEncryptToDevice: typeof crypto.encryptToDeviceMessages === 'function',
-            canVerifyDevice: typeof crypto.requestDeviceVerification === 'function',
-            canBackupKeys: typeof crypto.exportRoomKeys === 'function'
-          })
-          return true
-        } else {
-          console.warn('⚠️ 加密初始化完成但API不可用')
-          return false
-        }
-      } else {
-        console.warn('⚠️ 客户端不支持Rust加密初始化方法')
-        // 尝试检查是否已经有加密支持
-        const crypto = client.getCrypto()
-        if (crypto) {
-          console.log('✅ 客户端已有加密支持')
-          return true
-        } else {
-          console.warn('⚠️ 客户端没有加密支持，将以非加密模式运行')
-          return false
-        }
-      }
-    } catch (cryptoError: any) {
-      console.error('❌ 加密初始化失败:', cryptoError)
-      console.warn('⚠️ 将以非加密模式继续启动客户端')
-
-      // 记录详细错误信息以便调试
-      if (cryptoError.message) {
-        console.error('错误详情:', cryptoError.message)
-      }
-      if (cryptoError.stack) {
-        console.error('错误堆栈:', cryptoError.stack)
-      }
-
-      // 使用友好的错误信息
-      try {
-        const { getFriendlyErrorMessage } = await import('@/utils/wasmLoader')
-        error.value = getFriendlyErrorMessage(cryptoError)
-      } catch {
-        error.value = `加密初始化失败: ${cryptoError.message || '未知错误'}`
-      }
-
-      return false
-    }
-  }
 
   // 计算属性
   const currentRoom = computed(() => {
@@ -882,18 +761,54 @@ export const useMatrixStore = defineStore('matrix', () => {
       // 动态导入matrix-js-sdk
       const { createClient } = await import('matrix-js-sdk')
 
-      // 生成设备ID
-      const deviceIdKey = `jianluochat-device-id-${userId.split(':')[0].substring(1)}`
-      let deviceId = localStorage.getItem(deviceIdKey)
-
+      // 检查加密存储中是否已有设备ID，优先使用存储中的设备ID
+      const username = userId.split(':')[0].substring(1)
+      const deviceIdKey = `jianluochat-device-id-${username}`
+      
+      // 先尝试从加密存储中获取设备ID
+      let deviceId: string | null = null
+      
+      try {
+        // 检查是否有现有的加密数据库
+        const databases = await indexedDB.databases()
+        const cryptoDb = databases.find(db => 
+          db.name && (
+            db.name.includes('jianluochat-crypto') || 
+            db.name.includes('matrix-sdk-crypto')
+          )
+        )
+        
+        if (cryptoDb && cryptoDb.name) {
+          console.log(`🔍 发现现有加密数据库: ${cryptoDb.name}`)
+          
+          // 从数据库名称中提取设备ID（如果可能）
+          const dbNameParts = cryptoDb.name.split('-')
+          const possibleDeviceId = dbNameParts[dbNameParts.length - 1]
+          
+          if (possibleDeviceId && possibleDeviceId.length > 10) {
+            deviceId = possibleDeviceId
+            console.log(`🆔 从加密数据库提取设备ID: ${deviceId}`)
+          }
+        }
+      } catch (error) {
+        console.warn('检查现有加密数据库失败:', error)
+      }
+      
+      // 如果没有从加密存储中找到，尝试localStorage
+      if (!deviceId) {
+        deviceId = localStorage.getItem(deviceIdKey)
+        if (deviceId) {
+          console.log('🆔 从localStorage获取设备ID:', deviceId)
+        }
+      }
+      
+      // 最后才生成新的设备ID
       if (!deviceId) {
         const timestamp = Date.now()
         const random = Math.random().toString(36).substring(2, 8)
         deviceId = `jianluochat_web_${timestamp}_${random}`
         localStorage.setItem(deviceIdKey, deviceId)
-        console.log('🆔 生成新的设备ID:', deviceId)
-      } else {
-        console.log('🆔 使用已保存的设备ID:', deviceId)
+        console.log('🆔 生成新设备ID:', deviceId)
       }
 
       // 创建优化的客户端配置 - 极简配置以提高性能
@@ -1108,67 +1023,141 @@ export const useMatrixStore = defineStore('matrix', () => {
       // 设置客户端实例
       matrixClient.value = client
 
-      // 初始化加密功能
+      // 初始化加密功能 - 正确处理设备ID冲突
       console.log('🔐 初始化加密功能...')
       try {
-        const encryptionInitialized = await initializeEncryption(client)
-        if (encryptionInitialized) {
-          console.log('✅ 加密功能初始化成功')
-        } else {
-          console.log('⚠️ 加密功能初始化失败，将以非加密模式运行')
-        }
-      } catch (encryptionError) {
-        console.warn('⚠️ 加密初始化出错:', encryptionError)
-      }
-
-      // 启动客户端
-      console.log('🚀 启动Matrix客户端...')
-      try {
-        await client.startClient({
-          initialSyncLimit: 30, // 极简初始同步限制以提高性能
-          lazyLoadMembers: true,
-          pollTimeout: 20000
+        await client.initRustCrypto({
+          useIndexedDB: true,
+          cryptoDatabasePrefix: `jianluochat-crypto-${deviceId}`,
         })
+        console.log('✅ 加密功能初始化成功')
+      } catch (encryptionError: any) {
+        console.error('❌ 加密初始化失败:', encryptionError.message)
         
-        // 设置客户端配置以提高性能
-        ;(client as any).pollSinceTimeout = 20000
-        ;(client as any).syncCheckTimeout = 500
-        console.log('✅ Matrix客户端启动命令已发送')
-
-        // 立即检查同步状态
-        const immediateState = client.getSyncState()
-        console.log('📊 启动后立即检查同步状态:', immediateState)
-
-        // 如果同步状态不佳，等待一段时间让同步开始
-        if (immediateState === null || immediateState === 'STOPPED') {
-          console.log('⏳ 初始同步状态不佳，等待同步开始...')
-          await new Promise(resolve => setTimeout(resolve, 3000))
+        // 如果是设备ID冲突，需要彻底解决
+        if (encryptionError.message.includes("account in the store doesn't match")) {
+          console.log('🔧 检测到设备ID冲突，分析冲突详情...')
           
-          // 再次检查状态
-          const newState = client.getSyncState()
-          console.log('📊 3秒后同步状态:', newState)
+          // 从错误信息中提取期望的设备ID
+          const match = encryptionError.message.match(/expected @[^:]+:matrix\.org:([^,]+)/)
+          const expectedDeviceId = match ? match[1] : null
           
-          if (newState === null || newState === 'STOPPED') {
-            console.warn('⚠️ 同步仍未开始，尝试重新启动客户端...')
+          if (expectedDeviceId) {
+            console.log(`🔍 存储中期望的设备ID: ${expectedDeviceId}`)
+            console.log(`🔍 当前使用的设备ID: ${deviceId}`)
+            
             try {
-              // 尝试重新启动客户端
-              await client.stopClient()
-              await new Promise(resolve => setTimeout(resolve, 1000))
-              await client.startClient({
-                initialSyncLimit: 200,
-                lazyLoadMembers: true
+              // 方案1: 使用存储中期望的设备ID重新创建客户端
+              console.log('🔄 尝试使用存储中的设备ID重新创建客户端...')
+              
+              // 更新localStorage中的设备ID
+              localStorage.setItem(deviceIdKey, expectedDeviceId)
+              
+              // 重新创建客户端，使用正确的设备ID
+              const correctedClient = createClient({
+                baseUrl: baseUrl,
+                accessToken: accessToken,
+                userId: userId,
+                deviceId: expectedDeviceId, // 使用存储中期望的设备ID
+                timelineSupport: true,
+                useAuthorizationHeader: true
               })
-              console.log('✅ 重新启动客户端成功')
-            } catch (restartError) {
-              console.warn('重新启动客户端失败:', restartError)
+              
+              // 使用正确的设备ID初始化加密
+              await correctedClient.initRustCrypto({
+                useIndexedDB: true,
+                cryptoDatabasePrefix: `jianluochat-crypto-${expectedDeviceId}`,
+              })
+              
+              // 替换客户端
+              matrixClient.value = correctedClient
+              console.log('✅ 使用正确设备ID重新初始化成功')
+              return correctedClient
+              
+            } catch (correctionError: any) {
+              console.warn('⚠️ 设备ID修正失败:', correctionError.message)
+              
+              // 方案2: 完全清理并重新开始
+              console.log('🧹 执行完全清理并重新开始...')
+              
+              try {
+                // 清理所有相关数据
+                const databases = await indexedDB.databases()
+                for (const db of databases) {
+                  if (db.name && (
+                    db.name.includes('jianluochat-crypto') || 
+                    db.name.includes('matrix-sdk-crypto') ||
+                    db.name.includes('matrix-js-sdk')
+                  )) {
+                    console.log(`🗑️ 删除数据库: ${db.name}`)
+                    indexedDB.deleteDatabase(db.name)
+                  }
+                }
+                
+                // 清理localStorage中的设备ID
+                for (let i = 0; i < localStorage.length; i++) {
+                  const key = localStorage.key(i)
+                  if (key && key.startsWith('jianluochat-device-id-')) {
+                    localStorage.removeItem(key)
+                    console.log(`🗑️ 清理设备ID: ${key}`)
+                  }
+                }
+                
+                // 等待清理完成
+                await new Promise(resolve => setTimeout(resolve, 2000))
+                
+                // 生成全新的设备ID
+                const freshDeviceId = `jianluochat_web_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
+                localStorage.setItem(deviceIdKey, freshDeviceId)
+                console.log(`🆔 生成全新设备ID: ${freshDeviceId}`)
+                
+                // 重新创建客户端
+                const freshClient = createClient({
+                  baseUrl: baseUrl,
+                  accessToken: accessToken,
+                  userId: userId,
+                  deviceId: freshDeviceId,
+                  timelineSupport: true,
+                  useAuthorizationHeader: true
+                })
+                
+                // 初始化加密
+                await freshClient.initRustCrypto({
+                  useIndexedDB: true,
+                  cryptoDatabasePrefix: `jianluochat-crypto-${freshDeviceId}`,
+                })
+                
+                // 替换客户端
+                matrixClient.value = freshClient
+                console.log('✅ 完全重新初始化成功')
+                return freshClient
+                
+              } catch (cleanupError: any) {
+                console.error('❌ 完全清理也失败了:', cleanupError.message)
+                console.log('⚠️ 将以非加密模式继续启动客户端')
+              }
             }
           }
         }
-
-      } catch (startError) {
-        console.error('❌ 启动Matrix客户端失败:', startError)
-        throw startError
+        
+        console.log('⚠️ 将以非加密模式继续启动客户端')
+        
+        // 记录详细错误信息以便调试
+        if (encryptionError.message) {
+          console.error('错误详情:', encryptionError.message)
+        }
+        if (encryptionError.stack) {
+          console.error('错误堆栈:', encryptionError.stack)
+        }
       }
+
+      // 启动客户端 - 简化配置快速启动
+      console.log('🚀 启动Matrix客户端...')
+      await client.startClient({
+        initialSyncLimit: 50,
+        lazyLoadMembers: true
+      })
+      console.log('✅ Matrix客户端启动成功')
 
       // 改进的客户端同步等待逻辑
       console.log('⏳ 等待Matrix客户端同步...')
