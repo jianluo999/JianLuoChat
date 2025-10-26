@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Matrix聊天客户端</title>
+    <meta name="description" content="基于Matrix协议的桌面聊天客户端">
+    
+    <!-- 基础样式 -->
+    <style>
+        /* 基础重置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* 加载状态样式 */
+        #loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: #fff;
+            flex-direction: column;
+        }
+        
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            font-size: 16px;
+            color: #666;
+            font-weight: 500;
+        }
+        
+        /* 错误状态样式 */
+        #error {
+            display: none;
+            text-align: center;
+            padding: 40px;
+            color: #e74a4a;
+            font-family: -apple-font-smoothing: antialiased;
+        }
+        
+        .error-title {
+            font-size: 18px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .error-message {
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        
+        .retry-btn {
+            padding: 8px 16px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        
+        .retry-btn:hover {
+            background: #2980b9;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .loading-text {
+                font-size: 14px;
+            }
+            
+            .error-message {
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 加载状态 -->
+    <div id="loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">正在加载Matrix聊天客户端...</div>
+    </div>
+    
+    <!-- 错误状态 -->
+    <div id="error">
+        <div class="error-title">加载失败</div>
+        <div class="error-message">应用加载过程中出现错误。请检查网络连接后重试。</div>
+        <button class="retry-btn" onclick="retryLoad()">重试</button>
+    </div>
+    
+    <!-- 应用容器 -->
+    <div id="app" style="display: none;"></div>
+    
+    <script>
+        // 全局错误处理
+        window.addEventListener('error', function(event) {
+            console.error('全局错误:', event.error);
+            showError('应用运行时错误', event.error.message);
+        });
+        
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('未处理的Promise拒绝:', event.reason);
+            showError('应用错误', '应用遇到错误，请重新启动应用');
+        });
+        
+        // 显示错误
+        function showError(title, message) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('app').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+            document.querySelector('.error-title').textContent = title;
+            document.querySelector('.error-message').textContent = message;
+        }
+        
+        // 重试加载
+        function retryLoad() {
+            location.reload();
+        }
+        
+        // 检查应用状态
+        function checkAppStatus() {
+            return new Promise((resolve, reject) => {
+                // 检查Electron环境
+                if (!window.require) {
+                    reject(new Error('Electron环境不可用'));
+                    return;
+                }
+                
+                // 检查Node.js集成
+                const { ipcRenderer } = require('electron')
+                if (!ipcRenderer) {
+                    reject(new Error('IPC通信不可用'));
+                    return;
+                }
+                
+                // 检查WebGL支持
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!gl) {
+                    reject(new Error('WebGL不支持'));
+                    return;
+                }
+                
+                // 检查WebAssembly支持
+                if (!WebAssembly.validate) {
+                    reject(new Error('WebAssembly不支持'));
+                    return;
+                }
+                
+                resolve();
+            });
+        }
+        
+        // 初始化应用
+        async function initApp() {
+            try {
+                // 隐藏加载状态
+                document.getElementById('loading').style.display = 'none';
+                
+                // 检查应用状态
+                await checkAppStatus();
+                
+                // 显示应用容器
+                document.getElementById('app').style.display = 'block';
+                
+                // 动态加载Vue应用
+                const { createApp, h } from 'vue'
+                const { createRouter, createWebHistory } from 'vue-router'
+                const { createPinia } = 'pinia'
+                
+                // 动态导入路由配置
+                const { routes } = await import('./frontend/src/router/index.ts')
+                
+                // 创建路由
+                const router = createRouter({
+                    history: createWebglHistory()
+                })
+                
+                // 注册路由
+                routes.forEach(route => {
+                    router.addRoute(route)
+                })
+                
+                // 创建Pinia store
+                const pinia = createPinia()
+                
+                // 创建Vue应用
+                const app = createApp({
+                    name: 'MatrixDesktopApp',
+                    render: () => h('router-view')
+                })
+                
+                // 使用插件
+                app.use(router)
+                app.use(pinia)
+                
+                // 挂载应用
+                app.mount('#app')
+                
+            } catch (error) {
+                console.error('应用初始化失败:', error)
+                showError('初始化失败', error.message)
+            }
+        }
+        
+        // 延迟启动应用，给用户加载动画
+        setTimeout(initApp, 100)
+    </script>
+</body>
+</html>

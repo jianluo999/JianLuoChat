@@ -243,6 +243,37 @@ JianLuoChat is designed to work seamlessly with Element and other Matrix clients
 
 ### 📋 Changelog
 
+#### v1.3.1 (2025-10-26) - Desktop Client Foundation & Login Enhancement
+**🚀 Desktop Client Development**
+- **Electron Main Process**: Added `electron/index.html` for desktop client entry point
+- **Dependency Management**: Updated `electron/package-lock.json` for consistent dependency versions
+- **Login Progress Component**: Created `frontend/src/components/LoginProgressBar.vue` for visual login progress
+- **Login Logic**: Implemented `frontend/src/composables/useLoginProgress.ts` for non-blocking login experience
+- **Vue Composition API Fix**: Added `fix-vue-composition-api.js` to resolve Vue 3 compatibility issues
+
+**🔧 Configuration & Optimization**
+- **Git Ignore Enhancement**: Improved `.gitignore` with Electron build artifacts and large file exclusions
+- **Performance Improvements**:
+  - Non-blocking login with detailed progress feedback
+  - 8-second timeout protection to prevent hanging
+  - Rich animations and visual feedback for professional user experience
+
+**📁 Project Structure**
+```
+electron/
+├── index.html          # Desktop client main interface
+├── package-lock.json   # Dependency lock file
+└── ...                 # Other Electron files
+
+frontend/
+├── src/
+│   ├── components/
+│   │   └── LoginProgressBar.vue  # Login progress component
+│   └── composables/
+│       └── useLoginProgress.ts   # Login progress logic
+└── ...                             # Other frontend files
+```
+
 #### v1.3.0 (2025-10-25) - Matrix Chat Enhancement & Performance Optimization
 **🚀 Major Updates**
 - **Matrix Chat Functionality Enhancement**:
