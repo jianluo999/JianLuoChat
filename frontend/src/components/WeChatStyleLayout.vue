@@ -51,6 +51,51 @@
         >
           <span class="nav-icon">📁</span>
         </div>
+
+        <!-- 加入房间 -->
+        <div
+          class="nav-item"
+          title="加入房间"
+          @click="showJoinRoomDialog"
+        >
+          <span class="nav-icon">🏠</span>
+        </div>
+
+        <!-- 探索房间 -->
+        <div
+          class="nav-item"
+          title="探索房间"
+          @click="toggleExplore"
+        >
+          <span class="nav-icon">🔍</span>
+        </div>
+
+        <!-- 刷新房间 -->
+        <div
+          class="nav-item"
+          title="刷新房间"
+          @click="refreshRooms"
+        >
+          <span class="nav-icon">🔄</span>
+        </div>
+
+        <!-- 调试工具 -->
+        <div
+          class="nav-item"
+          title="调试工具"
+          @click="debugMatrixClient"
+        >
+          <span class="nav-icon">🔧</span>
+        </div>
+
+        <!-- 加密设置 -->
+        <div
+          class="nav-item"
+          title="加密设置"
+          @click="openEncryptionSettings"
+        >
+          <span class="nav-icon">🔐</span>
+        </div>
       </div>
 
       <div class="sidebar-footer">
