@@ -1868,9 +1868,41 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
         return []
       }
 
+      // 调试信息：检查客户端状态
+      console.log('🔍 Matrix客户端调试信息:', {
+        clientExists: !!matrixClient.value,
+        clientRunning: matrixClient.value?.clientRunning,
+        syncState: matrixClient.value?.getSyncState(),
+        totalRooms: matrixClient.value?.getRooms()?.length || 0,
+        requestedRoomId: roomId
+      })
+
       const room = matrixClient.value.getRoom(roomId)
       if (!room) {
         console.warn(`❌ 房间 ${roomId} 不存在`)
+        
+        // 调试：列出所有可用房间
+        const allRooms = matrixClient.value.getRooms()
+        console.log('🏠 所有可用房间:', allRooms.map(r => ({
+          id: r.roomId,
+          name: r.name,
+          membership: r.getMyMembership()
+        })))
+        
+        // 尝试等待同步完成后重试
+        if (matrixClient.value.getSyncState() === 'SYNCING') {
+          console.log('⏳ 等待同步完成后重试...')
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          
+          const retryRoom = matrixClient.value.getRoom(roomId)
+          if (!retryRoom) {
+            console.error(`❌ 重试后房间 ${roomId} 仍不存在`)
+            return []
+          }
+          console.log('✅ 重试成功，找到房间')
+          return await fetchMatrixMessages(roomId, limit) // 递归重试
+        }
+        
         return []
       }
 

@@ -1044,9 +1044,18 @@ onMounted(async () => {
   // 设置性能优化的滚动监听器
   setupScrollOptimization()
 
-  // 检查是否已经有Matrix客户端在运行且有房间数据
-  if (matrixStore.matrixClient && matrixStore.isConnected && matrixStore.rooms.length > 0) {
-    console.log('✅ Matrix客户端已存在且已连接，且有房间数据，跳过初始化')
+  // 检查是否已经有Matrix客户端在运行
+  if (matrixStore.matrixClient && matrixStore.matrixClient.clientRunning) {
+    console.log('✅ Matrix客户端已在运行，跳过初始化')
+    // 如果没有房间数据，尝试获取一次
+    if (matrixStore.rooms.length === 0) {
+      console.log('🔄 客户端运行中但无房间数据，尝试获取房间...')
+      try {
+        await matrixStore.fetchMatrixRooms()
+      } catch (error) {
+        console.warn('获取房间失败:', error)
+      }
+    }
     return
   }
 

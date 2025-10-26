@@ -600,6 +600,12 @@ export const useMatrixStore = defineStore('matrix', () => {
       return false
     }
 
+    // 如果已经有运行中的客户端，不要重复初始化
+    if (matrixClient.value && matrixClient.value.clientRunning) {
+      console.log('✅ Matrix客户端已在运行，跳过初始化')
+      return true
+    }
+
     try {
       const startTime = Date.now()
       console.log('🚀 开始Matrix初始化...')
@@ -755,7 +761,17 @@ export const useMatrixStore = defineStore('matrix', () => {
       clientInitializing.value = true
       console.log(`🚀 创建Matrix客户端: ${userId} @ ${homeserver}`)
 
-      // 先清理现有客户端
+      // 检查是否已有运行中的客户端，避免不必要的清理
+      if (matrixClient.value && matrixClient.value.clientRunning) {
+        console.log('⚠️ 检测到运行中的客户端，避免清理以防中断同步')
+        const existingUserId = matrixClient.value.getUserId()
+        if (existingUserId === userId) {
+          console.log('✅ 现有客户端用户ID匹配，复用现有客户端')
+          return matrixClient.value
+        }
+      }
+
+      // 只有在必要时才清理现有客户端
       await cleanupMatrixClient()
 
       // 动态导入matrix-js-sdk
@@ -824,15 +840,8 @@ export const useMatrixStore = defineStore('matrix', () => {
         useAuthorizationHeader: true
       })
       
-      // 设置性能优化配置
-      ;(client as any).initialSyncLimit = 30 // 极简初始同步限制
-      ;(client as any).pollTimeout = 20000 // 减少轮询超时时间
-      ;(client as any).pollSinceTimeout = 20000
-      ;(client as any).lazyLoadMembers = true
-      ;(client as any).relationsLimit = 5
-      ;(client as any).timelineLimit = 50
-      // 启用加密支持
-      ;(client as any).encryptionEnabled = true
+      // 移除可能导致同步问题的配置
+      // 让matrix-js-sdk使用默认的配置，避免同步被意外中断
 
       console.log('✅ Matrix客户端创建成功')
 
@@ -869,151 +878,15 @@ export const useMatrixStore = defineStore('matrix', () => {
       // 设置Matrix事件监听器（在启动客户端之前）
       console.log('🎧 设置Matrix事件监听器...')
 
-      // 监听同步状态变化
-      client.on('sync' as any, (state: string, prevState: string, data: any) => {
-        try {
-          console.log(`🔄 Matrix同步状态变化: ${prevState} -> ${state}`, data)
-          
-          // 安全处理同步状态
-          if (state === 'SYNCING' || state === 'PREPARED') {
-            connection.value.syncState = {
-              isActive: true,
-              lastSync: Date.now(),
-              nextBatch: data?.response?.next_batch || connection.value.syncState.nextBatch
-            }
-            console.log('✅ 同步状态良好，客户端正在运行')
-            
-            // 当同步完成时，尝试获取房间
-            setTimeout(() => {
-              try {
-                const clientRooms = client.getRooms()
-                console.log(`📊 同步后获取到 ${clientRooms.length} 个房间`)
-                if (clientRooms.length > 0) {
-                  // 更新房间列表
-                  const convertedRooms = clientRooms.map((room: any) => ({
-                    id: room.roomId,
-                    name: room.name || room.roomId,
-                    type: 'private' as const,
-                    isPublic: false,
-                    memberCount: room.getJoinedMemberCount(),
-                    unreadCount: 0,
-                    encrypted: false // 加密已禁用
-                  }))
+      // 禁用matrix.ts的同步事件监听器，避免与v39-clean.ts冲突
+      // 现在使用migration-helper重定向到v39-clean.ts，不需要重复的同步处理
+      console.log('⚠️ 跳过matrix.ts的同步事件监听器，使用v39-clean.ts处理')
 
-                  // 更新store中的房间列表
-                  rooms.value.splice(0, rooms.value.length, ...convertedRooms)
-                  saveRoomsToStorage()
-                  console.log('✅ 房间列表已通过同步事件更新')
-                }
-              } catch (roomError) {
-                console.warn('获取房间时出错:', roomError)
-              }
-            }, 1000)
-          } else if (state === 'ERROR') {
-            console.error('❌ 同步错误:', data?.error)
-            connection.value.syncState = {
-              isActive: false,
-              syncError: data?.error?.errcode || data?.error?.message || 'Unknown sync error'
-            }
-            
-            // 尝试重启同步
-            setTimeout(() => {
-              console.log('🔄 尝试重启同步...')
-              try {
-                client.startClient({
-                  initialSyncLimit: 200,
-                  lazyLoadMembers: true
-                })
-              } catch (restartError) {
-                console.error('重启同步失败:', restartError)
-              }
-            }, 5000)
-          } else if (state === 'STOPPED') {
-            console.log('⏹️ 同步已停止')
-            connection.value.syncState = { isActive: false }
-          } else {
-            connection.value.syncState = { isActive: state === 'SYNCING' }
-          }
+      // 禁用matrix.ts的房间事件监听器，避免与v39-clean.ts冲突
+      console.log('⚠️ 跳过matrix.ts的房间事件监听器，使用v39-clean.ts处理')
 
-          // 首次同步完成时，立即更新房间列表
-          if (state === 'PREPARED' && prevState !== 'PREPARED') {
-            console.log('🎯 首次同步完成，强制更新房间列表')
-            setTimeout(async () => {
-              try {
-                await fetchMatrixRooms()
-                console.log('✅ 首次同步后房间列表更新完成')
-              } catch (error) {
-                console.warn('首次同步后房间列表更新失败:', error)
-              }
-            }, 2000)
-          }
-        } catch (syncError: any) {
-          console.error('❌ 同步事件处理失败:', syncError)
-          connection.value.syncState = {
-            isActive: false,
-            syncError: syncError.message || 'Unknown sync error'
-          }
-        }
-      })
-
-        // 监听房间事件
-      client.on('Room' as any, (room: any) => {
-        console.log('🏠 新房间事件:', room.roomId, room.name)
-        
-        // 检查是否是新加入的房间
-        const existingRoom = rooms.value.find(r => r.id === room.roomId)
-        if (!existingRoom) {
-          console.log('🆕 检测到新房间，立即添加到列表:', room.roomId)
-          
-          // 立即添加新房间到列表
-          const newRoom = {
-            id: room.roomId,
-            name: room.name || room.roomId,
-            alias: room.getCanonicalAlias(),
-            topic: room.currentState?.getStateEvents('m.room.topic', '')?.getContent()?.topic || '',
-            type: (room.getJoinRule() === 'public' ? 'public' : 'private') as 'public' | 'private',
-            isPublic: room.getJoinRule() === 'public',
-            memberCount: room.getJoinedMemberCount() || 0,
-            members: [],
-            unreadCount: 0,
-            encrypted: room.hasEncryptionStateEvent(),
-            joinRule: room.getJoinRule() || 'invite',
-            historyVisibility: room.getHistoryVisibility() || 'shared',
-            lastActivity: Date.now()
-          }
-          
-          // 添加到房间列表（不包括文件传输助手的位置）
-          const fileTransferIndex = rooms.value.findIndex(r => r.isFileTransferRoom)
-          if (fileTransferIndex >= 0) {
-            // 在文件传输助手后面插入
-            rooms.value.splice(fileTransferIndex + 1, 0, newRoom)
-          } else {
-            // 如果没有文件传输助手，添加到开头
-            rooms.value.unshift(newRoom)
-          }
-          
-          saveRoomsToStorage()
-          console.log(`✅ 新房间 "${newRoom.name}" 已立即添加到房间列表`)
-        }
-        
-        // 延迟更新完整房间列表以确保同步
-        setTimeout(async () => {
-          try {
-            console.log('🔄 房间事件后延迟更新完整房间列表...')
-            await fetchMatrixRooms()
-            console.log('✅ 房间列表已通过房间事件完全更新')
-          } catch (roomError) {
-            console.warn('处理房间事件时出错:', roomError)
-          }
-        }, 3000) // 增加延迟到3秒，确保同步完成
-      })
-
-      // 监听消息事件
-      client.on('Room.timeline' as any, (event: any, room: any) => {
-        if (event.getType() === 'm.room.message') {
-          console.log('💬 新消息:', event.getContent().body)
-        }
-      })
+      // 禁用matrix.ts的消息事件监听器，避免与v39-clean.ts冲突
+      console.log('⚠️ 跳过matrix.ts的消息事件监听器，使用v39-clean.ts处理')
 
       // 监听错误事件
       client.on('error' as any, (error: any) => {
@@ -1151,136 +1024,38 @@ export const useMatrixStore = defineStore('matrix', () => {
         }
       }
 
-      // 启动客户端 - 简化配置快速启动
+      // 启动客户端 - 使用SDK默认配置避免同步问题
       console.log('🚀 启动Matrix客户端...')
       await client.startClient({
-        initialSyncLimit: 50,
-        lazyLoadMembers: true
+        initialSyncLimit: 8, // 使用SDK默认值
+        lazyLoadMembers: true,
+        // 不设置pollTimeout，使用SDK默认的30秒
       })
       console.log('✅ Matrix客户端启动成功')
 
-      // 改进的客户端同步等待逻辑
-      console.log('⏳ 等待Matrix客户端同步...')
+      // 简单等待同步开始 - 不设置超时让同步自然进行
+      console.log('⏳ 等待Matrix客户端同步开始...')
+      
+      // 只等待同步开始，不强制中断
       await new Promise((resolve) => {
-        let syncEventReceived = false
-        let resolveCount = 0
-
-        const safeResolve = (reason: string) => {
-          if (resolveCount === 0) {
-            resolveCount++
-            console.log(`🎯 同步等待结束: ${reason}`)
+        const onSync = (state: string) => {
+          console.log(`🔄 Matrix同步状态变化: ${state}`)
+          if (state === 'PREPARED' || state === 'SYNCING') {
+            client.removeListener('sync' as any, onSync)
+            console.log('✅ Matrix客户端同步已开始')
             resolve(true)
           }
         }
 
-        const timeout = setTimeout(() => {
-          if (!syncEventReceived) {
-            console.warn('⚠️ 同步等待超时，进行最终检查...')
-
-            // 最终状态检查
-            try {
-              const finalState = client.getSyncState()
-              const isRunning = client.clientRunning
-              const roomCount = client.getRooms().length
-
-              console.log('📊 超时时的最终状态:', {
-                syncState: finalState,
-                clientRunning: isRunning,
-                roomCount: roomCount
-              })
-
-              // 如果客户端在运行且有房间，认为是成功的
-              if (isRunning && roomCount > 0) {
-                console.log('✅ 虽然同步事件未收到，但客户端状态良好')
-                syncEventReceived = true
-              } else if (finalState === null) {
-                console.log('🔄 同步状态为null，尝试最后一次重启...')
-                client.startClient({ initialSyncLimit: 100 }).catch((err: any) => {
-                  console.error('最后重启尝试失败:', err)
-                })
-              }
-            } catch (err) {
-              console.error('最终状态检查失败:', err)
-            }
-          }
-
-          client.removeListener('sync' as any, onSync)
-          client.removeListener('error' as any, onError)
-          safeResolve('超时')
-        }, 12000) // 减少到12秒超时
-
-        const onSync = (state: string, prevState: string | null, data: any) => {
-          syncEventReceived = true
-          console.log(`🔄 Matrix同步状态变化: ${prevState} -> ${state}`)
-
-          if (data && data.error) {
-            console.error('同步错误详情:', data.error)
-          }
-
-          if (state === 'PREPARED' || state === 'SYNCING') {
-            clearTimeout(timeout)
-            client.removeListener('sync' as any, onSync)
-            client.removeListener('error' as any, onError)
-            console.log('✅ Matrix客户端同步已准备就绪')
-            safeResolve('同步成功')
-          } else if (state === 'ERROR') {
-            console.error('❌ Matrix客户端同步错误')
-            // 给一些时间看是否能恢复
-            setTimeout(() => {
-              const currentState = client.getSyncState()
-              if (currentState === 'ERROR') {
-                clearTimeout(timeout)
-                client.removeListener('sync' as any, onSync)
-                client.removeListener('error' as any, onError)
-                safeResolve('同步错误')
-              }
-            }, 2000)
-          }
-        }
-
-        const onError = (error: any) => {
-          console.error('❌ Matrix客户端错误事件:', error)
-          // 不立即停止，可能是临时错误
-        }
-
         client.on('sync' as any, onSync)
-        client.on('error' as any, onError)
 
-        // 立即检查当前状态
+        // 检查是否已经在同步
         const currentState = client.getSyncState()
-        console.log(`📊 当前同步状态: ${currentState}`)
         if (currentState === 'PREPARED' || currentState === 'SYNCING') {
-          clearTimeout(timeout)
           client.removeListener('sync' as any, onSync)
-          client.removeListener('error' as any, onError)
           console.log('✅ Matrix客户端已经在同步中')
-          safeResolve('已在同步')
-          return
+          resolve(true)
         }
-
-        // 渐进式状态检查
-        const checkStates = [3000, 6000, 9000]
-        checkStates.forEach((delay, index) => {
-          setTimeout(() => {
-            if (!syncEventReceived && resolveCount === 0) {
-              const state = client.getSyncState()
-              const running = client.clientRunning
-              const rooms = client.getRooms().length
-
-              console.log(`📊 ${delay/1000}秒检查 - 状态:${state}, 运行:${running}, 房间:${rooms}`)
-
-              // 如果检测到有效状态或房间，认为成功
-              if ((state !== null && state !== 'STOPPED') || rooms > 0) {
-                syncEventReceived = true
-                clearTimeout(timeout)
-                client.removeListener('sync' as any, onSync)
-                client.removeListener('error' as any, onError)
-                console.log(`🎉 通过${delay/1000}秒检查检测到有效状态`)
-                safeResolve('状态检查成功')
-              }
-            }
-          }, delay)
-        })
       })
 
       // 设置Matrix事件监听器

@@ -1,30 +1,61 @@
 <template>
-  <div id="app">
-    <!-- Matrix导航 -->
-    <MatrixNavigation
-      v-if="showMatrixNav"
-      @create-room="handleCreateRoom"
-      @test-connection="handleTestConnection"
-    />
+  <div id="app" class="app-container">
+    <!-- 移动端布局 -->
+    <MobileLayout v-if="isMobile" />
+    
+    <!-- 桌面端布局 -->
+    <div v-else class="desktop-layout">
+      <!-- Matrix导航 -->
+      <MatrixNavigation
+        v-if="showMatrixNav"
+        @create-room="handleCreateRoom"
+        @test-connection="handleTestConnection"
+      />
 
-    <!-- 主内容区域 -->
-    <div class="main-content" :class="{ 'with-nav': showMatrixNav }">
-      <router-view />
+      <!-- 主内容区域 -->
+      <div class="main-content" :class="{ 'with-nav': showMatrixNav }">
+        <router-view />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, onBeforeMount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useMatrixStore } from '@/stores/matrix'
 import MatrixNavigation from '@/components/MatrixNavigation.vue'
+import MobileLayout from '@/components/MobileLayout.vue'
 import axios from 'axios'
 
 const route = useRoute()
 const authStore = useAuthStore()
 const matrixStore = useMatrixStore()
+
+// 响应式检测
+const isMobile = ref(false)
+
+// 检测是否为移动端
+const checkIsMobile = () => {
+  const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera
+  const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i
+  isMobile.value = mobileRegex.test(userAgent) || window.innerWidth <= 768
+}
+
+// 监听窗口大小变化
+const handleResize = () => {
+  checkIsMobile()
+}
+
+onBeforeMount(() => {
+  checkIsMobile()
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
 
 // 显示Matrix导航的条件
 const showMatrixNav = computed(() => {
