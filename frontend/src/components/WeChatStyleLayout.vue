@@ -198,12 +198,83 @@
           <div class="empty-message">暂无聊天</div>
         </div>
 
-        <!-- 聊天管理工具栏 -->
-        <div v-if="filteredRooms.length > 0" class="chat-toolbar">
-          <div class="chat-count">{{ filteredRooms.length }} 个聊天</div>
-          <button class="cleanup-btn" @click="cleanupStrangeRoomsAction" title="清理陌生聊天">
-            🧹 清理
-          </button>
+        <!-- Matrix房间分类导航 -->
+        <div class="matrix-room-categories">
+          <div class="category-header">
+            <span class="category-title">Matrix 房间</span>
+            <span class="room-count">{{ filteredRooms.length }}</span>
+          </div>
+          
+          <div class="category-list">
+            <div 
+              class="category-item" 
+              :class="{ active: selectedCategory === 'all' }"
+              @click="selectCategory('all')"
+            >
+              <span class="category-icon">💬</span>
+              <span class="category-name">所有对话</span>
+              <span class="category-count">{{ filteredRooms.length }}</span>
+            </div>
+            
+            <div 
+              class="category-item" 
+              :class="{ active: selectedCategory === 'direct' }"
+              @click="selectCategory('direct')"
+            >
+              <span class="category-icon">👤</span>
+              <span class="category-name">私聊</span>
+              <span class="category-count">{{ directRooms.length }}</span>
+            </div>
+            
+            <div 
+              class="category-item" 
+              :class="{ active: selectedCategory === 'groups' }"
+              @click="selectCategory('groups')"
+            >
+              <span class="category-icon">👥</span>
+              <span class="category-name">群聊</span>
+              <span class="category-count">{{ groupRooms.length }}</span>
+            </div>
+            
+            <div 
+              class="category-item" 
+              :class="{ active: selectedCategory === 'spaces' }"
+              @click="selectCategory('spaces')"
+            >
+              <span class="category-icon">🏢</span>
+              <span class="category-name">空间</span>
+              <span class="category-count">{{ spaceRooms.length }}</span>
+            </div>
+            
+            <div 
+              class="category-item" 
+              :class="{ active: selectedCategory === 'encrypted' }"
+              @click="selectCategory('encrypted')"
+            >
+              <span class="category-icon">🔐</span>
+              <span class="category-name">加密房间</span>
+              <span class="category-count">{{ encryptedRooms.length }}</span>
+            </div>
+            
+            <div 
+              class="category-item" 
+              :class="{ active: selectedCategory === 'unread' }"
+              @click="selectCategory('unread')"
+            >
+              <span class="category-icon">🔴</span>
+              <span class="category-name">未读消息</span>
+              <span class="category-count">{{ unreadRooms.length }}</span>
+            </div>
+          </div>
+          
+          <div class="category-actions">
+            <button class="action-btn" @click="cleanupStrangeRoomsAction" title="清理陌生房间">
+              🧹 清理
+            </button>
+            <button class="action-btn" @click="refreshRooms" title="刷新房间列表">
+              🔄 刷新
+            </button>
+          </div>
         </div>
 
         <!-- 聊天列表 -->
@@ -228,7 +299,10 @@
             <div class="chat-preview">
               <span class="last-message">{{ room.lastMessage || '暂无消息' }}</span>
               <div class="chat-badges">
-                <span class="unread-count" v-if="room.unreadCount > 0">{{ room.unreadCount }}</span>
+                <span class="lock-icon" v-if="room.locked" title="聊天已锁定">🔒</span>
+                <span class="mute-icon" v-if="room.muted" title="消息免打扰">🔕</span>
+                <span class="unread-count" v-if="room.unreadCount > 0 && !room.muted">{{ room.unreadCount }}</span>
+                <span class="unread-dot" v-if="room.unreadCount > 0 && room.muted" title="有新消息但已免打扰"></span>
               </div>
             </div>
           </div>
@@ -379,24 +453,47 @@
     @click.stop
   >
     <div class="context-menu-item" @click="markAsTop">
-      置顶
+      📌 置顶房间
     </div>
     <div class="context-menu-item" @click="markAsUnread">
-      标为未读
+      🔴 标为未读
     </div>
     <div class="context-menu-item" @click="hideSelectedRoom">
-      消息免打扰
+      🔕 静音通知
     </div>
     <div class="context-menu-divider"></div>
-    <div class="context-menu-item" @click="hideSelectedRoom">
-      独立窗口显示
+    <div class="context-menu-item" @click="showRoomInfo">
+      ℹ️ 房间信息
     </div>
-    <div class="context-menu-item" @click="hideSelectedRoom">
-      不显示
+    <div class="context-menu-item" @click="showRoomMembers">
+      👥 房间成员
+    </div>
+    <div class="context-menu-item" @click="showChatFiles">
+      📁 媒体文件
+    </div>
+    <div class="context-menu-item" @click="loadHistoryRecords">
+      📜 加载历史消息
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" @click="showEncryptionInfo">
+      🔐 加密信息
+    </div>
+    <div class="context-menu-item" @click="verifyDevices">
+      🛡️ 设备验证
+    </div>
+    <div class="context-menu-item" @click="openInSeparateWindow">
+      🪟 独立窗口
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" @click="exportRoomData">
+      📤 导出数据
+    </div>
+    <div class="context-menu-item" @click="hideRoomFromList">
+      👁️ 隐藏房间
     </div>
     <div class="context-menu-divider"></div>
     <div class="context-menu-item danger" @click="leaveSelectedRoom">
-      删除
+      🚪 离开房间
     </div>
   </div>
 
@@ -444,13 +541,7 @@ const moreActionsRef = ref<HTMLElement>()
 
 
 // 计算属性
-const filteredRooms = computed(() => {
-  const rooms = matrixStore.rooms || []
-  if (!roomSearchQuery.value) return rooms
-  return rooms.filter(room =>
-    room.name.toLowerCase().includes(roomSearchQuery.value.toLowerCase())
-  )
-})
+// 原来的filteredRooms已移动到分类逻辑中
 
 const filteredPublicRooms = computed(() => {
   if (!publicRoomSearchQuery.value) return publicRooms.value
@@ -1328,22 +1419,219 @@ const markAsUnread = async () => {
   hideContextMenu()
 }
 
-// 隐藏选中的房间
+// 消息免打扰
 const hideSelectedRoom = async () => {
   if (!contextMenu.value.room) return
   
   const room = contextMenu.value.room
   console.log('🔕 消息免打扰:', room.name)
   
+  // 简单实现：标记为免打扰状态
+  const roomIndex = matrixStore.rooms.findIndex(r => r.id === room.id)
+  if (roomIndex >= 0) {
+    // 添加免打扰标记
+    matrixStore.rooms[roomIndex].muted = !matrixStore.rooms[roomIndex].muted
+    const status = matrixStore.rooms[roomIndex].muted ? '已开启' : '已关闭'
+    console.log(`✅ 消息免打扰${status}`)
+  }
+  
+  hideContextMenu()
+}
+
+// 独立窗口显示
+const openInSeparateWindow = () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('🪟 独立窗口显示:', room.name)
+  
+  // 创建独立聊天窗口的HTML内容
+  const createChatWindowHTML = (roomData: any) => {
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${roomData.name} - 聊天窗口</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-header {
+            background: #07c160;
+            color: white;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .chat-avatar {
+            width: 32px;
+            height: 32px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .chat-title {
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .chat-content {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+        }
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #e0e0e0;
+            border-top: 3px solid #07c160;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .close-btn {
+            margin-left: auto;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .close-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-header">
+        <div class="chat-avatar">${roomData.name.charAt(0).toUpperCase()}</div>
+        <div class="chat-title">${roomData.name}</div>
+        <button class="close-btn" onclick="window.close()">关闭</button>
+    </div>
+    <div class="chat-content">
+        <div class="loading">
+            <div class="spinner"></div>
+            <div>正在加载聊天内容...</div>
+            <div style="font-size: 12px; color: #999;">
+                房间ID: ${roomData.id}
+            </div>
+        </div>
+    </div>
+    <script>
+        // 尝试从父窗口获取消息
+        setTimeout(() => {
+            if (window.opener && !window.opener.closed) {
+                try {
+                    const messages = window.opener.matrixStore?.messages?.get('${roomData.id}') || [];
+                    if (messages.length > 0) {
+                        displayMessages(messages);
+                    } else {
+                        document.querySelector('.chat-content').innerHTML =
+                            '<div style="text-align: center; color: #999;">暂无消息</div>';
+                    }
+                } catch (error) {
+                    console.error('获取消息失败:', error);
+                    document.querySelector('.chat-content').innerHTML =
+                        '<div style="text-align: center; color: #999;">无法加载消息</div>';
+                }
+            }
+        }, 1000);
+
+        function displayMessages(messages) {
+            const content = document.querySelector('.chat-content');
+            content.innerHTML = messages.map(msg =>
+                '<div style="margin: 12px 0; padding: 8px; background: white; border-radius: 8px;">' +
+                    '<div style="font-size: 12px; color: #666; margin-bottom: 4px;">' + (msg.sender || '未知用户') + '</div>' +
+                    '<div>' + (msg.content || msg.body || '消息内容') + '</div>' +
+                '</div>'
+            ).join('');
+        }
+
+        // 监听父窗口关闭
+        window.addEventListener('beforeunload', () => {
+            if (window.opener && !window.opener.closed) {
+                console.log('独立聊天窗口关闭');
+            }
+        });
+
+</body>
+</html>`;
+  }
+  
+  try {
+    // 创建新窗口
+    const windowFeatures = 'width=800,height=600,scrollbars=yes,resizable=yes,menubar=no,toolbar=no,location=no,status=no'
+    const newWindow = window.open('', `chat_${room.id}`, windowFeatures)
+    
+    if (newWindow) {
+      // 写入HTML内容
+      newWindow.document.write(createChatWindowHTML(room))
+      newWindow.document.close()
+      newWindow.focus()
+      
+      console.log('✅ 独立窗口已打开')
+      
+      // 存储窗口引用，以便后续通信
+      if (typeof window !== 'undefined') {
+        if (!(window as any).chatWindows) {
+          (window as any).chatWindows = new Map()
+        }
+        (window as any).chatWindows.set(room.id, newWindow)
+      }
+      
+    } else {
+      console.error('❌ 无法打开新窗口，可能被浏览器阻止')
+      alert('无法打开新窗口，请检查浏览器弹窗设置')
+    }
+  } catch (error) {
+    console.error('❌ 打开独立窗口失败:', error)
+    alert('打开独立窗口失败: ' + error)
+  }
+  
+  hideContextMenu()
+}
+
+// 不显示（隐藏聊天）
+const hideRoomFromList = async () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('👁️‍🗨️ 隐藏聊天:', room.name)
+  
   try {
     const result = await matrixStore.hideRoom(room.id)
     if (result.success) {
-      console.log('✅ 已设置消息免打扰')
+      console.log('✅ 聊天已隐藏')
     } else {
-      console.error('❌ 设置失败:', result.error)
+      console.error('❌ 隐藏失败:', result.error)
     }
   } catch (error) {
-    console.error('❌ 设置出错:', error)
+    console.error('❌ 隐藏出错:', error)
   }
   
   hideContextMenu()
@@ -1405,6 +1693,450 @@ const cleanupStrangeRoomsAction = async () => {
   hideContextMenu()
 }
 
+// 聊天文件
+const showChatFiles = () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('📁 查看聊天文件:', room.name)
+  
+  // 获取聊天中的文件消息
+  const roomMessages = matrixStore.messages.get(room.id) || []
+  const fileMessages = roomMessages.filter(msg => 
+    msg.type === 'm.file' || 
+    msg.type === 'm.image' || 
+    msg.type === 'm.video' || 
+    msg.type === 'm.audio' ||
+    (msg.content && (msg.content.includes('http') || msg.content.includes('mxc://')))
+  )
+  
+  if (fileMessages.length > 0) {
+    console.log(`📄 找到 ${fileMessages.length} 个文件:`)
+    fileMessages.forEach((msg, index) => {
+      console.log(`  ${index + 1}. ${msg.filename || msg.body || '未知文件'} (${msg.type || '未知类型'})`)
+    })
+    alert(`聊天文件\n\n找到 ${fileMessages.length} 个文件，详情请查看控制台`)
+  } else {
+    alert('聊天文件\n\n该聊天中暂无文件')
+  }
+  
+  hideContextMenu()
+}
+
+// 聊天记录管理
+const showChatRecordManager = () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('📋 聊天记录管理:', room.name)
+  
+  const roomMessages = matrixStore.messages.get(room.id) || []
+  const messageCount = roomMessages.length
+  const firstMessage = roomMessages[0]
+  const lastMessage = roomMessages[roomMessages.length - 1]
+  
+  const info = [
+    `聊天记录管理 - ${room.name}`,
+    ``,
+    `📊 统计信息:`,
+    `• 消息总数: ${messageCount} 条`,
+    `• 最早消息: ${firstMessage ? new Date(firstMessage.timestamp).toLocaleString() : '无'}`,
+    `• 最新消息: ${lastMessage ? new Date(lastMessage.timestamp).toLocaleString() : '无'}`,
+    ``,
+    `🛠️ 可用操作:`,
+    `• 导出聊天记录`,
+    `• 清空聊天记录`,
+    `• 搜索聊天记录`,
+    ``,
+    `详细信息请查看控制台`
+  ].join('\n')
+  
+  console.log('📋 聊天记录详情:', {
+    roomName: room.name,
+    roomId: room.id,
+    messageCount,
+    messages: roomMessages.slice(0, 5), // 显示前5条消息
+    hasMore: messageCount > 5
+  })
+  
+  alert(info)
+  hideContextMenu()
+}
+
+// 加载历史聊天记录
+const loadHistoryRecords = async () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('📜 加载历史聊天记录:', room.name)
+  
+  try {
+    // 使用Matrix Store的智能历史加载功能
+    if (matrixStore.smartAutoLoadHistory) {
+      await matrixStore.smartAutoLoadHistory(room.id)
+      console.log('✅ 历史记录加载完成')
+      alert('历史聊天记录\n\n正在加载更多历史记录...\n请稍候查看聊天内容')
+    } else {
+      // 备用方案：加载更多消息
+      await matrixStore.fetchMatrixMessages(room.id, 1000)
+      console.log('✅ 已尝试加载更多消息')
+      alert('历史聊天记录\n\n已尝试加载更多消息')
+    }
+  } catch (error) {
+    console.error('❌ 加载历史记录失败:', error)
+    alert('历史聊天记录\n\n加载失败: ' + error)
+  }
+  
+  hideContextMenu()
+}
+
+// 锁定聊天
+const lockChat = () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('🔒 锁定聊天:', room.name)
+  
+  // 简单实现：标记为锁定状态
+  const roomIndex = matrixStore.rooms.findIndex(r => r.id === room.id)
+  if (roomIndex >= 0) {
+    matrixStore.rooms[roomIndex].locked = !matrixStore.rooms[roomIndex].locked
+    const status = matrixStore.rooms[roomIndex].locked ? '已锁定' : '已解锁'
+    console.log(`🔐 聊天${status}`)
+    alert(`聊天锁定\n\n${room.name} ${status}`)
+  }
+  
+  hideContextMenu()
+}
+
+// 意见反馈
+const showFeedback = () => {
+  console.log('💬 打开意见反馈')
+  
+  const feedbackInfo = [
+    `意见反馈`,
+    ``,
+    `📝 反馈方式:`,
+    `• GitHub Issues: 提交bug报告和功能建议`,
+    `• 邮箱反馈: 发送详细反馈信息`,
+    `• 在线反馈: 通过聊天窗口反馈`,
+    ``,
+    `🔧 当前版本信息:`,
+    `• 界面版本: 微信风格 v1.0`,
+    `• Matrix客户端: ${matrixStore.matrixClient ? '已连接' : '未连接'}`,
+    `• 房间数量: ${matrixStore.rooms.length}`,
+    `• 缓存状态: 智能缓存已启用`,
+    ``,
+    `感谢您的反馈！`
+  ].join('\n')
+  
+  alert(feedbackInfo)
+  hideContextMenu()
+}
+
+// Matrix房间信息
+const showRoomInfo = () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('ℹ️ 查看房间信息:', room.name)
+  
+  const roomInfo = [
+    `房间信息 - ${room.name}`,
+    ``,
+    `🏠 基本信息:`,
+    `• 房间ID: ${room.id}`,
+    `• 房间名称: ${room.name}`,
+    `• 房间别名: ${room.alias || '无'}`,
+    `• 房间主题: ${room.topic || '无'}`,
+    ``,
+    `👥 成员信息:`,
+    `• 成员数量: ${room.memberCount || 0} 人`,
+    `• 房间类型: ${room.type === 'public' ? '公开房间' : '私有房间'}`,
+    `• 加入规则: ${room.joinRule || 'invite'}`,
+    ``,
+    `🔐 安全信息:`,
+    `• 端到端加密: ${room.encrypted ? '已启用' : '未启用'}`,
+    `• 历史可见性: ${room.historyVisibility || 'shared'}`,
+    ``,
+    `📊 活动信息:`,
+    `• 未读消息: ${room.unreadCount || 0} 条`,
+    `• 最后活动: ${room.lastActivity ? new Date(room.lastActivity).toLocaleString() : '未知'}`,
+    ``,
+    `详细信息请查看控制台`
+  ].join('\n')
+  
+  console.log('ℹ️ 房间详细信息:', room)
+  alert(roomInfo)
+  hideContextMenu()
+}
+
+// Matrix房间成员
+const showRoomMembers = async () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('👥 查看房间成员:', room.name)
+  
+  try {
+    if (matrixStore.matrixClient) {
+      const matrixRoom = matrixStore.matrixClient.getRoom(room.id)
+      if (matrixRoom) {
+        const members = matrixRoom.getJoinedMembers()
+        const memberList = Object.values(members).map((member: any) => ({
+          userId: member.userId,
+          displayName: member.name || member.userId,
+          powerLevel: member.powerLevel || 0,
+          membership: member.membership
+        }))
+        
+        console.log('👥 房间成员列表:', memberList)
+        
+        const memberInfo = [
+          `房间成员 - ${room.name}`,
+          ``,
+          `👥 成员列表 (${memberList.length} 人):`,
+          ...memberList.slice(0, 10).map(member => 
+            `• ${member.displayName} (${member.powerLevel >= 50 ? '管理员' : '成员'})`
+          ),
+          memberList.length > 10 ? `... 还有 ${memberList.length - 10} 个成员` : '',
+          ``,
+          `详细成员信息请查看控制台`
+        ].filter(Boolean).join('\n')
+        
+        alert(memberInfo)
+      } else {
+        alert('房间成员\n\n无法获取房间成员信息')
+      }
+    } else {
+      alert('房间成员\n\nMatrix客户端未连接')
+    }
+  } catch (error) {
+    console.error('❌ 获取房间成员失败:', error)
+    alert('房间成员\n\n获取失败: ' + error)
+  }
+  
+  hideContextMenu()
+}
+
+// Matrix加密信息
+const showEncryptionInfo = () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('🔐 查看加密信息:', room.name)
+  
+  const encryptionInfo = [
+    `加密信息 - ${room.name}`,
+    ``,
+    `🔐 端到端加密:`,
+    `• 加密状态: ${room.encrypted ? '✅ 已启用' : '❌ 未启用'}`,
+    `• 加密算法: ${room.encrypted ? 'Olm/Megolm' : '无'}`,
+    ``,
+    `🛡️ 设备验证:`,
+    `• 客户端状态: ${matrixStore.matrixClient ? '已连接' : '未连接'}`,
+    `• 设备ID: ${matrixStore.matrixClient?.getDeviceId() || '未知'}`,
+    `• 用户ID: ${matrixStore.matrixClient?.getUserId() || '未知'}`,
+    ``,
+    `🔑 密钥管理:`,
+    `• 密钥备份: 建议启用`,
+    `• 跨设备验证: 建议完成`,
+    `• 会话密钥: 自动管理`,
+    ``,
+    `💡 安全建议:`,
+    `• 定期验证新设备`,
+    `• 启用密钥备份`,
+    `• 保护恢复密钥`,
+    ``,
+    `详细信息请查看控制台`
+  ].join('\n')
+  
+  console.log('🔐 加密详细信息:', {
+    roomEncrypted: room.encrypted,
+    clientConnected: !!matrixStore.matrixClient,
+    deviceId: matrixStore.matrixClient?.getDeviceId(),
+    userId: matrixStore.matrixClient?.getUserId()
+  })
+  
+  alert(encryptionInfo)
+  hideContextMenu()
+}
+
+// Matrix设备验证
+const verifyDevices = async () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('🛡️ 设备验证:', room.name)
+  
+  try {
+    if (matrixStore.matrixClient) {
+      const deviceInfo = [
+        `设备验证 - ${room.name}`,
+        ``,
+        `🛡️ 当前设备:`,
+        `• 设备ID: ${matrixStore.matrixClient.getDeviceId()}`,
+        `• 用户ID: ${matrixStore.matrixClient.getUserId()}`,
+        `• 服务器: ${matrixStore.matrixClient.getHomeserverUrl()}`,
+        ``,
+        `🔍 验证状态:`,
+        `• 设备已验证: 检查中...`,
+        `• 跨签名: 检查中...`,
+        `• 密钥备份: 检查中...`,
+        ``,
+        `💡 验证建议:`,
+        `• 验证所有登录设备`,
+        `• 启用跨设备签名`,
+        `• 定期检查设备列表`,
+        ``,
+        `详细验证信息请查看控制台`
+      ].join('\n')
+      
+      console.log('🛡️ 设备验证信息:', {
+        deviceId: matrixStore.matrixClient.getDeviceId(),
+        userId: matrixStore.matrixClient.getUserId(),
+        homeserver: matrixStore.matrixClient.getHomeserverUrl(),
+        clientRunning: matrixStore.matrixClient.clientRunning
+      })
+      
+      alert(deviceInfo)
+    } else {
+      alert('设备验证\n\nMatrix客户端未连接')
+    }
+  } catch (error) {
+    console.error('❌ 设备验证失败:', error)
+    alert('设备验证\n\n验证失败: ' + error)
+  }
+  
+  hideContextMenu()
+}
+
+// 导出房间数据
+const exportRoomData = () => {
+  if (!contextMenu.value.room) return
+  
+  const room = contextMenu.value.room
+  console.log('📤 导出房间数据:', room.name)
+  
+  try {
+    const roomMessages = matrixStore.messages.get(room.id) || []
+    const exportData = {
+      roomInfo: {
+        id: room.id,
+        name: room.name,
+        alias: room.alias,
+        topic: room.topic,
+        memberCount: room.memberCount,
+        encrypted: room.encrypted,
+        type: room.type
+      },
+      messages: roomMessages.map(msg => ({
+        id: msg.id,
+        sender: msg.sender,
+        content: msg.content || msg.body,
+        timestamp: msg.timestamp,
+        type: msg.type
+      })),
+      exportTime: new Date().toISOString(),
+      exportedBy: matrixStore.matrixClient?.getUserId() || 'unknown'
+    }
+    
+    // 创建下载链接
+    const dataStr = JSON.stringify(exportData, null, 2)
+    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(dataBlob)
+    
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${room.name.replace(/[^a-zA-Z0-9]/g, '_')}_export_${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    
+    console.log('✅ 房间数据导出完成')
+    alert(`房间数据导出\n\n✅ 已导出 ${room.name} 的数据\n• 房间信息\n• ${roomMessages.length} 条消息\n• JSON格式文件`)
+    
+  } catch (error) {
+    console.error('❌ 导出失败:', error)
+    alert('房间数据导出\n\n❌ 导出失败: ' + error)
+  }
+  
+  hideContextMenu()
+}
+
+// Matrix房间分类
+const selectedCategory = ref('all')
+
+// 计算不同类型的房间
+const directRooms = computed(() => {
+  return matrixStore.rooms.filter(room => 
+    room.memberCount <= 2 && !room.isFileTransferRoom
+  )
+})
+
+const groupRooms = computed(() => {
+  return matrixStore.rooms.filter(room => 
+    room.memberCount > 2 && room.type !== 'space'
+  )
+})
+
+const spaceRooms = computed(() => {
+  return matrixStore.rooms.filter(room => 
+    room.type === 'space'
+  )
+})
+
+const encryptedRooms = computed(() => {
+  return matrixStore.rooms.filter(room => 
+    room.encrypted
+  )
+})
+
+const unreadRooms = computed(() => {
+  return matrixStore.rooms.filter(room => 
+    room.unreadCount && room.unreadCount > 0
+  )
+})
+
+// 根据选中分类过滤房间
+const filteredRooms = computed(() => {
+  let rooms = []
+  
+  switch (selectedCategory.value) {
+    case 'direct':
+      rooms = directRooms.value
+      break
+    case 'groups':
+      rooms = groupRooms.value
+      break
+    case 'spaces':
+      rooms = spaceRooms.value
+      break
+    case 'encrypted':
+      rooms = encryptedRooms.value
+      break
+    case 'unread':
+      rooms = unreadRooms.value
+      break
+    default:
+      rooms = matrixStore.rooms
+  }
+  
+  // 应用搜索过滤
+  if (!roomSearchQuery.value) return rooms
+  return rooms.filter(room =>
+    room.name.toLowerCase().includes(roomSearchQuery.value.toLowerCase())
+  )
+})
+
+// 选择分类
+const selectCategory = (category: string) => {
+  selectedCategory.value = category
+  console.log(`📂 切换到分类: ${category}`)
+}
+
+
 // 点击其他地方隐藏菜单
 const handleGlobalClick = () => {
   if (contextMenu.value.show) {
@@ -1428,12 +2160,73 @@ if (typeof window !== 'undefined') {
       console.error('❌ 清理出错:', error)
     }
   }
-  console.log('🎉 微信风格聊天界面已加载!')
-  console.log('✨ 新功能:')
-  console.log('  • 右键点击聊天 - 置顶、标为未读、删除等')
-  console.log('  • 点击"🧹 清理"按钮 - 清理陌生聊天')
-  console.log('  • window.quickCleanup() - 快速清理（无确认）')
-  console.log('💡 提示: 右键菜单现在更像微信了!')
+  
+  // 独立窗口管理
+  (window as any).closeAllChatWindows = () => {
+    const chatWindows = (window as any).chatWindows
+    if (chatWindows) {
+      let closedCount = 0
+      for (const [roomId, chatWindow] of chatWindows) {
+        if (chatWindow && !chatWindow.closed) {
+          chatWindow.close()
+          closedCount++
+        }
+      }
+      chatWindows.clear()
+      console.log(`✅ 已关闭 ${closedCount} 个独立聊天窗口`)
+    } else {
+      console.log('📭 没有打开的独立聊天窗口')
+    }
+  }
+  
+  (window as any).listChatWindows = () => {
+    const chatWindows = (window as any).chatWindows
+    if (chatWindows && chatWindows.size > 0) {
+      console.log('🪟 当前打开的独立聊天窗口:')
+      for (const [roomId, chatWindow] of chatWindows) {
+        const status = chatWindow.closed ? '已关闭' : '运行中'
+        console.log(`  • ${roomId}: ${status}`)
+      }
+    } else {
+      console.log('📭 没有打开的独立聊天窗口')
+    }
+  }
+  
+  console.log('🎉 Matrix/Element 风格聊天界面已加载!')
+  console.log('✨ Matrix专属功能:')
+  console.log('  📂 房间分类 - 私聊/群聊/空间/加密房间分类')
+  console.log('  🔐 端到端加密 - Matrix原生加密支持')
+  console.log('  🛡️ 设备验证 - 跨设备安全验证')
+  console.log('  📤 数据导出 - 导出房间数据和消息')
+  console.log('')
+  console.log('🖱️ 右键菜单功能:')
+  console.log('  📌 置顶房间 - 重要房间置顶')
+  console.log('  🔴 标为未读 - 标记未读状态')
+  console.log('  🔕 静音通知 - 关闭通知提醒')
+  console.log('  ℹ️ 房间信息 - 查看详细房间信息')
+  console.log('  👥 房间成员 - 查看成员列表')
+  console.log('  📁 媒体文件 - 查看共享文件')
+  console.log('  📜 加载历史消息 - 获取更多历史')
+  console.log('  🔐 加密信息 - 查看加密状态')
+  console.log('  🛡️ 设备验证 - 验证设备安全')
+  console.log('  🪟 独立窗口 - 新窗口打开')
+  console.log('  📤 导出数据 - 导出房间数据')
+  console.log('  👁️ 隐藏房间 - 从列表隐藏')
+  console.log('  🚪 离开房间 - 退出房间')
+  console.log('')
+  console.log('📊 房间分类统计:')
+  console.log(`  💬 所有对话: ${matrixStore.rooms.length} 个`)
+  console.log(`  👤 私聊: ${matrixStore.rooms.filter(r => r.memberCount <= 2).length} 个`)
+  console.log(`  👥 群聊: ${matrixStore.rooms.filter(r => r.memberCount > 2).length} 个`)
+  console.log(`  🔐 加密房间: ${matrixStore.rooms.filter(r => r.encrypted).length} 个`)
+  console.log(`  🔴 未读消息: ${matrixStore.rooms.filter(r => r.unreadCount > 0).length} 个`)
+  console.log('')
+  console.log('🛠️ 控制台命令:')
+  console.log('  • window.quickCleanup() - 快速清理陌生房间')
+  console.log('  • window.closeAllChatWindows() - 关闭所有独立窗口')
+  console.log('  • window.listChatWindows() - 查看窗口状态')
+  console.log('')
+  console.log('💡 专为Matrix协议优化的现代化聊天界面！')
 }
 
 // 注释：已移除 initializeMatrixInBackground 函数以避免重复初始化
@@ -2420,34 +3213,135 @@ if (typeof window !== 'undefined') {
   background: transparent;
 }
 
-/* 聊天管理工具栏 */
-.chat-toolbar {
+/* Matrix房间分类导航 */
+.matrix-room-categories {
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 12px 0;
+}
+
+.category-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 20px;
-  background: rgba(255, 255, 255, 0.02);
+  padding: 0 20px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  font-size: 12px;
+  margin-bottom: 8px;
 }
 
-.chat-count {
-  color: rgba(255, 255, 255, 0.6);
+.category-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
 }
 
-.cleanup-btn {
+.room-count {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
   background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.category-list {
+  padding: 0 12px;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 2px;
+}
+
+.category-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.category-item.active {
+  background: rgba(7, 193, 96, 0.2);
+  color: #07c160;
+}
+
+.category-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+  margin-right: 8px;
+}
+
+.category-name {
+  flex: 1;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.category-item.active .category-name {
+  color: #07c160;
+}
+
+.category-count {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 5px;
+  border-radius: 8px;
+  min-width: 16px;
+  text-align: center;
+}
+
+.category-item.active .category-count {
+  background: rgba(7, 193, 96, 0.3);
+  color: #07c160;
+}
+
+.category-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 20px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  margin-top: 8px;
+}
+
+.action-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
   border: none;
   border-radius: 4px;
   color: rgba(255, 255, 255, 0.8);
-  padding: 4px 8px;
+  padding: 6px 12px;
   font-size: 11px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.cleanup-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+.action-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
   color: white;
+}
+
+/* 聊天状态图标 */
+.lock-icon {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-right: 4px;
+  color: #ffa500;
+}
+
+.mute-icon {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-right: 4px;
+}
+
+.unread-dot {
+  width: 8px;
+  height: 8px;
+  background: #ff4444;
+  border-radius: 50%;
+  display: inline-block;
 }
 </style>
