@@ -54,3 +54,9 @@ android/.gradle/
 # Temporary files
 *.tmp
 *.temp
+
+# Large files and build artifacts
+*.jar
+*.jar.original
+electron/jre-runtime/
+backend/target/
