@@ -336,32 +336,6 @@ frontend/
 - **Background Loading**: Room lists and messages load asynchronously in background
 - **Smooth Interactions**: Significantly improved overall application responsiveness
 
-#### Project Structure
-```
-jianluochat/
-├── frontend/           # Vue 3 frontend application
-│   ├── src/
-│   │   ├── components/ # Vue components
-│   │   │   ├── MatrixRealLogin.vue      # Matrix login component
-│   │   │   ├── PublicRoomsExplorer.vue  # Room discovery
-│   │   │   ├── MatrixMessageArea.vue    # Chat interface
-│   │   │   └── MatrixRoomList.vue       # Room navigation
-│   │   ├── stores/     # Pinia stores
-│   │   │   ├── matrix.ts               # Matrix client state
-│   │   │   └── auth.ts                 # Authentication
-│   │   ├── views/      # Page views
-│   │   │   └── MatrixChatView.vue      # Main chat view
-│   │   └── services/   # API services
-├── backend/            # Spring Boot backend
-│   ├── src/main/java/
-│   │   └── com/jianluochat/
-│   │       ├── controller/
-│   │       ├── service/
-│   │       │   └── RealMatrixService.java # Matrix integration
-│   │       └── model/
-└── docs/              # Documentation and screenshots
-```
-
 ### 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
@@ -408,48 +382,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 #### 选项2：Docker（开发推荐）
 
-简络聊是一个现代化的Matrix协议客户端，将去中心化通讯的强大功能与独特的复古未来主义设计美学相结合。基于Vue 3和Spring Boot构建，在保持与Matrix生态系统完全兼容的同时，提供无缝的聊天体验。
-
-### ✨ 核心特性
-
-- **🔐 真正的Matrix协议集成**：完整的Matrix客户端实现，支持端到端加密
-- **🌍 联邦支持**：连接到任何Matrix家庭服务器（matrix.org, kde.org等）
-- **🤝 Element互通性**：与Element及其他Matrix客户端完全兼容
-- **💬 跨客户端消息**：与Element用户无缝收发消息
-- **🏠 共享房间访问**：加入并参与Element用户创建的房间
-- **🎨 复古未来主义界面**：独特的绿色终端风格界面设计
-- **🌐 双语支持**：中英文界面，支持本地化
-- **🏠 公共房间探索器**：发现并加入Matrix网络中的公共房间
-- **📱 跨平台**：基于Web的客户端，可从任何设备访问
-- **🔄 实时同步**：跨设备实时消息同步
-- **💾 持久登录**：登录状态在浏览器会话间保持
-- **🚀 现代技术栈**：Vue 3 + Spring Boot 3 + PostgreSQL + Redis
-
-### 🎯 设计理念
-
-简络聊采用受经典终端界面和赛博朋克文化启发的**复古未来主义美学**：
-
-- **绿色终端主题**：等宽字体，绿黑配色方案
-- **Matrix协议优先**：构建为真正的Matrix客户端，而非普通聊天应用
-- **Element兼容性**：与Element及其他Matrix客户端完全互通
-- **极简功能**：专注于核心通讯功能
-- **文化桥梁**：双语设计，连接东西方用户
-
-### 🤝 Element互通性
-
-简络聊设计为与Element和其他Matrix客户端无缝协作：
-
-- **✅ 共享房间**：加入Element用户创建的房间
-- **✅ 实时消息**：与Element用户即时收发消息（非加密房间）
-- **✅ 用户发现**：查找并与任何Matrix客户端的用户通信
-- **✅ 联邦支持**：跨不同Matrix家庭服务器连接
-- **✅ 协议合规**：完整的Matrix Client-Server API实现
-- **⚠️ 端到端加密**：加密房间暂不支持发送消息（开发中）
-- **🚧 文件共享**：与Element用户文件传输（开发中）
-- **🚧 语音/视频**：与Element用户WebRTC通话（计划中）
-
-#### 选项3：手动安装（高级）
-
 **环境要求**
 - Docker & Docker Compose
 
@@ -487,7 +419,7 @@ cd frontend && npm install && npm run dev
 - 后端API：http://localhost:8080
 - 测试页面：http://localhost:5173/test
 
-#### 方式二：手动安装
+#### 选项3：手动安装（高级）
 
 **环境要求**
 - Node.js 18+
@@ -554,82 +486,82 @@ npm run dev
 
 ### 📋 更新日志
 
-## [2025-10-26] 版本更新
+#### v1.3.1 (2025-10-26) - Desktop Client Foundation & Login Enhancement
+**🚀 Desktop Client Development**
+- **Electron Main Process**: Added `electron/index.html` for desktop client entry point
+- **Dependency Management**: Updated `electron/package-lock.json` for consistent dependency versions
+- **Login Progress Component**: Created `frontend/src/components/LoginProgressBar.vue` for visual login progress
+- **Login Logic**: Implemented `frontend/src/composables/useLoginProgress.ts` for non-blocking login experience
+- **Vue Composition API Fix**: Added `fix-vue-composition-api.js` to resolve Vue 3 compatibility issues
 
-### 新增功能
+**🔧 Configuration & Optimization**
+- **Git Ignore Enhancement**: Improved `.gitignore` with Electron build artifacts and large file exclusions
+- **Performance Improvements**:
+  - Non-blocking login with detailed progress feedback
+  - 8-second timeout protection to prevent hanging
+  - Rich animations and visual feedback for professional user experience
 
-#### Electron桌面客户端
-- ✨ **新增 Electron 主进程入口文件** (`electron/index.html`)
-  - 创建了桌面客户端的主HTML界面
-  - 集成了Electron框架的基础配置
-  - 支持跨平台桌面应用运行
+#### v1.3.0 (2025-10-25) - Matrix Chat Enhancement & Performance Optimization
+**🚀 Major Updates**
+- **Matrix Chat Functionality Enhancement**:
+  - Optimized Matrix message area component for better performance
+  - Implemented virtual scrolling for room lists, reducing memory usage by 50%
+  - Added comprehensive performance monitoring system
+  - Enhanced Matrix message input component for smoother typing experience
 
-- 📦 **Electron依赖管理**
-  - 更新了 `electron/package-lock.json`
-  - 确保所有Electron相关依赖的版本一致性
-  - 优化了依赖解析和安装流程
+- **Performance Optimization**:
+  - Implemented frontend performance monitoring with network and error tracking
+  - Optimized Matrix room list rendering performance (60% faster loading)
+  - Added performance testing page for validation
+  - Created performance-optimized application version
 
-#### v1.3.0 (2025-10-25) - Matrix聊天功能增强与性能优化
-**🚀 重大更新**
-- **Matrix聊天功能增强**：
-  - 优化Matrix消息区域组件，提升消息显示性能
-  - 实现虚拟滚动的房间列表，内存占用减少50%
-  - 添加全面的性能监控系统
-  - 增强Matrix消息输入组件，提供更流畅的输入体验
+- **Encryption Fix Tools**:
+  - Complete encryption fix guide documentation
+  - Multiple encryption repair scripts and utilities
+  - Encryption testing tools for validation
+  - One-click encryption fix script
 
-- **性能优化**：
-  - 实现前端性能监控，包括网络监控和错误监控
-  - 优化Matrix房间列表渲染性能（加载速度提升60%）
-  - 添加性能测试页面，用于测试和验证
-  - 创建性能优化的应用版本
+**🔧 Technical Improvements**
+- Upgraded Matrix SDK to v39
+- Implemented unified Matrix state management
+- Optimized code structure for better maintainability
+- Enhanced error handling and logging
 
-- **加密修复工具**：
-  - 完整的加密修复指南文档
-  - 多个加密修复脚本和工具
-  - 加密测试工具，用于验证修复效果
-  - 一键加密修复脚本
+**🆕 New Files Added**
+- `ENCRYPTION_FIX_GUIDE.md` - Detailed encryption fix guide
+- `fix-encryption-now.bat` - One-click encryption fix script
+- `immediate-encryption-fix.js` - Immediate encryption fix tool
+- `test-encryption-fix.js` - Encryption fix testing tool
+- `fix-encryption-support.js` - Encryption fix support script
 
-**🔧 技术改进**
-- 升级Matrix SDK到v39版本
-- 实现统一的Matrix状态管理
-- 优化代码结构，提高可维护性
-- 增强错误处理和日志记录
+#### v1.2.1 (2025-01-18) - UI Button Fix & Sync Optimization
+**🔧 Interface Fixes**
+- **Button Layout Fix**: Fixed refresh button being hidden by reorganizing header actions
+- **More Actions Menu**: Added collapsible menu for secondary functions (⋯)
+- **Matrix Sync Optimization**: Reduced sync timeout from 15s to 3s for faster room loading
 
-**🆕 新增文件**
-- `ENCRYPTION_FIX_GUIDE.md` - 加密修复详细指南
-- `fix-encryption-now.bat` - 一键加密修复脚本
-- `immediate-encryption-fix.js` - 立即加密修复工具
-- `test-encryption-fix.js` - 加密修复测试工具
-- `fix-encryption-support.js` - 加密修复支持脚本
+#### v1.2.0 (2025-01-17) - Fast Login & UI Optimization
+**🚀 Performance Improvements**
+- **Fast Login**: Reduced login time from 10-30 seconds to almost instant redirect
+- **Async Initialization**: Matrix client starts in background without blocking UI
+- **Route Optimization**: Simplified routing structure for faster page transitions
 
-#### v1.2.1 (2025-01-18) - 界面按钮修复与同步优化
-**🔧 界面修复**
-- **按钮布局修复**: 重新组织头部操作区域，解决刷新按钮被遮挡问题
-- **更多操作菜单**: 添加可折叠的次要功能菜单（⋯）
-- **Matrix同步优化**: 将同步超时时间从15秒减少到3秒，提升房间加载速度
+**🎨 UI Enhancements**
+- **WeChat-style Chat Bubbles**: Adopted WeChat's classic green (#95ec69) and white color scheme
+- **Message Input Optimization**: Clean WeChat-style design
+- **Logout Button Repositioning**: Moved to bottom-left corner following WeChat design patterns
+- **Overall Layout Optimization**: Maintained WeChat's classic layout structure
 
-#### v1.2.0 (2025-01-17) - 快速登录与界面优化
-**🚀 性能优化**
-- **快速登录**: 登录时间从10-30秒缩短到几乎瞬间跳转
-- **异步初始化**: Matrix客户端在后台异步启动，不阻塞界面
-- **路由优化**: 简化路由结构，提升页面切换速度
+**🔧 Technical Fixes**
+- **Message Retrieval API**: Fixed roomMessagesAPI calls using correct Matrix client methods
+- **Room List Optimization**: Prioritized Matrix client for room fetching with API fallback
+- **Message Sending Improvements**: Used Matrix client's sendTextMessage method
+- **Debug Features**: Fixed client status checking methods
 
-**🎨 界面改进**
-- **微信风格聊天气泡**: 采用微信经典的绿色(#95ec69)和白色配色
-- **消息输入框优化**: 简洁的微信风格设计
-- **登出按钮重新定位**: 移至左下角，符合微信设计习惯
-- **整体布局优化**: 保持微信的经典布局结构
-
-**🔧 技术修复**
-- **消息获取API**: 修复roomMessagesAPI调用，使用正确的Matrix客户端方法
-- **房间列表优化**: 优先使用Matrix客户端获取房间，添加API fallback
-- **消息发送改进**: 使用Matrix客户端的sendTextMessage方法
-- **调试功能**: 修复客户端状态检查方法
-
-**📱 用户体验**
-- **即时响应**: 用户登录后立即看到聊天界面
-- **后台加载**: 房间列表和消息在后台异步加载
-- **流畅交互**: 大幅提升整体应用响应速度
+**📱 User Experience**
+- **Instant Response**: Users see chat interface immediately after login
+- **Background Loading**: Room lists and messages load asynchronously in background
+- **Smooth Interactions**: Significantly improved overall application responsiveness
 
 ### 🤝 贡献指南
 
@@ -651,6 +583,6 @@ npm run dev
 
 **Made with ❤️ for the Matrix community**
 
-[Report Bug](https://github.com/yourusername/jianluochat/issues) • [Request Feature](https://github.com/yourusername/jianluochat/issues) • [Documentation](https://github.com/yourusername/jianluochat/wiki)
+[Report Bug](https://github.com/jianluo999/JianLuoChat/issues) • [Request Feature](https://github.com/jianluo999/JianLuoChat/issues) • [Documentation](https://github.com/jianluo999/JianLuoChat/wiki)
 
 </div>
