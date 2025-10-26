@@ -4,6 +4,7 @@ D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\websocket
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\service\MatrixRoomService.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\config\MatrixConfig.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\controller\RoomController.java
+D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\service\DatabaseRecoveryService.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\repository\UserRepository.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\security\JwtAuthenticationEntryPoint.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\repository\RoleRepository.java
@@ -21,11 +22,13 @@ D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\config\We
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\entity\RoomInvitation.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\repository\RoomRepository.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\controller\UserController.java
+D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\controller\DatabaseRecoveryController.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\entity\RoomMember.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\JianluoChatApplication.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\controller\MessageController.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\entity\Message.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\entity\Room.java
+D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\controller\MatrixRoomController.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\controller\AuthController.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\controller\HealthController.java
 D:\StudyPlanT\mygithub\jilouchat\backend\src\main\java\com\jianluochat\service\RealMatrixService.java

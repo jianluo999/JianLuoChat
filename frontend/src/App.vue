@@ -53,8 +53,14 @@ onBeforeMount(() => {
   window.addEventListener('resize', handleResize)
 })
 
-onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
+onMounted(() => {
+  // 在组件销毁时清理事件监听器
+  const cleanup = () => {
+    window.removeEventListener('resize', handleResize)
+  }
+  
+  // 使用 beforeunload 事件来清理
+  window.addEventListener('beforeunload', cleanup)
 })
 
 // 显示Matrix导航的条件

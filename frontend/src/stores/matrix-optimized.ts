@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, shallowRef, shallowReactive, readonly, nextTick } from 'vue'
+import { ref, computed, shallowRef, shallowReactive, readonly, nextTick, onUnmounted } from 'vue'
 import { passiveEventManager } from '@/utils/passiveEventManager'
 
 // ==================== 类型定义 ====================

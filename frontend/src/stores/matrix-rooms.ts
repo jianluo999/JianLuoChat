@@ -54,9 +54,7 @@ export const useMatrixRoomStore = defineStore('matrix-rooms', () => {
         try {
             const response = await roomAPI.createRoom({
                 name: roomData.name,
-                type: roomData.type || 'public',
-                alias: roomData.alias,
-                topic: roomData.topic
+                type: roomData.type || 'public'
             });
             return response.data;
         } catch (err: any) {
@@ -87,7 +85,7 @@ export const useMatrixRoomStore = defineStore('matrix-rooms', () => {
         loading.value = true;
         error.value = '';
         try {
-            const response = await roomAPI.leaveRoom(room);
+            const response = await roomAPI.leaveRoom(roomId);
             return response.data;
         } catch (err: any) {
             error.value = '离开房间失败';
@@ -175,15 +173,15 @@ export const useMatrixRoomStore = defineStore('matrix-rooms', () => {
     // 拒绝房间邀请
     const rejectRoom = async (roomId: string) => {
         loading.value = true;
-        error = '';
+        error.value = '';
         try {
             // 这些功能需要后端API支持
             return { success: true, message: '邀请已拒绝' };
         } catch (err: any) {
-            error = '拒绝邀请失败';
-            return { success: false, error: error };
+            error.value = '拒绝邀请失败';
+            return { success: false, error: error.value };
         } finally {
-            loading = false;
+            loading.value = false;
         }
     };
 
@@ -197,7 +195,7 @@ export const useMatrixRoomStore = defineStore('matrix-rooms', () => {
         getMatrixRooms,
         createMatrixRoom,
         joinMatrixRoom,
-        leaveRoom,
+        leaveMatrixRoom,
         getRoomInfo,
         updateMatrixRoom,
         getRoomMembers,

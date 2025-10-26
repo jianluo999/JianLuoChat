@@ -6,6 +6,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: './', // 设置为相对路径，适配Electron
   plugins: [
     vue(),
     vueDevTools(),

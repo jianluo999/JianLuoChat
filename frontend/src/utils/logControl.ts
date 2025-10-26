@@ -23,7 +23,7 @@ interface LogControlConfig {
 }
 
 // 全局配置
-let config: LogControl.log = DEFAULT_CONFIG
+let config: LogControlConfig = DEFAULT_CONFIG
 
 // 从环境变量加载配置
 export const initializeLogControl = (): void => {
@@ -65,4 +65,6 @@ export const shouldBlockErrorReporting = (error: Error | string): boolean => {
 }
 
 // 获取当前配置
-export const getLogConfig = (): LogControl.Config
+export const getLogConfig = (): LogControlConfig => {
+  return config
+}
