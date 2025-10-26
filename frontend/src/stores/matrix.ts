@@ -592,8 +592,11 @@ export const useMatrixStore = defineStore('matrix', () => {
     return await initializeMatrix()
   }
 
-  // 优化的Matrix初始化函数 - 专注于性能和稳定性
+  // 优化的Matrix初始化函数 - 专注于性能和稳定性，集成进度跟踪
   const initializeMatrix = async () => {
+    // 导入进度管理
+    const { globalLoginProgress } = await import('@/composables/useLoginProgress')
+    
     // 防止重复初始化
     if (clientInitializing.value) {
       console.log('⚠️ Matrix正在初始化中，跳过重复初始化')
@@ -609,6 +612,9 @@ export const useMatrixStore = defineStore('matrix', () => {
     try {
       const startTime = Date.now()
       console.log('🚀 开始Matrix初始化...')
+
+      // 启动进度跟踪
+      globalLoginProgress.startLoginProgress()
 
       // 1. 立即加载本地数据（异步，不阻塞后续操作）
       Promise.all([
@@ -635,6 +641,9 @@ export const useMatrixStore = defineStore('matrix', () => {
           if (loginData.userId && loginData.accessToken && loginData.homeserver) {
             console.log('✅ 找到有效的登录信息，开始恢复登录...')
 
+            // 完成身份验证步骤
+            globalLoginProgress.completeStep('auth', { userId: loginData.userId })
+
             // 恢复登录状态（异步，不等待）
             setLoginInfo(loginData).catch(err => {
               console.warn('恢复登录状态失败:', err)
@@ -647,20 +656,52 @@ export const useMatrixStore = defineStore('matrix', () => {
               loginData.homeserver
             ).catch(clientError => {
               console.warn('创建Matrix客户端失败:', clientError)
+              globalLoginProgress.markStepError('rooms', clientError.message)
               return null
             })
 
             // 4. 异步刷新房间列表
-            const roomsPromise = clientPromise.then(client => {
+            const roomsPromise = clientPromise.then(async (client) => {
               if (client) {
-                return fetchMatrixRooms().catch(roomsError => {
+                try {
+                  const rooms = await fetchMatrixRooms()
+                  globalLoginProgress.completeStep('rooms', { roomCount: rooms.length })
+                  
+                  // 开始加载消息
+                  setTimeout(async () => {
+                    try {
+                      // 为前几个房间预加载消息
+                      const topRooms = rooms.slice(0, 3)
+                      for (const room of topRooms) {
+                        await fetchMatrixMessages(room.id, 20).catch(err => {
+                          console.warn(`预加载房间 ${room.id} 消息失败:`, err)
+                        })
+                      }
+                      globalLoginProgress.completeStep('messages', { preloadedRooms: topRooms.length })
+                    } catch (error) {
+                      globalLoginProgress.markStepError('messages', error.message)
+                      globalLoginProgress.completeStep('messages') // 即使出错也继续
+                    }
+                  }, 500)
+                  
+                  return rooms
+                } catch (roomsError) {
                   console.warn('刷新房间列表失败:', roomsError)
-                })
+                  globalLoginProgress.markStepError('rooms', roomsError.message)
+                  globalLoginProgress.completeStep('rooms') // 即使出错也继续
+                  return []
+                }
               }
+              return []
             })
 
             // 等待客户端创建完成（但不等待房间刷新）
             await clientPromise
+
+            // 标记准备就绪
+            setTimeout(() => {
+              globalLoginProgress.completeStep('ready')
+            }, 1000)
 
             const duration = Date.now() - startTime
             console.log(`🎉 Matrix初始化完成（${duration}ms），客户端创建成功`)
@@ -670,17 +711,23 @@ export const useMatrixStore = defineStore('matrix', () => {
             console.warn('⚠️ 登录信息不完整，清理无效数据')
             localStorage.removeItem('matrix-login-info')
             localStorage.removeItem('matrix_login_info')
+            globalLoginProgress.cancelLoginProgress()
           }
         } catch (parseError) {
           console.warn('解析登录信息失败:', parseError)
           localStorage.removeItem('matrix-login-info')
           localStorage.removeItem('matrix_login_info')
+          globalLoginProgress.cancelLoginProgress()
         }
       } else if (accessToken) {
         console.warn('⚠️ 清理不一致的存储状态')
         localStorage.removeItem('matrix_access_token')
         localStorage.removeItem('matrix-login-info')
         localStorage.removeItem('matrix_login_info')
+        globalLoginProgress.cancelLoginProgress()
+      } else {
+        // 没有登录信息，取消进度条
+        globalLoginProgress.cancelLoginProgress()
       }
 
       console.log('💡 没有找到有效登录信息')
@@ -688,6 +735,12 @@ export const useMatrixStore = defineStore('matrix', () => {
 
     } catch (error) {
       console.error('Matrix初始化失败:', error)
+      
+      // 导入进度管理并标记错误
+      const { globalLoginProgress } = await import('@/composables/useLoginProgress')
+      globalLoginProgress.markStepError('auth', error.message)
+      globalLoginProgress.cancelLoginProgress()
+      
       await cleanupMatrixClient()
       return false
     }
@@ -1385,17 +1438,26 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
-  // Matrix用户认证
+  // Matrix用户认证 - 集成进度跟踪
   const matrixLogin = async (username: string, password: string) => {
+    // 导入进度管理
+    const { globalLoginProgress } = await import('@/composables/useLoginProgress')
+    
     try {
       loading.value = true
       error.value = null
+
+      // 启动登录进度
+      globalLoginProgress.startLoginProgress()
 
       // 如果是测试用户，创建真实的Matrix客户端连接
       if (username === 'testuser' && password === 'testpass') {
         const userId = `@testuser:matrix.org`
         const accessToken = 'test_matrix_token'
         const homeserver = 'matrix.org'
+
+        // 完成身份验证步骤
+        globalLoginProgress.completeStep('auth', { userId, isTestUser: true })
 
         connection.value.userId = userId
         connection.value.accessToken = accessToken
@@ -1413,8 +1475,11 @@ export const useMatrixStore = defineStore('matrix', () => {
         try {
           await createMatrixClient(userId, accessToken, homeserver)
           console.log('Matrix client created for test user')
+          globalLoginProgress.completeStep('rooms', { isTestUser: true })
         } catch (clientError) {
           console.warn('Failed to create Matrix client for test user:', clientError)
+          globalLoginProgress.markStepError('rooms', clientError.message)
+          
           // 对于测试用户，即使客户端创建失败也继续，但设置一个模拟客户端
           matrixClient.value = {
             publicRooms: async (options: any) => {
@@ -1452,10 +1517,22 @@ export const useMatrixStore = defineStore('matrix', () => {
               return mxcUrl // 简单返回原URL
             }
           }
+          globalLoginProgress.completeStep('rooms', { isTestUser: true, isMock: true })
         }
 
         // 模拟加载世界频道
-        await loadTestWorldChannel()
+        try {
+          await loadTestWorldChannel()
+          globalLoginProgress.completeStep('messages', { isTestUser: true })
+        } catch (error) {
+          globalLoginProgress.markStepError('messages', error.message)
+          globalLoginProgress.completeStep('messages') // 继续完成
+        }
+
+        // 标记准备就绪
+        setTimeout(() => {
+          globalLoginProgress.completeStep('ready')
+        }, 500)
 
         return { success: true, user: currentUser.value }
       }
@@ -1464,6 +1541,12 @@ export const useMatrixStore = defineStore('matrix', () => {
       const response = await matrixAPI.login({ username, password })
 
       if (response.data.success) {
+        // 完成身份验证步骤
+        globalLoginProgress.completeStep('auth', { 
+          userId: `@${username}:jianluochat.com`,
+          accessToken: response.data.accessToken 
+        })
+
         connection.value.userId = `@${username}:jianluochat.com`
         connection.value.accessToken = response.data.accessToken || 'matrix_token_placeholder'
         connection.value.connected = true
@@ -1476,7 +1559,25 @@ export const useMatrixStore = defineStore('matrix', () => {
         }
 
         // 开始同步
-        await startMatrixSync(username)
+        try {
+          await startMatrixSync(username)
+          globalLoginProgress.completeStep('rooms', { syncStarted: true })
+          
+          // 模拟消息加载完成
+          setTimeout(() => {
+            globalLoginProgress.completeStep('messages')
+          }, 1000)
+          
+          // 标记准备就绪
+          setTimeout(() => {
+            globalLoginProgress.completeStep('ready')
+          }, 1500)
+        } catch (syncError) {
+          globalLoginProgress.markStepError('rooms', syncError.message)
+          globalLoginProgress.completeStep('rooms') // 继续完成
+          globalLoginProgress.completeStep('messages')
+          globalLoginProgress.completeStep('ready')
+        }
 
         return { success: true, user: currentUser.value }
       } else {
@@ -1486,6 +1587,11 @@ export const useMatrixStore = defineStore('matrix', () => {
       error.value = err.response?.data?.error || 'Matrix login failed'
       connection.value.connected = false
       console.error('Matrix login error:', err)
+      
+      // 标记登录失败并取消进度
+      globalLoginProgress.markStepError('auth', error.value)
+      globalLoginProgress.cancelLoginProgress()
+      
       return { success: false, error: error.value }
     } finally {
       loading.value = false

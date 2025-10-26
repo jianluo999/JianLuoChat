@@ -26,9 +26,9 @@
   "author": "Your Name",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^33.0.0",
-    "electron-builder": "^24.14.5",
-    "electron-updater": "^5.1.2",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.6.4",
+    "electron-updater": "^6.1.4",
     "rimraf": "^5.0.1"
   },
   "dependencies": {},
@@ -37,74 +37,52 @@
     "productName": "Matrix聊天客户端",
     "copyright": "Copyright © 2024 Matrix客户端团队",
     "directories": {
-      "build": "build",
       "output": "dist"
     },
     "files": [
-      "main.js",
-      "preload.js",
-      "assets/**/*",
-      "../frontend/dist/**/*",
+      "**/*",
       "!node_modules",
       "!npm-debug.log",
       "!test",
-      "!tests"
+      "!tests",
+      "!dist",
+      "!build",
+      {
+        "from": "../frontend/dist",
+        "to": "frontend/dist",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../backend/target",
+        "to": "backend/target",
+        "filter": ["*.jar"]
+      },
+      {
+        "from": "jre-runtime",
+        "to": "jre-runtime",
+        "filter": ["**/*"]
+      }
     ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
-      ],
-      "arch": [
-        "x64"
-      ],
-      "icon": "assets/icon.ico",
-      "publish": [
         {
-          "provider": "generic",
-          "url": "https://your-update-server.com/update"
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
         }
       ],
-      "nsis": {
-        "oneClick": false,
-        "allowToChangeInstallationDirectory": true,
-        "deleteAppDataOnUninstall": false,
-        "perMachine": false,
-        "createDesktopShortcut": true,
-        "createStartMenuShortcut": true,
-        "installerIcon": "assets/icon.ico",
-        "uninstallerIcon": "assets/icon.ico",
-        "installerHeaderIcon": "assets/icon.ico",
-        "license": "LICENSE.txt",
-        "menu": true,
-        "guid": "{YOUR-UNIQUE-GUID-HERE}"
-      }
+      "sign": null
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "deleteAppDataOnUninstall": false,
-      "perMachine": false,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "installerIcon": "assets/icon.ico",
-      "uninstallerIcon": "assets/icon.ico",
-      "installerHeaderIcon": "assets/icon.ico",
-      "license": "LICENSE.txt",
-      "menu": true,
-      "guid": "{YOUR-UNIQUE-GUID-HERE}"
+      "createStartMenuShortcut": true
     },
-    "publish": [
-      {
-        "provider": "generic",
-        "url": "https://your-update-server.com/update"
-      }
-    ],
-    "asar": true,
-    "compression": "maximum",
-    "asarUnpack": [
-      "**/*.wasm",
-      "**/*.node"
-    ]
+    "asar": false,
+    "compression": "store"
   }
 }

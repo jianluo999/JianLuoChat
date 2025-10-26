@@ -1,5 +1,14 @@
 <template>
   <div id="app" class="app-container">
+    <!-- 登录进度条 -->
+    <LoginProgressBar 
+      ref="progressBarRef"
+      :visible="showLoginProgress"
+      :show-overlay="false"
+      @complete="onLoginProgressComplete"
+      @step="onLoginProgressStep"
+    />
+
     <!-- 移动端布局 -->
     <MobileLayout v-if="isMobile" />
     
@@ -21,17 +30,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, onBeforeMount } from 'vue'
+import { computed, onMounted, ref, onBeforeMount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useMatrixStore } from '@/stores/matrix'
+import { globalLoginProgress } from '@/composables/useLoginProgress'
 import MatrixNavigation from '@/components/MatrixNavigation.vue'
 import MobileLayout from '@/components/MobileLayout.vue'
+import LoginProgressBar from '@/components/LoginProgressBar.vue'
 import axios from 'axios'
 
 const route = useRoute()
 const authStore = useAuthStore()
 const matrixStore = useMatrixStore()
+
+// 进度条相关
+const progressBarRef = ref<any>(null)
+const showLoginProgress = ref(false)
 
 // 响应式检测
 const isMobile = ref(false)
@@ -82,12 +97,36 @@ const handleTestConnection = async () => {
   }
 }
 
+// 进度条事件处理
+const onLoginProgressComplete = () => {
+  console.log('🎉 登录进度完成')
+  showLoginProgress.value = false
+}
+
+const onLoginProgressStep = (step: number, message: string) => {
+  console.log(`📊 进度步骤 ${step}: ${message}`)
+}
+
+// 监听进度状态变化
+watch(() => globalLoginProgress.progressState.isActive, (isActive) => {
+  showLoginProgress.value = isActive
+  if (isActive && progressBarRef.value) {
+    // 设置进度条引用
+    globalLoginProgress.setProgressBarRef(progressBarRef.value)
+  }
+})
+
 onMounted(() => {
   // 设置 axios 基础配置
   axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
   // 初始化认证状态
   authStore.initializeAuth()
+
+  // 设置进度条引用
+  if (progressBarRef.value) {
+    globalLoginProgress.setProgressBarRef(progressBarRef.value)
+  }
 
   // 如果在聊天相关路由，初始化Matrix连接
   if (route.path === '/chat' || route.path === '/wechat-layout') {
