@@ -554,6 +554,21 @@ npm run dev
 
 ### 📋 更新日志
 
+## [2025-10-26] 版本更新
+
+### 新增功能
+
+#### Electron桌面客户端
+- ✨ **新增 Electron 主进程入口文件** (`electron/index.html`)
+  - 创建了桌面客户端的主HTML界面
+  - 集成了Electron框架的基础配置
+  - 支持跨平台桌面应用运行
+
+- 📦 **Electron依赖管理**
+  - 更新了 `electron/package-lock.json`
+  - 确保所有Electron相关依赖的版本一致性
+  - 优化了依赖解析和安装流程
+
 #### v1.3.0 (2025-10-25) - Matrix聊天功能增强与性能优化
 **🚀 重大更新**
 - **Matrix聊天功能增强**：
