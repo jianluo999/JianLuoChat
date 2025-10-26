@@ -1768,10 +1768,44 @@ export const useMatrixStore = defineStore('matrix', () => {
     return fileTransferRoom
   }
 
-  // 改进的Matrix房间获取功能
+  // 改进的Matrix房间获取功能（集成智能缓存）
   const fetchMatrixRooms = async () => {
+    // 导入缓存策略
+    const { getStableRoomList } = await import('@/utils/roomListStabilizer')
+    
     try {
       loading.value = true
+      
+      // 使用智能缓存策略获取房间
+      const stableRooms = await getStableRoomList('matrix.ts', async () => {
+        return await executeMatrixRoomsFetch()
+      })
+      
+      if (stableRooms && stableRooms.length > 0) {
+        console.log(`✅ [智能缓存] 获取到 ${stableRooms.length} 个房间`)
+        
+        // 强制更新房间列表
+        rooms.value.splice(0, rooms.value.length, ...stableRooms)
+        saveRoomsToStorage()
+        
+        return stableRooms
+      }
+      
+      return rooms.value
+      
+    } catch (err: any) {
+      error.value = 'Failed to fetch Matrix rooms'
+      console.error('Error fetching Matrix rooms:', err)
+      return []
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 实际的房间获取执行函数
+  const executeMatrixRoomsFetch = async () => {
+    try {
+      console.log(`🔄 [执行获取] 开始获取Matrix房间数据`)
       console.log('🔄 开始获取Matrix房间列表...')
 
       // 首先进行连接诊断
@@ -2000,13 +2034,10 @@ export const useMatrixStore = defineStore('matrix', () => {
         }
       }
 
-      return rooms.value
+      return finalRooms
     } catch (err: any) {
-      error.value = 'Failed to fetch Matrix rooms'
-      console.error('Error fetching Matrix rooms:', err)
-      return []
-    } finally {
-      loading.value = false
+      console.error('Error in executeMatrixRoomsFetch:', err)
+      throw err
     }
   }
 
@@ -2053,15 +2084,46 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
-  // Matrix消息管理 - 优化版本
-  const fetchMatrixMessages = async (roomId: string, limit = 50, autoLoadMore = true) => {
+  // Matrix消息管理 - 优化版本（集成智能缓存）
+  const fetchMatrixMessages = async (roomId: string, limit = 30, autoLoadMore = false) => {
+    // 导入缓存策略
+    const { getStableMessages } = await import('@/utils/roomListStabilizer')
+    
     try {
       if (!matrixClient.value) {
         console.error('Matrix客户端未初始化')
         return []
       }
 
-      console.log(`🔄 开始加载房间消息: ${roomId}`)
+      console.log(`🔄 [智能消息] 开始加载房间消息: ${roomId}`)
+
+      // 使用智能缓存策略获取消息
+      const stableMessages = await getStableMessages(roomId, 'matrix.ts', async () => {
+        return await executeMatrixMessagesFetch(roomId, limit, autoLoadMore)
+      })
+      
+      if (stableMessages && stableMessages.length > 0) {
+        console.log(`✅ [智能消息缓存] 房间 ${roomId} 获取到 ${stableMessages.length} 条消息`)
+        
+        // 更新本地消息存储
+        messages.value.set(roomId, stableMessages)
+        saveMessagesToStorage()
+        
+        return stableMessages
+      }
+      
+      return messages.value.get(roomId) || []
+      
+    } catch (error) {
+      console.error(`❌ [智能消息] 房间 ${roomId} 消息获取失败:`, error)
+      return messages.value.get(roomId) || []
+    }
+  }
+
+  // 实际的消息获取执行函数
+  const executeMatrixMessagesFetch = async (roomId: string, limit = 30, autoLoadMore = false) => {
+    try {
+      console.log(`🔄 [执行消息获取] 房间: ${roomId}, 限制: ${limit}`)
 
       let roomMessages: MatrixMessage[] = []
 
@@ -2324,11 +2386,8 @@ export const useMatrixStore = defineStore('matrix', () => {
 
       return roomMessages
     } catch (err: any) {
-      error.value = 'Failed to fetch Matrix messages'
-      console.error('Error fetching Matrix messages:', err)
-      // 如果加载失败，至少设置一个空数组
-      messages.value.set(roomId, [])
-      return []
+      console.error('Error in executeMatrixMessagesFetch:', err)
+      throw err
     }
   }
 

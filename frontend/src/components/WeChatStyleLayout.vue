@@ -372,6 +372,8 @@ import StartDirectMessageDialog from './StartDirectMessageDialog.vue'
 import CreateGroupChatDialog from './CreateGroupChatDialog.vue'
 import { passiveEventManager } from '@/utils/passiveEventManager'
 import { useErrorHandler } from '@/utils/errorSetup'
+// 导入缓存工具（开发环境）
+import { cacheTestTool, showCacheStats } from '@/utils/cacheTestTool'
 
 const matrixStore = useMatrixStore()
 const router = useRouter()
@@ -1041,6 +1043,17 @@ const joinPublicRoom = async (roomId: string) => {
 onMounted(async () => {
   console.log('🚀 WeChatStyleLayout 组件挂载开始')
 
+  // 初始化缓存监控（开发环境）
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔍 [开发模式] 启动缓存监控')
+    cacheTestTool.startMonitoring(10000) // 每10秒监控一次
+    
+    // 5秒后显示初始统计
+    setTimeout(() => {
+      showCacheStats()
+    }, 5000)
+  }
+
   // 设置性能优化的滚动监听器
   setupScrollOptimization()
 
@@ -1184,6 +1197,12 @@ const setupScrollOptimization = () => {
 // 组件卸载时清理
 onUnmounted(() => {
   console.log('🧹 清理WeChatStyleLayout组件...')
+  
+  // 停止缓存监控（开发环境）
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🛑 [开发模式] 停止缓存监控')
+    cacheTestTool.stopMonitoring()
+  }
   
   // 清理滚动监听器
   scrollCleanupFunctions.forEach(cleanup => {

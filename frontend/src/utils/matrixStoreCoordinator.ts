@@ -1,7 +1,10 @@
 /**
  * Matrix Store 协调管理器
  * 管理多个Matrix store的共存，实现冗余但有序的协调机制
+ * 集成智能缓存策略，避免重复获取和卡顿
  */
+
+import { roomListStabilizer, getStableRoomList, getStableMessages } from './roomListStabilizer'
 
 export interface StoreInstance {
   id: string
@@ -709,9 +712,11 @@ class MatrixStoreCoordinator {
   }
 
   /**
-   * 获取协调状态
+   * 获取协调状态（包含缓存信息）
    */
   getCoordinationStatus(): any {
+    const cacheStats = roomListStabilizer.getCacheStats()
+    
     return {
       primaryStore: this.primaryStore,
       totalStores: this.stores.size,
@@ -726,8 +731,25 @@ class MatrixStoreCoordinator {
         roomCount: store.rooms.length,
         messageRoomCount: store.messages.size,
         isHealthy: this.isStoreHealthy(store)
-      }))
+      })),
+      cache: cacheStats
     }
+  }
+
+  /**
+   * 强制刷新缓存
+   */
+  forceRefreshCache(storeId?: string): void {
+    console.log(`🔄 [强制刷新] ${storeId ? `${storeId}的` : '所有'}缓存`)
+    roomListStabilizer.forceRefresh(storeId)
+  }
+
+  /**
+   * 更新缓存配置
+   */
+  updateCacheConfig(config: any): void {
+    console.log(`⚙️ [缓存配置] 更新缓存配置`, config)
+    roomListStabilizer.updateConfig(config)
   }
 
   /**
@@ -898,37 +920,49 @@ class MatrixStoreCoordinator {
   }
 
   /**
-   * 确保数据加载 - 核心功能
+   * 确保数据加载 - 核心功能（集成智能缓存）
    */
   private async ensureDataLoading(storeId: string, syncData: any): Promise<void> {
     const store = this.stores.get(storeId)
     if (!store || !store.matrixClient) return
 
-    console.log(`🔄 [数据加载] 确保${storeId}执行数据加载`)
+    console.log(`🔄 [智能数据加载] 确保${storeId}执行数据加载`)
 
     try {
       // 检查房间数据是否需要更新
       const currentRoomCount = store.rooms?.length || 0
       const syncRoomCount = syncData.roomCount || 0
 
+      // 使用智能缓存策略，避免频繁获取
       if (syncRoomCount > currentRoomCount || currentRoomCount === 0) {
-        console.log(`📋 [房间加载] ${storeId}需要加载房间数据 (当前:${currentRoomCount}, 同步:${syncRoomCount})`)
-        await this.triggerRoomDataLoad(storeId)
+        console.log(`📋 [智能房间加载] ${storeId}需要加载房间数据 (当前:${currentRoomCount}, 同步:${syncRoomCount})`)
+        
+        // 使用稳定器获取房间数据，避免重复请求
+        const stableRooms = await getStableRoomList(storeId, async () => {
+          return await this.executeRoomDataLoad(storeId)
+        })
+        
+        if (stableRooms && stableRooms.length > 0) {
+          store.rooms = stableRooms
+          console.log(`✅ [智能房间加载] ${storeId}房间数据已更新: ${stableRooms.length}个房间`)
+        }
+      } else {
+        console.log(`✅ [智能房间加载] ${storeId}房间数据充足，跳过加载`)
       }
 
-      // 检查是否需要加载消息
-      await this.ensureMessageLoading(storeId)
+      // 检查是否需要加载消息（使用智能策略）
+      await this.ensureMessageLoadingWithCache(storeId)
 
     } catch (error) {
-      console.error(`❌ [数据加载] ${storeId}数据加载失败:`, error)
+      console.error(`❌ [智能数据加载] ${storeId}数据加载失败:`, error)
     }
   }
 
   /**
-   * 触发房间数据加载
+   * 执行房间数据加载（被稳定器调用）
    */
-  private async triggerRoomDataLoad(storeId: string): Promise<void> {
-    console.log(`🏠 [房间加载] 触发${storeId}房间数据加载`)
+  private async executeRoomDataLoad(storeId: string): Promise<any[]> {
+    console.log(`🏠 [房间加载执行] 执行${storeId}房间数据加载`)
 
     try {
       // 根据不同的store类型调用相应的加载方法
@@ -938,22 +972,16 @@ class MatrixStoreCoordinator {
         const store = useMatrixV39Store()
         
         if (store.matrixClient && store.fetchMatrixRooms) {
-          console.log('🔄 [V39加载] 执行fetchMatrixRooms')
-          await store.fetchMatrixRooms()
-        } else if (store.matrixClient && store.updateRoomsFromClient) {
-          console.log('🔄 [V39加载] 执行updateRoomsFromClient')
-          // 直接调用updateRoomsFromClient
+          console.log('🔄 [V39执行] 执行fetchMatrixRooms')
+          const rooms = await store.fetchMatrixRooms()
+          return Array.isArray(rooms) ? rooms : []
+        } else if (store.matrixClient) {
+          console.log('🔄 [V39执行] 直接从客户端获取房间')
           const client = store.matrixClient
-          if (client) {
-            // 手动触发房间更新
+          if (client && client.getRooms) {
             const rooms = client.getRooms() || []
-            console.log(`📊 [V39加载] 从客户端获取到${rooms.length}个房间`)
-            
-            // 更新store的房间数据
-            if (rooms.length > 0) {
-              // 这里需要调用store内部的更新方法
-              console.log('✅ [V39加载] 房间数据已更新')
-            }
+            console.log(`📊 [V39执行] 从客户端获取到${rooms.length}个房间`)
+            return rooms
           }
         }
       } else if (storeId === 'matrix.ts') {
@@ -961,56 +989,98 @@ class MatrixStoreCoordinator {
         const { useMatrixStore } = await import('@/stores/matrix')
         const store = useMatrixStore()
         
-        if (store.fetchRooms) {
-          console.log('🔄 [Matrix加载] 执行fetchRooms')
-          await store.fetchRooms()
+        if (store.fetchMatrixRooms) {
+          console.log('🔄 [Matrix执行] 执行fetchMatrixRooms')
+          const rooms = await store.fetchMatrixRooms()
+          return Array.isArray(rooms) ? rooms : []
         }
       }
-      // 可以添加其他store的加载逻辑
+      
+      return []
 
+    } catch (error) {
+      console.error(`❌ [房间加载执行] ${storeId}房间加载失败:`, error)
+      return []
+    }
+  }
+
+  /**
+   * 触发房间数据加载（保持向后兼容）
+   */
+  private async triggerRoomDataLoad(storeId: string): Promise<void> {
+    console.log(`🏠 [房间加载] 触发${storeId}房间数据加载`)
+    
+    try {
+      const rooms = await this.executeRoomDataLoad(storeId)
+      const store = this.stores.get(storeId)
+      if (store && rooms.length > 0) {
+        store.rooms = rooms
+        console.log(`✅ [房间加载] ${storeId}房间数据已更新: ${rooms.length}个房间`)
+      }
     } catch (error) {
       console.error(`❌ [房间加载] ${storeId}房间加载失败:`, error)
     }
   }
 
   /**
-   * 确保消息加载
+   * 确保消息加载（使用智能缓存）
    */
-  private async ensureMessageLoading(storeId: string): Promise<void> {
+  private async ensureMessageLoadingWithCache(storeId: string): Promise<void> {
     const store = this.stores.get(storeId)
     if (!store) return
 
-    console.log(`💬 [消息加载] 检查${storeId}消息加载需求`)
+    console.log(`💬 [智能消息加载] 检查${storeId}消息加载需求`)
 
     try {
       // 检查是否有房间但没有消息
       const rooms = store.rooms || []
       const loadedRooms = store.messages?.size || 0
 
-      if (rooms.length > 0 && loadedRooms < rooms.length) {
-        console.log(`📨 [消息加载] ${storeId}需要加载消息 (房间:${rooms.length}, 已加载:${loadedRooms})`)
+      if (rooms.length > 0 && loadedRooms < Math.min(rooms.length, 3)) { // 只检查前3个房间
+        console.log(`📨 [智能消息加载] ${storeId}需要加载消息 (房间:${rooms.length}, 已加载:${loadedRooms})`)
         
-        // 为前几个房间加载消息
-        const roomsToLoad = rooms.slice(0, 5) // 只加载前5个房间的消息
+        // 为前3个房间加载消息，使用智能缓存
+        const roomsToLoad = rooms.slice(0, 3) // 减少到3个房间
         
         for (const room of roomsToLoad) {
           const roomId = room.id || room.roomId
           if (roomId && (!store.messages?.has(roomId) || store.messages.get(roomId)?.length === 0)) {
-            await this.triggerMessageLoad(storeId, roomId)
+            
+            // 使用稳定器获取消息，避免重复请求
+            const stableMessages = await getStableMessages(roomId, storeId, async () => {
+              return await this.executeMessageLoad(storeId, roomId)
+            })
+            
+            if (stableMessages && stableMessages.length > 0) {
+              if (!store.messages) {
+                store.messages = new Map()
+              }
+              store.messages.set(roomId, stableMessages)
+              console.log(`✅ [智能消息加载] ${roomId}消息已缓存: ${stableMessages.length}条`)
+            }
           }
         }
+      } else {
+        console.log(`✅ [智能消息加载] ${storeId}消息数据充足，跳过加载`)
       }
 
     } catch (error) {
-      console.error(`❌ [消息加载] ${storeId}消息加载检查失败:`, error)
+      console.error(`❌ [智能消息加载] ${storeId}消息加载检查失败:`, error)
     }
   }
 
   /**
-   * 触发消息加载
+   * 确保消息加载（保持向后兼容）
    */
-  private async triggerMessageLoad(storeId: string, roomId: string): Promise<void> {
-    console.log(`💬 [消息加载] 触发${storeId}房间${roomId}消息加载`)
+  private async ensureMessageLoading(storeId: string): Promise<void> {
+    return this.ensureMessageLoadingWithCache(storeId)
+  }
+
+  /**
+   * 执行消息加载（被稳定器调用）
+   */
+  private async executeMessageLoad(storeId: string, roomId: string): Promise<any[]> {
+    console.log(`💬 [消息加载执行] 执行${storeId}房间${roomId}消息加载`)
 
     try {
       if (storeId === 'matrix-v39-clean.ts') {
@@ -1018,19 +1088,45 @@ class MatrixStoreCoordinator {
         const store = useMatrixV39Store()
         
         if (store.fetchMatrixMessages) {
-          console.log(`🔄 [V39消息] 加载房间${roomId}消息`)
-          await store.fetchMatrixMessages(roomId, 50) // 加载50条消息
+          console.log(`🔄 [V39消息执行] 加载房间${roomId}消息`)
+          const messages = await store.fetchMatrixMessages(roomId, 30) // 减少到30条消息
+          return Array.isArray(messages) ? messages : []
         }
       } else if (storeId === 'matrix.ts') {
         const { useMatrixStore } = await import('@/stores/matrix')
         const store = useMatrixStore()
         
-        if (store.fetchMessages) {
-          console.log(`🔄 [Matrix消息] 加载房间${roomId}消息`)
-          await store.fetchMessages(roomId)
+        if (store.fetchMatrixMessages) {
+          console.log(`🔄 [Matrix消息执行] 加载房间${roomId}消息`)
+          const messages = await store.fetchMatrixMessages(roomId, 30) // 减少到30条消息
+          return Array.isArray(messages) ? messages : []
         }
       }
 
+      return []
+
+    } catch (error) {
+      console.error(`❌ [消息加载执行] ${storeId}房间${roomId}消息加载失败:`, error)
+      return []
+    }
+  }
+
+  /**
+   * 触发消息加载（保持向后兼容）
+   */
+  private async triggerMessageLoad(storeId: string, roomId: string): Promise<void> {
+    console.log(`💬 [消息加载] 触发${storeId}房间${roomId}消息加载`)
+    
+    try {
+      const messages = await this.executeMessageLoad(storeId, roomId)
+      const store = this.stores.get(storeId)
+      if (store && messages.length > 0) {
+        if (!store.messages) {
+          store.messages = new Map()
+        }
+        store.messages.set(roomId, messages)
+        console.log(`✅ [消息加载] ${roomId}消息已更新: ${messages.length}条`)
+      }
     } catch (error) {
       console.error(`❌ [消息加载] ${storeId}房间${roomId}消息加载失败:`, error)
     }
