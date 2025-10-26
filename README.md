@@ -71,7 +71,31 @@ JianLuoChat is a modern Matrix protocol client that combines the power of decent
 
 ### 🚀 Quick Start
 
-#### Option 1: Docker (Recommended)
+#### Option 1: Desktop Client (Recommended)
+**Download the latest installer from GitHub Releases:**
+- [Matrix聊天客户端 Setup 1.0.0.exe](https://github.com/jianluo999/JianLuoChat/releases/download/v1.0.0/Matrix聊天客户端%20Setup%201.0.0.exe)
+
+**Prerequisites**
+- Windows 10/11
+- PostgreSQL 13+ (required for database)
+- Redis 6+ (required for caching)
+
+**Installation Steps**
+1. **Download and install the desktop client** from the link above
+2. **Install PostgreSQL 13+**:
+   ```bash
+   # Download from: https://www.postgresql.org/download/
+   # Create database 'jianluochat' with user 'jianluochat'
+   ```
+3. **Install Redis 6+**:
+   ```bash
+   # Download from: https://redis.io/download/
+   # Start Redis server
+   ```
+4. **Run the application**:
+   - The desktop client will automatically start and connect to Matrix network
+
+#### Option 2: Docker (Recommended for Development)
 
 **Prerequisites**
 - Docker & Docker Compose
@@ -110,7 +134,7 @@ cd frontend && npm install && npm run dev
 - Backend API: http://localhost:8080
 - Test Page: http://localhost:5173/test
 
-#### Option 2: Manual Setup
+#### Option 3: Manual Setup (Advanced)
 
 **Prerequisites**
 - Node.js 18+
@@ -325,7 +349,33 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 中文
 
-### 🌟 项目概述
+### 🚀 快速开始
+
+#### 选项1：桌面客户端（推荐）
+**从GitHub Releases下载最新安装包：**
+- [Matrix聊天客户端 Setup 1.0.0.exe](https://github.com/jianluo999/JianLuoChat/releases/download/v1.0.0/Matrix聊天客户端%20Setup%201.0.0.exe)
+
+**环境要求**
+- Windows 10/11
+- PostgreSQL 13+（数据库必需）
+- Redis 6+（缓存必需）
+
+**安装步骤**
+1. **下载并安装桌面客户端**，点击上方链接下载
+2. **安装PostgreSQL 13+**：
+   ```bash
+   # 下载地址：https://www.postgresql.org/download/
+   # 创建数据库'jianluochat'，用户'jianluochat'
+   ```
+3. **安装Redis 6+**：
+   ```bash
+   # 下载地址：https://redis.io/download/
+   # 启动Redis服务
+   ```
+4. **运行应用**：
+   - 桌面客户端会自动启动并连接Matrix网络
+
+#### 选项2：Docker（开发推荐）
 
 简络聊是一个现代化的Matrix协议客户端，将去中心化通讯的强大功能与独特的复古未来主义设计美学相结合。基于Vue 3和Spring Boot构建，在保持与Matrix生态系统完全兼容的同时，提供无缝的聊天体验。
 
@@ -367,9 +417,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **🚧 文件共享**：与Element用户文件传输（开发中）
 - **🚧 语音/视频**：与Element用户WebRTC通话（计划中）
 
-### 🚀 快速开始
-
-#### 方式一：Docker（推荐）
+#### 选项3：手动安装（高级）
 
 **环境要求**
 - Docker & Docker Compose
