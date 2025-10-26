@@ -1091,7 +1091,120 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
     }
   }
 
-  const updateRoomsFromClient = (client: any) => {
+  // 分批处理房间，避免长时间阻塞主线程
+  const processRoomsInBatches = async (rooms: any[], convertedRooms: MatrixRoom[], convertedSpaces: MatrixRoom[], convertedDMs: MatrixRoom[], client: any) => {
+    const batchSize = 8 // 每批处理8个房间
+    
+    for (let i = 0; i < rooms.length; i += batchSize) {
+      const batch = rooms.slice(i, i + batchSize)
+      
+      batch.forEach((room: any) => {
+        try {
+          const joinRule = room.getJoinRule()
+          const isSpace = room.isSpaceRoom?.() || false
+          const isDirect = client.isRoomDirect?.(room.roomId) || false
+          const powerLevelsEvent = room.currentState?.getStateEvents('m.room.power_levels', '')
+          const powerLevels = powerLevelsEvent?.getContent() || {}
+
+          const matrixRoom: MatrixRoom = {
+            id: room.roomId,
+            name: room.name || room.roomId,
+            alias: room.getCanonicalAlias(),
+            topic: room.currentState?.getStateEvents('m.room.topic', '')?.getContent()?.topic || '',
+            type: isSpace ? 'space' : isDirect ? 'dm' : (joinRule === 'public' ? 'public' : 'private'),
+            isPublic: joinRule === 'public',
+            isDirect,
+            isSpace,
+            memberCount: room.currentState?.getJoinedMemberCount() || 0,
+            joinedMemberCount: room.getJoinedMemberCount() || 0,
+            invitedMemberCount: room.getInvitedMemberCount() || 0,
+            members: [], // 先设为空，异步加载
+            unreadCount: room.getUnreadNotificationCount() || 0,
+            notificationCount: room.getUnreadNotificationCount() || 0,
+            highlightCount: room.getUnreadNotificationCount('highlight') || 0,
+            encrypted: room.hasEncryptionStateEvent(),
+            encryptionAlgorithm: room.hasEncryptionStateEvent() ? 'm.megolm.v1.aes-sha2' : undefined,
+            avatarUrl: room.getAvatarUrl?.(client.baseUrl, 96, 96, 'scale'),
+            canonicalAlias: room.getCanonicalAlias(),
+            altAliases: room.getAltAliases() || [],
+            powerLevels: {
+              users: powerLevels.users || {},
+              usersDefault: powerLevels.users_default || 0,
+              events: powerLevels.events || {},
+              eventsDefault: powerLevels.events_default || 0,
+              stateDefault: powerLevels.state_default || 50,
+              ban: powerLevels.ban || 50,
+              kick: powerLevels.kick || 50,
+              redact: powerLevels.redact || 50,
+              invite: powerLevels.invite || 50,
+              notifications: {
+                room: powerLevels.notifications?.room || 50
+              }
+            },
+            joinRule: joinRule || 'invite',
+            historyVisibility: room.getHistoryVisibility() || 'shared',
+            guestAccess: room.getGuestAccess() || 'can_join',
+            tags: room.tags || {},
+            accountData: {},
+            summary: room.summary ? {
+              heroes: room.summary.heroes || [],
+              joinedMemberCount: room.summary.joinedMemberCount || 0,
+              invitedMemberCount: room.summary.invitedMemberCount || 0
+            } : undefined,
+            typing: [],
+            receipts: {},
+            presence: {},
+            childRooms: [],
+            parentSpaces: [],
+            updatedAt: Date.now(),
+            createdAt: (() => {
+              try {
+                return room.getCreatedAt?.() || Date.now()
+              } catch (e) {
+                return Date.now()
+              }
+            })()
+          }
+
+          // 异步加载房间成员（不阻塞主流程）
+          setTimeout(() => {
+            try {
+              const members = room.getJoinedMembers()
+              matrixRoom.members = members.map((member: any) => ({
+                userId: member.userId,
+                displayName: member.name,
+                avatarUrl: member.getAvatarUrl?.(client.baseUrl, 32, 32, 'scale'),
+                membership: member.membership,
+                powerLevel: powerLevels.users?.[member.userId] || powerLevels.users_default || 0,
+                presence: presence.get(member.userId)?.presence
+              }))
+            } catch (memberError) {
+              console.warn(`加载房间 ${room.roomId} 成员失败:`, memberError)
+            }
+          }, 50)
+
+          // 分类房间
+          if (isSpace) {
+            convertedSpaces.push(matrixRoom)
+          } else if (isDirect) {
+            convertedDMs.push(matrixRoom)
+          } else {
+            convertedRooms.push(matrixRoom)
+          }
+
+        } catch (roomError) {
+          console.warn(`处理房间 ${room.roomId} 失败:`, roomError)
+        }
+      })
+      
+      // 每批处理完后让出主线程，防止阻塞UI
+      if (i + batchSize < rooms.length) {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      }
+    }
+  }
+
+  const updateRoomsFromClient = async (client: any) => {
     try {
       const startTime = performance.now()
       console.log('🔄 更新房间列表...')
@@ -1101,7 +1214,8 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       const convertedSpaces: MatrixRoom[] = []
       const convertedDMs: MatrixRoom[] = []
 
-      clientRooms.forEach((room: any) => {
+      // 分批处理房间，避免长时间阻塞主线程
+      await processRoomsInBatches(clientRooms, convertedRooms, convertedSpaces, convertedDMs, client)
         try {
           const joinRule = room.getJoinRule()
           const isSpace = room.isSpaceRoom?.() || false
