@@ -1036,19 +1036,19 @@ class MatrixStoreCoordinator {
       const rooms = store.rooms || []
       const loadedRooms = store.messages?.size || 0
 
-      if (rooms.length > 0 && loadedRooms < Math.min(rooms.length, 3)) { // 只检查前3个房间
+      if (rooms.length > 0 && loadedRooms < Math.min(rooms.length, 15)) { // 增加到15个房间
         console.log(`📨 [智能消息加载] ${storeId}需要加载消息 (房间:${rooms.length}, 已加载:${loadedRooms})`)
         
-        // 为前3个房间加载消息，使用智能缓存
-        const roomsToLoad = rooms.slice(0, 3) // 减少到3个房间
+        // 为前15个房间加载消息，使用渐进式加载
+        const roomsToLoad = rooms.slice(0, 15) // 增加到15个房间
         
         for (const room of roomsToLoad) {
           const roomId = room.id || room.roomId
           if (roomId && (!store.messages?.has(roomId) || store.messages.get(roomId)?.length === 0)) {
             
-            // 使用稳定器获取消息，避免重复请求
-            const stableMessages = await getStableMessages(roomId, storeId, async () => {
-              return await this.executeMessageLoad(storeId, roomId)
+            // 使用稳定器获取消息，支持渐进式加载
+            const stableMessages = await getStableMessages(roomId, storeId, async (limit?: number) => {
+              return await this.executeMessageLoad(storeId, roomId, limit)
             })
             
             if (stableMessages && stableMessages.length > 0) {
@@ -1077,10 +1077,11 @@ class MatrixStoreCoordinator {
   }
 
   /**
-   * 执行消息加载（被稳定器调用）
+   * 执行消息加载（被稳定器调用，支持渐进式加载）
    */
-  private async executeMessageLoad(storeId: string, roomId: string): Promise<any[]> {
-    console.log(`💬 [消息加载执行] 执行${storeId}房间${roomId}消息加载`)
+  private async executeMessageLoad(storeId: string, roomId: string, limit?: number): Promise<any[]> {
+    const actualLimit = limit || 500 // 默认500条消息
+    console.log(`💬 [消息加载执行] 执行${storeId}房间${roomId}消息加载 (限制:${actualLimit}条)`)
 
     try {
       if (storeId === 'matrix-v39-clean.ts') {
@@ -1088,8 +1089,8 @@ class MatrixStoreCoordinator {
         const store = useMatrixV39Store()
         
         if (store.fetchMatrixMessages) {
-          console.log(`🔄 [V39消息执行] 加载房间${roomId}消息`)
-          const messages = await store.fetchMatrixMessages(roomId, 30) // 减少到30条消息
+          console.log(`🔄 [V39消息执行] 加载房间${roomId}消息 (${actualLimit}条)`)
+          const messages = await store.fetchMatrixMessages(roomId, actualLimit)
           return Array.isArray(messages) ? messages : []
         }
       } else if (storeId === 'matrix.ts') {
@@ -1097,8 +1098,8 @@ class MatrixStoreCoordinator {
         const store = useMatrixStore()
         
         if (store.fetchMatrixMessages) {
-          console.log(`🔄 [Matrix消息执行] 加载房间${roomId}消息`)
-          const messages = await store.fetchMatrixMessages(roomId, 30) // 减少到30条消息
+          console.log(`🔄 [Matrix消息执行] 加载房间${roomId}消息 (${actualLimit}条)`)
+          const messages = await store.fetchMatrixMessages(roomId, actualLimit)
           return Array.isArray(messages) ? messages : []
         }
       }
