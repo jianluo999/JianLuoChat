@@ -1013,6 +1013,20 @@ export const useMatrixOptimizedStore = defineStore('matrix-optimized', () => {
         checkSync()
       })
 
+      // 注册到协调器（中等优先级，优化版本）
+      try {
+        const { registerMatrixStore } = await import('@/utils/matrixStoreCoordinator')
+        registerMatrixStore('matrix-optimized.ts', {
+          matrixClient,
+          rooms,
+          messages,
+          connection
+        }, 8) // 性能测试专用store优先级（PerformanceTestPage等使用）
+        console.log('✅ Matrix Optimized Store 已注册到协调器')
+      } catch (coordError) {
+        console.warn('⚠️ 协调器注册失败:', coordError)
+      }
+
       // 强制更新房间列表
       setTimeout(() => {
         if (client) {

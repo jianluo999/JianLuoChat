@@ -549,6 +549,20 @@ export const useMatrixProgressiveOptimization = defineStore('matrix-progressive-
       
       console.log(`✅ [超级冗余登录] 登录成功 [${quickLoginTime.toFixed(2)}ms] 方法: ${method} 服务器: ${server}`)
       
+      // 注册到协调器（中等优先级，优化功能）
+      try {
+        const { registerMatrixStore } = await import('@/utils/matrixStoreCoordinator')
+        registerMatrixStore('matrix-progressive-optimization.ts', {
+          matrixClient: null, // 渐进式优化不直接管理客户端
+          rooms: roomListCache.value,
+          messages: new Map(),
+          connection: { connected: true, homeserver: server, userId: loginData.user_id }
+        }, 7) // 登录辅助store优先级（MatrixSmartLogin等使用）
+        console.log('✅ Matrix Progressive Optimization Store 已注册到协调器')
+      } catch (coordError) {
+        console.warn('⚠️ 协调器注册失败:', coordError)
+      }
+      
       return { 
         success: true, 
         user: { id: loginData.user_id },

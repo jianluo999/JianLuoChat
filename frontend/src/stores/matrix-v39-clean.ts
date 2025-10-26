@@ -1297,6 +1297,20 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
         // 重置重连状态
         MatrixReconnectionManager.resetReconnectionState(connection.value.syncState)
         
+        // 通过协调器处理同步事件
+        try {
+          import('@/utils/matrixStoreCoordinator').then(({ handleMatrixEvent }) => {
+            handleMatrixEvent('matrix-v39-clean.ts', 'sync', {
+              state,
+              prevState,
+              roomCount: matrixClient.value?.getRooms()?.length || 0,
+              syncProgress: data?.progress || 0
+            })
+          })
+        } catch (coordError) {
+          console.warn('⚠️ 协调器同步事件处理失败:', coordError)
+        }
+        
         // 使用防抖优化：取消之前的更新，只执行最后一次
         if (syncUpdateTimer) {
           clearTimeout(syncUpdateTimer)
@@ -1320,6 +1334,19 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
         console.error('❌ Sync 错误:', errorMessage)
         connection.value.syncState.syncError = errorMessage
         
+        // 通过协调器处理错误事件
+        try {
+          import('@/utils/matrixStoreCoordinator').then(({ handleMatrixEvent }) => {
+            handleMatrixEvent('matrix-v39-clean.ts', 'error', {
+              error: data?.error,
+              errorMessage,
+              syncState: state
+            })
+          })
+        } catch (coordError) {
+          console.warn('⚠️ 协调器错误事件处理失败:', coordError)
+        }
+        
         // 检查是否为网络错误
         if (MatrixErrorHandler.isNetworkError(data?.error)) {
           console.log('🌐 检测到网络错误，启动智能重连...')
@@ -1339,6 +1366,19 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
     let newRoomUpdateTimer: any = null
     const handleNewRoom = (room: any) => {
       console.log('🏠 新房间:', room.name || room.roomId)
+      
+      // 通过协调器处理房间事件
+      try {
+        import('@/utils/matrixStoreCoordinator').then(({ handleMatrixEvent }) => {
+          handleMatrixEvent('matrix-v39-clean.ts', 'room', {
+            roomId: room.roomId,
+            roomName: room.name,
+            type: 'new'
+          })
+        })
+      } catch (coordError) {
+        console.warn('⚠️ 协调器房间事件处理失败:', coordError)
+      }
       
       // 防抖：取消之前的更新，只执行最后一次
       if (newRoomUpdateTimer) {
@@ -1365,6 +1405,18 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
           const message = convertEventToMessage(event, room)
           if (message) {
             addMessageToRoom(room.roomId, message)
+            
+            // 通过协调器处理消息事件
+            try {
+              import('@/utils/matrixStoreCoordinator').then(({ handleMatrixEvent }) => {
+                handleMatrixEvent('matrix-v39-clean.ts', 'message', {
+                  roomId: room.roomId,
+                  messages: [message]
+                })
+              })
+            } catch (coordError) {
+              console.warn('⚠️ 协调器消息事件处理失败:', coordError)
+            }
           }
         } else if (eventType === 'm.reaction') {
           handleReactionEvent(event, room)
@@ -1567,6 +1619,20 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
             
             // 设置客户端
             matrixClient.value = client
+            
+            // 注册到协调器（重要辅助store，12+组件使用）
+            try {
+              const { registerMatrixStore } = await import('@/utils/matrixStoreCoordinator')
+              registerMatrixStore('matrix-v39-clean.ts', {
+                matrixClient,
+                rooms,
+                messages,
+                connection
+              }, 12) // 重要辅助store优先级
+              console.log('✅ Matrix V39 Store 已注册到协调器（重要辅助store）')
+            } catch (coordError) {
+              console.warn('⚠️ 协调器注册失败:', coordError)
+            }
             
             // 更新连接状态
             connection.value = {

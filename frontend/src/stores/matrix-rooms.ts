@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import { useAuthStore } from './auth';
 import { roomAPI, matrixAPI } from '@/services/api';
 
-export const useMatrixRoomStore = define() {
+export const useMatrixRoomStore = defineStore('matrix-rooms', () => {
     const authStore = useAuthStore();
     
     // 房间管理状态
@@ -19,6 +19,21 @@ export const useMatrixRoomStore = define() {
             const response = await roomAPI.getRooms();
             if (response.data.success) {
                 rooms.value = response.data.rooms || [];
+                
+                // 注册到协调器（低优先级，仅房间管理）
+                try {
+                    const { registerMatrixStore } = await import('@/utils/matrixStoreCoordinator')
+                    registerMatrixStore('matrix-rooms.ts', {
+                        matrixClient: null, // 仅房间管理，不管理客户端
+                        rooms,
+                        messages: new Map(),
+                        connection: { connected: false }
+                    }, 3) // 低优先级
+                    console.log('✅ Matrix Rooms Store 已注册到协调器')
+                } catch (coordError) {
+                    console.warn('⚠️ 协调器注册失败:', coordError)
+                }
+                
                 return { success: true, rooms: rooms.value };
             } else {
                 error.value = response.data.error || '获取房间列表失败';

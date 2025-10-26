@@ -974,6 +974,21 @@ export const useMatrixUnifiedStore = defineStore('matrix-unified', () => {
         await createMatrixClient(loginData.userId, loginData.accessToken, loginData.homeserver)
 
         console.log('✅ Matrix登录成功')
+        
+        // 注册到协调器（高优先级，统一版本）
+        try {
+          const { registerMatrixStore } = await import('@/utils/matrixStoreCoordinator')
+          registerMatrixStore('matrix-unified.ts', {
+            matrixClient,
+            rooms,
+            messages,
+            connection
+          }, 8) // 高优先级
+          console.log('✅ Matrix Unified Store 已注册到协调器')
+        } catch (coordError) {
+          console.warn('⚠️ 协调器注册失败:', coordError)
+        }
+        
         return { success: true, user: currentUser.value }
       } else {
         throw new Error('登录失败')

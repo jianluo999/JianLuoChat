@@ -101,6 +101,21 @@ export const useMatrixSimpleStore = defineStore('matrix-simple', () => {
       }
 
       console.log('✅ 简化Matrix客户端初始化成功')
+      
+      // 注册到协调器（低优先级，简化版本）
+      try {
+        const { registerMatrixStore } = await import('@/utils/matrixStoreCoordinator')
+        registerMatrixStore('matrix-simple.ts', {
+          matrixClient,
+          rooms,
+          messages,
+          connection: { connected: true, userId: currentUser.value?.id }
+        }, 4) // 低优先级
+        console.log('✅ Matrix Simple Store 已注册到协调器')
+      } catch (coordError) {
+        console.warn('⚠️ 协调器注册失败:', coordError)
+      }
+      
       return true
 
     } catch (error) {

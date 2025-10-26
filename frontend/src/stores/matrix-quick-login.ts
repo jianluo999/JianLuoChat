@@ -65,6 +65,21 @@ export const useMatrixQuickLogin = defineStore('matrix-quick-login', () => {
       localStorage.setItem('matrix-v39-login-info', JSON.stringify(loginData))
       
       console.log('✅ 快速登录成功')
+      
+      // 注册到协调器（低优先级，仅用于快速登录）
+      try {
+        const { registerMatrixStore } = await import('@/utils/matrixStoreCoordinator')
+        registerMatrixStore('matrix-quick-login.ts', {
+          matrixClient: null, // 快速登录不创建完整客户端
+          rooms: [],
+          messages: new Map(),
+          connection
+        }, 2) // 低优先级
+        console.log('✅ Matrix Quick Login Store 已注册到协调器')
+      } catch (coordError) {
+        console.warn('⚠️ 协调器注册失败:', coordError)
+      }
+      
       return { success: true, user: { id: loginResponse.user_id } }
     } catch (err: any) {
       console.error('❌ 快速登录失败:', err)

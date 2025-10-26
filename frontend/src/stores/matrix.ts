@@ -878,15 +878,92 @@ export const useMatrixStore = defineStore('matrix', () => {
       // 设置Matrix事件监听器（在启动客户端之前）
       console.log('🎧 设置Matrix事件监听器...')
 
-      // 禁用matrix.ts的同步事件监听器，避免与v39-clean.ts冲突
-      // 现在使用migration-helper重定向到v39-clean.ts，不需要重复的同步处理
-      console.log('⚠️ 跳过matrix.ts的同步事件监听器，使用v39-clean.ts处理')
+      // 通过协调器处理同步事件，实现多store协调
+      const { handleMatrixEvent } = await import('@/utils/matrixStoreCoordinator')
+      
+      client.on('sync' as any, (state: string, prevState: string, data: any) => {
+        try {
+          console.log(`🔄 [matrix.ts] 同步状态变化: ${prevState} -> ${state}`)
+          
+          // 通过协调器处理同步事件
+          handleMatrixEvent('matrix.ts', 'sync', {
+            state,
+            prevState,
+            data,
+            clientRooms: client.getRooms()
+          })
+          
+          // 更新本地连接状态
+          if (state === 'SYNCING' || state === 'PREPARED') {
+            connection.value.syncState = {
+              isActive: true,
+              lastSync: Date.now(),
+              nextBatch: data?.response?.next_batch || connection.value.syncState.nextBatch
+            }
+            console.log('✅ [matrix.ts] 同步状态良好')
+          } else if (state === 'ERROR') {
+            connection.value.syncState = {
+              isActive: false,
+              syncError: data?.error?.errcode || data?.error?.message || 'Unknown sync error'
+            }
+            handleMatrixEvent('matrix.ts', 'error', data?.error)
+          } else if (state === 'STOPPED') {
+            connection.value.syncState = { isActive: false }
+          }
+        } catch (syncError: any) {
+          console.error('❌ [matrix.ts] 同步事件处理失败:', syncError)
+          handleMatrixEvent('matrix.ts', 'error', syncError)
+        }
+      })
 
-      // 禁用matrix.ts的房间事件监听器，避免与v39-clean.ts冲突
-      console.log('⚠️ 跳过matrix.ts的房间事件监听器，使用v39-clean.ts处理')
+      // 通过协调器处理房间事件
+      client.on('Room' as any, (room: any) => {
+        console.log('🏠 [matrix.ts] 新房间事件:', room.roomId, room.name)
+        
+        const roomData = {
+          id: room.roomId,
+          name: room.name || room.roomId,
+          alias: room.getCanonicalAlias(),
+          topic: room.currentState?.getStateEvents('m.room.topic', '')?.getContent()?.topic || '',
+          type: (room.getJoinRule() === 'public' ? 'public' : 'private') as 'public' | 'private',
+          isPublic: room.getJoinRule() === 'public',
+          memberCount: room.getJoinedMemberCount() || 0,
+          encrypted: room.hasEncryptionStateEvent(),
+          joinRule: room.getJoinRule() || 'invite',
+          historyVisibility: room.getHistoryVisibility() || 'shared',
+          lastActivity: Date.now()
+        }
+        
+        // 通过协调器处理房间事件
+        handleMatrixEvent('matrix.ts', 'room', roomData)
+      })
 
-      // 禁用matrix.ts的消息事件监听器，避免与v39-clean.ts冲突
-      console.log('⚠️ 跳过matrix.ts的消息事件监听器，使用v39-clean.ts处理')
+      // 通过协调器处理消息事件
+      client.on('Room.timeline' as any, (event: any, room: any, toStartOfTimeline: boolean) => {
+        if (toStartOfTimeline || event.getType() !== 'm.room.message') return
+
+        console.log('💬 [matrix.ts] 新消息事件:', event.getId(), 'in room:', room.roomId)
+
+        const eventContent = event.getContent()
+        const message = {
+          id: event.getId(),
+          roomId: room.roomId,
+          content: eventContent?.body || eventContent?.formatted_body || '',
+          sender: event.getSender(),
+          senderName: event.getSender(),
+          timestamp: event.getTs(),
+          type: event.getType(),
+          eventId: event.getId(),
+          encrypted: !!eventContent?.algorithm,
+          status: 'sent' as const
+        }
+
+        // 通过协调器处理消息事件
+        handleMatrixEvent('matrix.ts', 'message', {
+          roomId: room.roomId,
+          messages: [message]
+        })
+      })
 
       // 监听错误事件
       client.on('error' as any, (error: any) => {
@@ -895,6 +972,15 @@ export const useMatrixStore = defineStore('matrix', () => {
 
       // 设置客户端实例
       matrixClient.value = client
+
+      // 注册到协调器
+      const { registerMatrixStore } = await import('@/utils/matrixStoreCoordinator')
+      registerMatrixStore('matrix.ts', {
+        matrixClient,
+        rooms,
+        messages,
+        connection
+      }, 15) // 主力store最高优先级（25+组件使用，包括App.vue）
 
       // 初始化加密功能 - 正确处理设备ID冲突
       console.log('🔐 初始化加密功能...')
