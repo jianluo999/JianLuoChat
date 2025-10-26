@@ -1,0 +1,30 @@
+import { defineStore } from 'pinia'
+import { ref, computed, shallowRef, shallowReactor, nextTick } from 'vue'
+
+// 快速登录Matrix服务 - 优化版本
+export const useMatrixQuickLoginStore = defineStore('matrix-quick-login', () => {
+  // 简化状态管理
+  const matrixClient = shallowRef(null)
+  const connection = shallowReactor({
+    connected: false,
+    homeserver: 'matrix.org',
+    userId: null,
+    accessToken: null,
+    deviceId: null,
+    syncState: { isActive: false }
+  })
+  
+  // 简化状态
+  const rooms = shallowReactor([])
+  const currentRoomId = ref(null)
+  const loading = ref(false)
+  const error = ref(null)
+  const loginComplete = ref(false)
+  
+  // 快速登录方法
+  const quickLogin = async (username, password, homeserver = 'matrix.org') => {
+    try {
+      loading.value = true
+      error.value = null
+      
+      console.log(`🚀 快速登录: ${username}@${homes

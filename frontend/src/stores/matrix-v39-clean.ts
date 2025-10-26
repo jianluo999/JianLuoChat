@@ -231,8 +231,13 @@ class MatrixErrorHandler {
   static handle(error: any, context: string): string {
     console.error(`❌ ${context}:`, error)
     
-    if (error.name === 'NetworkError' || error.code === 'NETWORK_ERROR') {
-      return '网络连接失败，请检查网络设置'
+    // 网络相关错误
+    if (error.name === 'NetworkError' || 
+        error.code === 'NETWORK_ERROR' ||
+        error.message?.includes('Failed to fetch') ||
+        error.message?.includes('ERR_CONNECTION_RESET') ||
+        error.message?.includes('ERR_CONNECTION_CLOSED')) {
+      return '网络连接不稳定，正在尝试重连...'
     }
     
     if (error.errcode === 'M_UNAUTHORIZED' || error.status === 401) {
@@ -244,6 +249,15 @@ class MatrixErrorHandler {
     }
     
     return error.message || error.errcode || '未知错误'
+  }
+
+  static isNetworkError(error: any): boolean {
+    return error.name === 'NetworkError' || 
+           error.code === 'NETWORK_ERROR' ||
+           error.message?.includes('Failed to fetch') ||
+           error.message?.includes('ERR_CONNECTION_RESET') ||
+           error.message?.includes('ERR_CONNECTION_CLOSED') ||
+           error.message?.includes('fetch failed')
   }
 }
 
@@ -347,17 +361,17 @@ class MatrixCryptoManager {
 
   static async initializeCrypto(client: any): Promise<boolean> {
     try {
-      console.log('🔐 初始化 Rust 加密引擎...')
+      console.log('🔐 初始化加密引擎...')
 
       // 检查浏览器支持
       if (!window.WebAssembly) {
-        console.warn('浏览器不支持 WebAssembly，跳过加密')
+        console.warn('⚠️ 浏览器不支持 WebAssembly，跳过加密')
         return false
       }
 
       // 检查客户端是否支持加密
       if (typeof client.initRustCrypto !== 'function') {
-        console.warn('客户端不支持 Rust 加密，尝试传统加密')
+        console.warn('⚠️ 不支持 Rust 加密，尝试传统加密')
         
         // 尝试传统加密初始化
         if (typeof client.initCrypto === 'function') {
@@ -388,19 +402,19 @@ class MatrixCryptoManager {
         // 等待加密准备就绪，但不阻塞太久
         const crypto = client.getCrypto()
         if (crypto) {
-          console.log('✅ 加密 API 可用')
+          console.log('✅ 加密 API 就绪')
           return true
         }
 
-        console.warn('⚠️ 加密 API 不可用，但初始化成功')
+        console.warn('⚠️ 加密 API 未就绪')
         return false
         
       } catch (rustError) {
-        console.warn('🔄 Rust 加密初始化失败，尝试清理并重试:', rustError)
+        console.warn('⚠️ Rust 加密初始化失败，尝试恢复:', rustError)
         
         // 如果是设备ID不匹配错误，清理加密存储并重试
         if (rustError instanceof Error && rustError.message && rustError.message.includes("doesn't match the account")) {
-          console.log('🧹 检测到设备ID不匹配，清理加密存储...')
+          console.log('🧹 设备ID不匹配，清理加密存储并重试...')
           await this.clearCryptoStores(client.getUserId())
           
           // 重试初始化
@@ -411,10 +425,10 @@ class MatrixCryptoManager {
               pickleKey: undefined,
               setupEncryptionOnLogin: false
             })
-            console.log('✅ 清理后 Rust 加密引擎初始化成功')
+            console.log('✅ 加密引擎恢复成功')
             return true
           } catch (retryError) {
-            console.warn('🔄 重试后仍然失败，尝试传统加密:', retryError)
+            console.warn('⚠️ 重试失败，回退到传统加密')
           }
         }
         
@@ -555,6 +569,19 @@ class MatrixReconnectionManager {
   private static maxReconnectAttempts = 10
   private static baseReconnectDelay = 1000
 
+  static async checkNetworkConnectivity(): Promise<boolean> {
+    try {
+      // 尝试连接到 Matrix 服务器检查连通性
+      const response = await fetch('https://matrix.org/_matrix/client/versions', {
+        method: 'GET',
+        timeout: 5000
+      })
+      return response.ok
+    } catch {
+      return false
+    }
+  }
+
   static startReconnection(client: any, syncState: any) {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
@@ -575,6 +602,15 @@ class MatrixReconnectionManager {
 
     this.reconnectTimer = setTimeout(async () => {
       try {
+        // 先检查网络连通性
+        const isNetworkAvailable = await this.checkNetworkConnectivity()
+        if (!isNetworkAvailable) {
+          console.log('🌐 网络不可用，延迟重连...')
+          syncState.reconnectAttempts = attempts // 不增加重连次数
+          this.startReconnection(client, syncState)
+          return
+        }
+
         syncState.reconnectAttempts = attempts + 1
         syncState.lastReconnectAttempt = Date.now()
 
@@ -1057,7 +1093,8 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
 
   const updateRoomsFromClient = (client: any) => {
     try {
-      console.log('🔄 从客户端更新房间列表...')
+      const startTime = performance.now()
+      console.log('🔄 更新房间列表...')
       
       const clientRooms = client.getRooms()
       const convertedRooms: MatrixRoom[] = []
@@ -1163,16 +1200,18 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       directMessages.splice(0, directMessages.length, ...convertedDMs)
 
       // 更新性能指标
+      const totalRooms = convertedRooms.length + convertedSpaces.length + convertedDMs.length
       MatrixPerformanceManager.updateCounts(
-        convertedRooms.length + convertedSpaces.length + convertedDMs.length,
+        totalRooms,
         Array.from(messages.values()).reduce((total, msgs) => total + msgs.length, 0)
       )
 
-      console.log(`✅ 房间列表更新完成: ${convertedRooms.length} 房间, ${convertedSpaces.length} 空间, ${convertedDMs.length} 私聊`)
+      const duration = (performance.now() - startTime).toFixed(2)
+      console.log(`✅ 房间列表更新完成 [${duration}ms]: ${convertedRooms.length} 房间, ${convertedSpaces.length} 空间, ${convertedDMs.length} 私聊`)
       
-      // 如果房间列表仍然为空，尝试强制刷新
-      if (convertedRooms.length === 0 && convertedSpaces.length === 0 && convertedDMs.length === 0) {
-        console.warn('⚠️ 房间列表为空，可能需要等待同步完成')
+      // 如果房间列表仍然为空，提示等待同步
+      if (totalRooms === 0) {
+        console.warn('⚠️ 房间列表为空，等待同步完成或检查网络连接')
       }
 
     } catch (error) {
@@ -1216,10 +1255,11 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
   const setupEventListeners = (client: any) => {
     console.log('🎧 设置高级事件监听器...')
 
-    // 同步事件 - 增强版
+    // 同步事件 - 增强版（使用防抖优化更新频率）
+    let syncUpdateTimer: any = null
     const handleSync = throttle((state: string, prevState: string | null, data: any) => {
       const endTimer = MatrixPerformanceManager.startTimer('sync')
-      console.log(`🔄 同步状态: ${prevState} -> ${state}`)
+      console.log(`🔄 Sync: ${prevState} → ${state}`)
       
       connection.value.syncState = {
         ...connection.value.syncState,
@@ -1235,20 +1275,34 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
         // 重置重连状态
         MatrixReconnectionManager.resetReconnectionState(connection.value.syncState)
         
-        // 立即更新房间列表，然后再延迟更新一次确保完整性
+        // 使用防抖优化：取消之前的更新，只执行最后一次
+        if (syncUpdateTimer) {
+          clearTimeout(syncUpdateTimer)
+        }
+        
+        // 立即更新一次（快速响应）
         if (matrixClient.value) {
           updateRoomsFromClient(matrixClient.value)
-          
-          // 延迟更新以确保所有房间都已加载
-          setTimeout(() => {
-            if (matrixClient.value) {
-              updateRoomsFromClient(matrixClient.value)
-            }
-          }, 500)
         }
+        
+        // 延迟更新以确保所有房间都已加载（防抖）
+        syncUpdateTimer = setTimeout(() => {
+          if (matrixClient.value) {
+            console.log('🔄 执行延迟房间更新（确保数据完整性）')
+            updateRoomsFromClient(matrixClient.value)
+          }
+          syncUpdateTimer = null
+        }, 500)
       } else if (state === 'ERROR') {
-        console.error('❌ 同步错误:', data?.error)
-        connection.value.syncState.syncError = data?.error?.message || 'Unknown sync error'
+        const errorMessage = data?.error?.message || data?.error || 'Unknown sync error'
+        console.error('❌ Sync 错误:', errorMessage)
+        connection.value.syncState.syncError = errorMessage
+        
+        // 检查是否为网络错误
+        if (MatrixErrorHandler.isNetworkError(data?.error)) {
+          console.log('🌐 检测到网络错误，启动智能重连...')
+          connection.value.syncState.syncError = '网络连接不稳定，正在重连...'
+        }
         
         // 启动自动重连
         MatrixReconnectionManager.startReconnection(client, connection.value.syncState)
@@ -1259,14 +1313,23 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       endTimer()
     }, 500)
 
-    const handleNewRoom = throttle((room: any) => {
-      console.log('🏠 新房间:', room.roomId, room.name)
-      setTimeout(() => {
+    // 新房间事件（使用防抖减少更新频率）
+    let newRoomUpdateTimer: any = null
+    const handleNewRoom = (room: any) => {
+      console.log('🏠 新房间:', room.name || room.roomId)
+      
+      // 防抖：取消之前的更新，只执行最后一次
+      if (newRoomUpdateTimer) {
+        clearTimeout(newRoomUpdateTimer)
+      }
+      
+      newRoomUpdateTimer = setTimeout(() => {
         if (matrixClient.value) {
           updateRoomsFromClient(matrixClient.value)
         }
-      }, 100)
-    }, 200)
+        newRoomUpdateTimer = null
+      }, 300) // 300ms 防抖
+    }
 
     const handleRoomTimeline = throttle((event: any, room: any, toStartOfTimeline: boolean) => {
       if (toStartOfTimeline) return
@@ -1539,11 +1602,15 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
           } catch (clientError) {
             console.error('❌ 恢复客户端失败:', clientError)
             localStorage.removeItem('matrix-v39-login-info')
+            localStorage.removeItem('matrix_access_token')
+            localStorage.removeItem('matrix_login_info')
             return false
           }
         } else {
           console.log('🕐 登录信息已过期，需要重新登录')
           localStorage.removeItem('matrix-v39-login-info')
+          localStorage.removeItem('matrix_access_token')
+          localStorage.removeItem('matrix_login_info')
         }
       }
       
@@ -1606,6 +1673,16 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
         displayName: username
       }
       localStorage.setItem('matrix-v39-login-info', JSON.stringify(loginData))
+      
+      // 同时保存路由守卫期望的键名
+      localStorage.setItem('matrix_access_token', accessToken)
+      localStorage.setItem('matrix_login_info', JSON.stringify(loginData))
+      
+      console.log('✅ 登录信息已保存到 localStorage，键名:', {
+        'matrix-v39-login-info': !!localStorage.getItem('matrix-v39-login-info'),
+        'matrix_access_token': !!localStorage.getItem('matrix_access_token'),
+        'matrix_login_info': !!localStorage.getItem('matrix_login_info')
+      })
 
       // 创建正式客户端，使用服务器返回的设备ID
       const client = await MatrixClientManager.createClient(loggedInUserId, accessToken, serverUrl, deviceId)
@@ -1688,6 +1765,17 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
     } catch (err: any) {
       const errorMessage = MatrixErrorHandler.handle(err, 'Matrix 登录')
       error.value = errorMessage
+      
+      // 如果是网络错误，提供重试建议
+      if (MatrixErrorHandler.isNetworkError(err)) {
+        console.error('❌ Matrix 登录: 网络连接失败，建议检查网络或稍后重试')
+        return { 
+          success: false, 
+          error: '网络连接失败，请检查网络连接后重试',
+          isNetworkError: true
+        }
+      }
+      
       console.error('❌ Matrix 登录失败:', err)
       return { success: false, error: errorMessage }
     } finally {
@@ -1929,6 +2017,8 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       
       // 清除存储
       localStorage.removeItem('matrix-v39-login-info')
+      localStorage.removeItem('matrix_access_token')
+      localStorage.removeItem('matrix_login_info')
       
       // 清理设备ID相关存储
       const keysToRemove = []
@@ -1996,6 +2086,8 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       
       localStorage.removeItem('matrix-v39-login-info')
       localStorage.removeItem('matrix-v39-access-token')
+      localStorage.removeItem('matrix_access_token')
+      localStorage.removeItem('matrix_login_info')
       
       // 清理设备ID和加密相关数据
       const keysToRemove = []
@@ -2500,6 +2592,35 @@ export const useMatrixV39Store = defineStore('matrix-v39-clean', () => {
       }
     }
   }
+
+  // 网络状态监听器
+  const initNetworkListener = () => {
+    if (typeof window !== 'undefined') {
+      // 监听网络状态变化
+      window.addEventListener('online', async () => {
+        console.log('🌐 网络已恢复，尝试重连...')
+        if (matrixClient.value && connection.value.syncState === 'ERROR') {
+          try {
+            await matrixClient.value.startClient({
+              initialSyncLimit: 20,
+              lazyLoadMembers: true
+            })
+          } catch (error) {
+            console.error('❌ 网络恢复后重连失败:', error)
+          }
+        }
+      })
+
+      window.addEventListener('offline', () => {
+        console.log('🌐 网络已断开')
+        connection.value.syncState = 'ERROR'
+        connection.value.syncError = '网络连接已断开'
+      })
+    }
+  }
+
+  // 初始化网络监听器
+  initNetworkListener()
 
   // 返回接口
   return {
