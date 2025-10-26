@@ -72,7 +72,7 @@
           <span class="username">{{ matrixStore.currentUser.displayName || matrixStore.currentUser.username }}</span>
         </div>
         <div class="header-actions">
-          <!-- 主要操作按钮 -->
+          <!-- 简化的主要操作按钮 -->
           <button class="action-btn primary" @click="startDirectMessage" title="发起聊天">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
@@ -83,87 +83,79 @@
               <path d="M16 4c0-1.11.89-2 2-2s2 .89 2 2-.89 2-2 2-2-.89-2-2zM4 18v-1c0-2.66 5.33-4 8-4s8 1.34 8 4v1H4zM12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z"/>
             </svg>
           </button>
-          <button class="action-btn primary" @click="showJoinRoomDialog" title="加入房间">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-            </svg>
-          </button>
+        </div>
+      </div>
 
-          <!-- 更多操作菜单 -->
-          <div class="more-actions" ref="moreActionsRef">
-            <button
-              class="action-btn more-btn"
-              @click="toggleMoreMenu"
-              title="更多操作"
-              :class="{ active: showMoreMenu }"
+      <!-- 通讯录内容区域 -->
+      <div v-if="activeNav === 'contacts'" class="contacts-panel">
+        <div class="contacts-header">
+          <h3>通讯录</h3>
+        </div>
+        <div class="contacts-list">
+          <div class="contact-group">
+            <div class="group-header">
+              <span class="group-icon">👥</span>
+              <span class="group-title">群聊</span>
+              <span class="group-count">{{ groupRooms.length }}</span>
+            </div>
+            <div 
+              v-for="room in groupRooms.slice(0, 5)" 
+              :key="room.id"
+              class="contact-item"
+              @click="selectRoom(room.id)"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-              </svg>
-            </button>
-            <div v-if="showMoreMenu" class="more-menu">
-              <button class="menu-item" @click="toggleExplore">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-                </svg>
-                探索房间
-              </button>
-              <button class="menu-item" @click="refreshRooms">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-                </svg>
-                刷新房间
-              </button>
-              <div class="menu-divider"></div>
-              <button class="menu-item" @click="debugMatrixClient">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M20 8h-2.81c-.45-.78-1.07-1.45-1.82-1.96L17 4.41 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5c-.49 0-.96.06-1.42.17L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8z"/>
-                </svg>
-                调试工具
-              </button>
-              <button class="menu-item" @click="forceCreateFileTransfer">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
-                </svg>
-                强制创建文件助手
-              </button>
-              <button class="menu-item" @click="forceSync">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12,18A6,6 0 0,1 6,12C6,11 6.25,10.03 6.7,9.2L5.24,7.74C4.46,8.97 4,10.43 4,12A8,8 0 0,0 12,20V23L16,19L12,15M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12C18,13 17.75,13.97 17.3,14.8L18.76,16.26C19.54,15.03 20,13.57 20,12A8,8 0 0,0 12,4Z"/>
-                </svg>
-                强制同步
-              </button>
-              <button class="menu-item" @click="testFastMessage">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M7 14l5-5 5 5z"/>
-                </svg>
-                测试消息
-              </button>
-              <button class="menu-item" @click="openEncryptionSettings">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
-                </svg>
-                加密设置
-              </button>
-              <button class="menu-item" @click="openDeviceVerification">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1M10,17L6,13L7.41,11.59L10,14.17L16.59,7.58L18,9L10,17Z"/>
-                </svg>
-                设备验证
-              </button>
-              <button class="menu-item" @click="checkCryptoConflicts">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/>
-                </svg>
-                检查冲突
-              </button>
+              <div class="contact-avatar">{{ getRoomInitials(room.name) }}</div>
+              <div class="contact-info">
+                <div class="contact-name">{{ room.name }}</div>
+                <div class="contact-desc">{{ room.memberCount || 0 }} 人</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="contact-group">
+            <div class="group-header">
+              <span class="group-icon">👤</span>
+              <span class="group-title">私聊</span>
+              <span class="group-count">{{ directRooms.length }}</span>
+            </div>
+            <div 
+              v-for="room in directRooms.slice(0, 5)" 
+              :key="room.id"
+              class="contact-item"
+              @click="selectRoom(room.id)"
+            >
+              <div class="contact-avatar">{{ getRoomInitials(room.name) }}</div>
+              <div class="contact-info">
+                <div class="contact-name">{{ room.name }}</div>
+                <div class="contact-desc">私聊</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="contact-group">
+            <div class="group-header">
+              <span class="group-icon">🔐</span>
+              <span class="group-title">加密房间</span>
+              <span class="group-count">{{ encryptedRooms.length }}</span>
+            </div>
+            <div 
+              v-for="room in encryptedRooms.slice(0, 5)" 
+              :key="room.id"
+              class="contact-item"
+              @click="selectRoom(room.id)"
+            >
+              <div class="contact-avatar">{{ getRoomInitials(room.name) }}</div>
+              <div class="contact-info">
+                <div class="contact-name">{{ room.name }}</div>
+                <div class="contact-desc">加密聊天</div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       <!-- 搜索框 -->
-      <div class="search-container">
+      <div v-if="activeNav === 'chat'" class="search-container">
         <div class="search-box">
           <span class="search-icon">🔍</span>
           <input
@@ -176,7 +168,7 @@
       </div>
 
       <!-- 聊天列表 -->
-      <div class="chat-list">
+      <div v-if="activeNav === 'chat'" class="chat-list">
         <!-- 加载状态 -->
         <div v-if="matrixStore.loading && matrixStore.rooms.length === 0" class="loading-chat-list">
           <div class="loading-spinner"></div>
@@ -198,84 +190,7 @@
           <div class="empty-message">暂无聊天</div>
         </div>
 
-        <!-- Matrix房间分类导航 -->
-        <div class="matrix-room-categories">
-          <div class="category-header">
-            <span class="category-title">Matrix 房间</span>
-            <span class="room-count">{{ filteredRooms.length }}</span>
-          </div>
-          
-          <div class="category-list">
-            <div 
-              class="category-item" 
-              :class="{ active: selectedCategory === 'all' }"
-              @click="selectCategory('all')"
-            >
-              <span class="category-icon">💬</span>
-              <span class="category-name">所有对话</span>
-              <span class="category-count">{{ filteredRooms.length }}</span>
-            </div>
-            
-            <div 
-              class="category-item" 
-              :class="{ active: selectedCategory === 'direct' }"
-              @click="selectCategory('direct')"
-            >
-              <span class="category-icon">👤</span>
-              <span class="category-name">私聊</span>
-              <span class="category-count">{{ directRooms.length }}</span>
-            </div>
-            
-            <div 
-              class="category-item" 
-              :class="{ active: selectedCategory === 'groups' }"
-              @click="selectCategory('groups')"
-            >
-              <span class="category-icon">👥</span>
-              <span class="category-name">群聊</span>
-              <span class="category-count">{{ groupRooms.length }}</span>
-            </div>
-            
-            <div 
-              class="category-item" 
-              :class="{ active: selectedCategory === 'spaces' }"
-              @click="selectCategory('spaces')"
-            >
-              <span class="category-icon">🏢</span>
-              <span class="category-name">空间</span>
-              <span class="category-count">{{ spaceRooms.length }}</span>
-            </div>
-            
-            <div 
-              class="category-item" 
-              :class="{ active: selectedCategory === 'encrypted' }"
-              @click="selectCategory('encrypted')"
-            >
-              <span class="category-icon">🔐</span>
-              <span class="category-name">加密房间</span>
-              <span class="category-count">{{ encryptedRooms.length }}</span>
-            </div>
-            
-            <div 
-              class="category-item" 
-              :class="{ active: selectedCategory === 'unread' }"
-              @click="selectCategory('unread')"
-            >
-              <span class="category-icon">🔴</span>
-              <span class="category-name">未读消息</span>
-              <span class="category-count">{{ unreadRooms.length }}</span>
-            </div>
-          </div>
-          
-          <div class="category-actions">
-            <button class="action-btn" @click="cleanupStrangeRoomsAction" title="清理陌生房间">
-              🧹 清理
-            </button>
-            <button class="action-btn" @click="refreshRooms" title="刷新房间列表">
-              🔄 刷新
-            </button>
-          </div>
-        </div>
+
 
         <!-- 聊天列表 -->
         <div
@@ -309,16 +224,82 @@
         </div>
       </div>
 
-      <!-- 底部退出按钮 -->
+      <!-- 底部功能菜单 -->
       <div class="chat-list-footer">
-        <button
-          class="logout-btn"
-          @click="handleLogout"
-          title="退出登录"
-        >
-          <span class="logout-icon">🚪</span>
-          <span class="logout-text">退出</span>
-        </button>
+        <!-- 横杠菜单按钮 -->
+        <div class="footer-menu" ref="footerMenuRef">
+          <button
+            class="menu-toggle-btn"
+            @click="toggleFooterMenu"
+            title="更多功能"
+            :class="{ active: showFooterMenu }"
+          >
+            <span class="menu-icon">☰</span>
+          </button>
+          
+          <!-- 功能菜单 -->
+          <div v-if="showFooterMenu" class="footer-menu-panel">
+            <div class="menu-section">
+              <div class="menu-section-title">房间管理</div>
+              <button class="footer-menu-item" @click="showJoinRoomDialog">
+                <span class="item-icon">🏠</span>
+                <span class="item-text">加入房间</span>
+              </button>
+              <button class="footer-menu-item" @click="toggleExplore">
+                <span class="item-icon">🔍</span>
+                <span class="item-text">探索房间</span>
+              </button>
+              <button class="footer-menu-item" @click="refreshRooms">
+                <span class="item-icon">🔄</span>
+                <span class="item-text">刷新房间</span>
+              </button>
+            </div>
+            
+            <div class="menu-section">
+              <div class="menu-section-title">工具</div>
+              <button class="footer-menu-item" @click="forceCreateFileTransfer">
+                <span class="item-icon">📁</span>
+                <span class="item-text">文件助手</span>
+              </button>
+              <button class="footer-menu-item" @click="debugMatrixClient">
+                <span class="item-icon">🔧</span>
+                <span class="item-text">调试工具</span>
+              </button>
+              <button class="footer-menu-item" @click="testFastMessage">
+                <span class="item-icon">⚡</span>
+                <span class="item-text">测试消息</span>
+              </button>
+            </div>
+            
+            <div class="menu-section">
+              <div class="menu-section-title">安全</div>
+              <button class="footer-menu-item" @click="openEncryptionSettings">
+                <span class="item-icon">🔐</span>
+                <span class="item-text">加密设置</span>
+              </button>
+              <button class="footer-menu-item" @click="openDeviceVerification">
+                <span class="item-icon">🛡️</span>
+                <span class="item-text">设备验证</span>
+              </button>
+              <button class="footer-menu-item" @click="checkCryptoConflicts">
+                <span class="item-icon">⚠️</span>
+                <span class="item-text">检查冲突</span>
+              </button>
+            </div>
+            
+            <div class="menu-section">
+              <div class="menu-section-title">系统</div>
+              <button class="footer-menu-item" @click="forceSync">
+                <span class="item-icon">🔄</span>
+                <span class="item-text">强制同步</span>
+              </button>
+              <button class="footer-menu-item danger" @click="handleLogout">
+                <span class="item-icon">🚪</span>
+                <span class="item-text">退出登录</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -445,7 +426,7 @@
     </div>
   </div>
 
-  <!-- 微信风格右键菜单 -->
+  <!-- 简化的右键菜单 -->
   <div
     v-if="contextMenu.show"
     class="wechat-context-menu"
@@ -453,47 +434,27 @@
     @click.stop
   >
     <div class="context-menu-item" @click="markAsTop">
-      📌 置顶房间
+      📌 置顶聊天
     </div>
     <div class="context-menu-item" @click="markAsUnread">
       🔴 标为未读
     </div>
     <div class="context-menu-item" @click="hideSelectedRoom">
-      🔕 静音通知
+      🔕 消息免打扰
     </div>
     <div class="context-menu-divider"></div>
     <div class="context-menu-item" @click="showRoomInfo">
-      ℹ️ 房间信息
-    </div>
-    <div class="context-menu-item" @click="showRoomMembers">
-      👥 房间成员
+      ℹ️ 聊天信息
     </div>
     <div class="context-menu-item" @click="showChatFiles">
-      📁 媒体文件
-    </div>
-    <div class="context-menu-item" @click="loadHistoryRecords">
-      📜 加载历史消息
+      � 房查找聊天内容
     </div>
     <div class="context-menu-divider"></div>
-    <div class="context-menu-item" @click="showEncryptionInfo">
-      🔐 加密信息
-    </div>
-    <div class="context-menu-item" @click="verifyDevices">
-      🛡️ 设备验证
-    </div>
-    <div class="context-menu-item" @click="openInSeparateWindow">
-      🪟 独立窗口
-    </div>
-    <div class="context-menu-divider"></div>
-    <div class="context-menu-item" @click="exportRoomData">
-      📤 导出数据
-    </div>
     <div class="context-menu-item" @click="hideRoomFromList">
-      👁️ 隐藏房间
+      👁️ 不显示该聊天
     </div>
-    <div class="context-menu-divider"></div>
     <div class="context-menu-item danger" @click="leaveSelectedRoom">
-      🚪 离开房间
+      🗑️ 删除聊天
     </div>
   </div>
 
@@ -537,6 +498,8 @@ const publicRooms = ref<any[]>([])
 const isLoadingPublicRooms = ref(false)
 const showMoreMenu = ref(false)
 const moreActionsRef = ref<HTMLElement>()
+const showFooterMenu = ref(false)
+const footerMenuRef = ref<HTMLElement>()
 
 
 
@@ -561,10 +524,17 @@ const toggleMoreMenu = () => {
   showMoreMenu.value = !showMoreMenu.value
 }
 
+const toggleFooterMenu = () => {
+  showFooterMenu.value = !showFooterMenu.value
+}
+
 // 点击外部关闭更多菜单
 const handleClickOutside = (event: Event) => {
   if (moreActionsRef.value && !moreActionsRef.value.contains(event.target as Node)) {
     showMoreMenu.value = false
+  }
+  if (footerMenuRef.value && !footerMenuRef.value.contains(event.target as Node)) {
+    showFooterMenu.value = false
   }
 }
 
@@ -1193,8 +1163,9 @@ onMounted(async () => {
   // 设置性能优化的滚动监听器
   setupScrollOptimization()
 
-  // 添加全局点击监听器（用于关闭右键菜单）
+  // 添加全局点击监听器（用于关闭右键菜单和底部菜单）
   document.addEventListener('click', handleGlobalClick)
+  document.addEventListener('click', handleClickOutside)
 
   // 检查是否已经有Matrix客户端在运行
   if (matrixStore.matrixClient && matrixStore.matrixClient.clientRunning) {
@@ -1355,6 +1326,7 @@ onUnmounted(() => {
   
   // 清理右键菜单监听器
   document.removeEventListener('click', handleGlobalClick)
+  document.removeEventListener('click', handleClickOutside)
   
   console.log('✅ WeChatStyleLayout组件清理完成')
 })
@@ -2065,10 +2037,7 @@ const exportRoomData = () => {
   hideContextMenu()
 }
 
-// Matrix房间分类
-const selectedCategory = ref('all')
-
-// 计算不同类型的房间
+// 计算不同类型的房间（用于通讯录）
 const directRooms = computed(() => {
   return matrixStore.rooms.filter(room => 
     room.memberCount <= 2 && !room.isFileTransferRoom
@@ -2081,66 +2050,28 @@ const groupRooms = computed(() => {
   )
 })
 
-const spaceRooms = computed(() => {
-  return matrixStore.rooms.filter(room => 
-    room.type === 'space'
-  )
-})
-
 const encryptedRooms = computed(() => {
   return matrixStore.rooms.filter(room => 
     room.encrypted
   )
 })
 
-const unreadRooms = computed(() => {
-  return matrixStore.rooms.filter(room => 
-    room.unreadCount && room.unreadCount > 0
-  )
-})
-
-// 根据选中分类过滤房间
+// 简化的房间过滤（只应用搜索）
 const filteredRooms = computed(() => {
-  let rooms = []
-  
-  switch (selectedCategory.value) {
-    case 'direct':
-      rooms = directRooms.value
-      break
-    case 'groups':
-      rooms = groupRooms.value
-      break
-    case 'spaces':
-      rooms = spaceRooms.value
-      break
-    case 'encrypted':
-      rooms = encryptedRooms.value
-      break
-    case 'unread':
-      rooms = unreadRooms.value
-      break
-    default:
-      rooms = matrixStore.rooms
-  }
-  
-  // 应用搜索过滤
-  if (!roomSearchQuery.value) return rooms
-  return rooms.filter(room =>
+  if (!roomSearchQuery.value) return matrixStore.rooms
+  return matrixStore.rooms.filter(room =>
     room.name.toLowerCase().includes(roomSearchQuery.value.toLowerCase())
   )
 })
-
-// 选择分类
-const selectCategory = (category: string) => {
-  selectedCategory.value = category
-  console.log(`📂 切换到分类: ${category}`)
-}
 
 
 // 点击其他地方隐藏菜单
 const handleGlobalClick = () => {
   if (contextMenu.value.show) {
     hideContextMenu()
+  }
+  if (showFooterMenu.value) {
+    showFooterMenu.value = false
   }
 }
 
@@ -3121,7 +3052,110 @@ if (typeof window !== 'undefined') {
   background: linear-gradient(135deg, #4CAF50, #45a049);
 }
 
-/* 底部退出按钮 - 微信风格 */
+/* 通讯录面板 */
+.contacts-panel {
+  flex: 1;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.contacts-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.contacts-header h3 {
+  margin: 0;
+  color: #2d5a27;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.contacts-list {
+  padding: 10px 0;
+}
+
+.contact-group {
+  margin-bottom: 20px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 20px;
+  background: rgba(45, 90, 39, 0.05);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.group-icon {
+  font-size: 16px;
+  margin-right: 8px;
+}
+
+.group-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.group-count {
+  font-size: 12px;
+  color: #999;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.contact-item:hover {
+  background: rgba(45, 90, 39, 0.05);
+}
+
+.contact-avatar {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #66BB6A, #4CAF50);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.contact-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.contact-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-desc {
+  font-size: 12px;
+  color: #999;
+}
+
+/* 底部功能菜单 - 微信风格 */
 .chat-list-footer {
   padding: 10px 15px;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
@@ -3130,7 +3164,11 @@ if (typeof window !== 'undefined') {
   z-index: 5;
 }
 
-.logout-btn {
+.footer-menu {
+  position: relative;
+}
+
+.menu-toggle-btn {
   width: 100%;
   padding: 8px 12px;
   border: none;
@@ -3138,7 +3176,7 @@ if (typeof window !== 'undefined') {
   color: #666;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 400;
   display: flex;
   align-items: center;
@@ -3149,17 +3187,87 @@ if (typeof window !== 'undefined') {
   z-index: 10;
 }
 
-.logout-btn:hover {
+.menu-toggle-btn:hover {
   background: rgba(0, 0, 0, 0.08);
   color: #333;
 }
 
-.logout-icon {
-  font-size: 14px;
+.menu-toggle-btn.active {
+  background: rgba(45, 90, 39, 0.1);
+  color: #2d5a27;
 }
 
-.logout-text {
-  font-size: 13px;
+.menu-icon {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.footer-menu-panel {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 8px;
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.menu-section {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.menu-section:last-child {
+  border-bottom: none;
+}
+
+.menu-section-title {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #999;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.footer-menu-item {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #333;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+}
+
+.footer-menu-item:hover {
+  background: rgba(45, 90, 39, 0.05);
+}
+
+.footer-menu-item.danger {
+  color: #ff4444;
+}
+
+.footer-menu-item.danger:hover {
+  background: rgba(255, 68, 68, 0.05);
+}
+
+.item-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.item-text {
+  flex: 1;
 }
 
 /* 微信风格右键菜单样式 */
@@ -3213,115 +3321,7 @@ if (typeof window !== 'undefined') {
   background: transparent;
 }
 
-/* Matrix房间分类导航 */
-.matrix-room-categories {
-  background: rgba(255, 255, 255, 0.02);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 12px 0;
-}
 
-.category-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 20px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  margin-bottom: 8px;
-}
-
-.category-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.room-count {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.1);
-  padding: 2px 6px;
-  border-radius: 10px;
-}
-
-.category-list {
-  padding: 0 12px;
-}
-
-.category-item {
-  display: flex;
-  align-items: center;
-  padding: 6px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  margin-bottom: 2px;
-}
-
-.category-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.category-item.active {
-  background: rgba(7, 193, 96, 0.2);
-  color: #07c160;
-}
-
-.category-icon {
-  font-size: 14px;
-  width: 20px;
-  text-align: center;
-  margin-right: 8px;
-}
-
-.category-name {
-  flex: 1;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.category-item.active .category-name {
-  color: #07c160;
-}
-
-.category-count {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.1);
-  padding: 1px 5px;
-  border-radius: 8px;
-  min-width: 16px;
-  text-align: center;
-}
-
-.category-item.active .category-count {
-  background: rgba(7, 193, 96, 0.3);
-  color: #07c160;
-}
-
-.category-actions {
-  display: flex;
-  gap: 8px;
-  padding: 8px 20px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  margin-top: 8px;
-}
-
-.action-btn {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
-  border-radius: 4px;
-  color: rgba(255, 255, 255, 0.8);
-  padding: 6px 12px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.action-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: white;
-}
 
 /* 聊天状态图标 */
 .lock-icon {
