@@ -329,17 +329,66 @@ const handleInput = () => {
 }
 
 const handlePaste = (event: ClipboardEvent) => {
+  console.log('📋 粘贴事件触发')
   const items = event.clipboardData?.items
+  let hasImage = false
+  
   if (items) {
+    console.log(`📄 剪贴板中有 ${items.length} 个项目`)
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
-      if (item.type.indexOf('image') !== -1) {
+      console.log(`📄 项目 ${i}: ${item.type}`)
+      
+      // 检测各种图片类型
+      if (item.type.indexOf('image') !== -1 || 
+          item.type === 'image/png' || 
+          item.type === 'image/jpeg' || 
+          item.type === 'image/gif' || 
+          item.type === 'image/webp') {
+        console.log('🖼️ 检测到图片文件')
         const file = item.getAsFile()
         if (file) {
+          console.log(`📤 获取到文件: ${file.name} (${file.size} bytes)`)
+          hasImage = true
+          uploadFile(file)
+        } else {
+          console.log('❌ 无法从剪贴板项目获取文件，尝试备用方案')
+          // 备用方案：尝试从剪贴板数据中获取图片
+          try {
+            const blob = item.getAsFile()
+            if (blob) {
+              const file = new File([blob], 'pasted-image.png', { type: 'image/png' })
+              hasImage = true
+              uploadFile(file)
+            }
+          } catch (error) {
+            console.error('备用方案也失败了:', error)
+          }
+        }
+      }
+    }
+  } else {
+    console.log('❌ 剪贴板中没有项目，尝试检查files属性')
+    // 检查是否有files属性
+    if (event.clipboardData?.files && event.clipboardData.files.length > 0) {
+      console.log(`📄 通过files属性找到 ${event.clipboardData.files.length} 个文件`)
+      for (let i = 0; i < event.clipboardData.files.length; i++) {
+        const file = event.clipboardData.files[i]
+        if (file.type.startsWith('image/')) {
+          console.log(`🖼️ 检测到图片文件: ${file.name}`)
+          hasImage = true
           uploadFile(file)
         }
       }
     }
+  }
+  
+  // 如果检测到图片，阻止默认粘贴行为
+  if (hasImage) {
+    console.log('🛑 阻止默认粘贴行为')
+    event.preventDefault()
+  } else {
+    console.log('📝 允许默认文本粘贴行为')
   }
 }
 
@@ -448,12 +497,20 @@ const attachFile = () => {
 }
 
 const uploadFile = async (file: File) => {
+  // 检查文件大小限制（10MB）
+  const maxSize = 10 * 1024 * 1024 // 10MB
+  if (file.size > maxSize) {
+    alert(`文件大小超过限制（${maxSize / 1024 / 1024}MB），请选择较小的文件`)
+    return
+  }
+
   const fileObj = {
     id: Date.now() + Math.random(),
-    name: file.name,
+    name: file.name || 'pasted-image.png',
     size: file.size,
     progress: 0,
-    file
+    file,
+    status: 'uploading' as 'uploading' | 'success' | 'failed'
   }
 
   uploadingFiles.value.push(fileObj)
@@ -461,6 +518,7 @@ const uploadFile = async (file: File) => {
   try {
     // 显示上传进度
     fileObj.progress = 10
+    fileObj.status = 'uploading'
 
     // 上传文件到Matrix
     const contentUri = await matrixStore.uploadFileToMatrix(file)
@@ -470,6 +528,7 @@ const uploadFile = async (file: File) => {
       // 发送文件消息
       await matrixStore.sendFileMessage(props.roomId, file, contentUri)
       fileObj.progress = 100
+      fileObj.status = 'success'
 
       // 移除上传完成的文件
       setTimeout(() => {
@@ -477,22 +536,72 @@ const uploadFile = async (file: File) => {
         if (index > -1) {
           uploadingFiles.value.splice(index, 1)
         }
-      }, 1000)
+      }, 2000)
 
       console.log(`✅ 文件 ${file.name} 上传并发送成功`)
     }
   } catch (error) {
     console.error('❌ 文件上传失败:', error)
     fileObj.progress = -1 // 标记为失败
+    fileObj.status = 'failed'
 
-    // 3秒后移除失败的文件
+    // 尝试备用上传方案
+    try {
+      console.log('🔄 尝试备用上传方案...')
+      await uploadFileAlternative(file)
+    } catch (altError) {
+      console.error('❌ 备用上传方案也失败了:', altError)
+    }
+
+    // 5秒后移除失败的文件
     setTimeout(() => {
       const index = uploadingFiles.value.findIndex(f => f.id === fileObj.id)
       if (index > -1) {
         uploadingFiles.value.splice(index, 1)
       }
-    }, 3000)
+    }, 5000)
   }
+}
+
+// 备用文件上传方案
+const uploadFileAlternative = async (file: File) => {
+  console.log('🔄 使用备用方案上传文件')
+  
+  // 如果Matrix上传失败，尝试直接发送base64编码的图片
+  const reader = new FileReader()
+  
+  return new Promise((resolve, reject) => {
+    reader.onload = async (e) => {
+      try {
+        const base64Data = e.target?.result as string
+        console.log('📊 文件已转换为base64，准备发送...')
+        
+        // 直接发送图片消息
+        await matrixStore.sendMatrixMessage(props.roomId, {
+          msgtype: 'm.image',
+          body: file.name || '图片',
+          url: base64Data,
+          info: {
+            mimetype: file.type,
+            size: file.size
+          }
+        })
+        
+        console.log('✅ 备用方案上传成功')
+        resolve(true)
+      } catch (error) {
+        console.error('❌ 备用方案上传失败:', error)
+        reject(error)
+      }
+    }
+    
+    reader.onerror = (error) => {
+      console.error('❌ 文件读取失败:', error)
+      reject(error)
+    }
+    
+    reader.readAsDataURL(file)
+  })
 }
 
 const removeFile = (fileId: number) => {
