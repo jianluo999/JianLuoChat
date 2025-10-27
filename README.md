@@ -563,6 +563,85 @@ npm run dev
 - **Background Loading**: Room lists and messages load asynchronously in background
 - **Smooth Interactions**: Significantly improved overall application responsiveness
 
+### 📋 更新日志（中文版）
+
+#### v1.3.1 (2025-10-26) - Desktop Client Foundation & Login Enhancement
+**🚀 Desktop Client Development**
+- **Electron Main Process**: Added `electron/index.html` for desktop client entry point
+- **Dependency Management**: Updated `electron/package-lock.json` for consistent dependency versions
+- **Login Progress Component**: Created `frontend/src/components/LoginProgressBar.vue` for visual login progress
+- **Login Logic**: Implemented `frontend/src/composables/useLoginProgress.ts` for non-blocking login experience
+- **Vue Composition API Fix**: Added `fix-vue-composition-api.js` to resolve Vue 3 compatibility issues
+
+**🔧 Configuration & Optimization**
+- **Git Ignore Enhancement**: Improved `.gitignore` with Electron build artifacts and large file exclusions
+- **Performance Improvements**:
+  - Non-blocking login with detailed progress feedback
+  - 8-second timeout protection to prevent hanging
+  - Rich animations and visual feedback for professional user experience
+
+#### v1.3.0 (2025-10-25) - Matrix Chat Enhancement & Performance Optimization
+**🚀 Major Updates**
+- **Matrix Chat Functionality Enhancement**:
+  - Optimized Matrix message area component for better performance
+  - Implemented virtual scrolling for room lists, reducing memory usage by 50%
+  - Added comprehensive performance monitoring system
+  - Enhanced Matrix message input component for smoother typing experience
+
+- **Performance Optimization**:
+  - Implemented frontend performance monitoring with network and error tracking
+  - Optimized Matrix room list rendering performance (60% faster loading)
+  - Added performance testing page for validation
+  - Created performance-optimized application version
+
+- **Encryption Fix Tools**:
+  - Complete encryption fix guide documentation
+  - Multiple encryption repair scripts and utilities
+  - Encryption testing tools for validation
+  - One-click encryption fix script
+
+**🔧 Technical Improvements**
+- Upgraded Matrix SDK to v39
+- Implemented unified Matrix state management
+- Optimized code structure for better maintainability
+- Enhanced error handling and logging
+
+**🆕 New Files Added**
+- `ENCRYPTION_FIX_GUIDE.md` - Detailed encryption fix guide
+- `fix-encryption-now.bat` - One-click encryption fix script
+- `immediate-encryption-fix.js` - Immediate encryption fix tool
+- `test-encryption-fix.js` - Encryption fix testing tool
+- `fix-encryption-support.js` - Encryption fix support script
+
+#### v1.2.1 (2025-01-18) - UI Button Fix & Sync Optimization
+**🔧 Interface Fixes**
+- **Button Layout Fix**: Fixed refresh button being hidden by reorganizing header actions
+- **More Actions Menu**: Added collapsible menu for secondary functions (⋯)
+- **Matrix Sync Optimization**: Reduced sync timeout from 15s to 3s for faster room loading
+
+#### v1.2.0 (2025-01-17) - Fast Login & UI Optimization
+**🚀 Performance Improvements**
+- **Fast Login**: Reduced login time from 10-30 seconds to almost instant redirect
+- **Async Initialization**: Matrix client starts in background without blocking UI
+- **Route Optimization**: Simplified routing structure for faster page transitions
+
+**🎨 UI Enhancements**
+- **WeChat-style Chat Bubbles**: Adopted WeChat's classic green (#95ec69) and white color scheme
+- **Message Input Optimization**: Clean WeChat-style design
+- **Logout Button Repositioning**: Moved to bottom-left corner following WeChat design patterns
+- **Overall Layout Optimization**: Maintained WeChat's classic layout structure
+
+**🔧 Technical Fixes**
+- **Message Retrieval API**: Fixed roomMessagesAPI calls using correct Matrix client methods
+- **Room List Optimization**: Prioritized Matrix client for room fetching with API fallback
+- **Message Sending Improvements**: Used Matrix client's sendTextMessage method
+- **Debug Features**: Fixed client status checking methods
+
+**📱 User Experience**
+- **Instant Response**: Users see chat interface immediately after login
+- **Background Loading**: Room lists and messages load asynchronously in background
+- **Smooth Interactions**: Significantly improved overall application responsiveness
+
 ### 🤝 贡献指南
 
 我们欢迎贡献！请查看我们的[贡献指南](CONTRIBUTING.md)了解详情。
