@@ -684,7 +684,7 @@ export const useMatrixStore = defineStore('matrix', () => {
                       }
                       globalLoginProgress.completeStep('messages', { preloadedRooms: topRooms.length })
                     } catch (error) {
-                      globalLoginProgress.markStepError('messages', error.message)
+                      globalLoginProgress.markStepError('messages', error.message || '消息获取失败')
                       globalLoginProgress.completeStep('messages') // 即使出错也继续
                     }
                   }, 500)
@@ -692,7 +692,7 @@ export const useMatrixStore = defineStore('matrix', () => {
                   return rooms
                 } catch (roomsError) {
                   console.warn('刷新房间列表失败:', roomsError)
-                  globalLoginProgress.markStepError('rooms', roomsError.message)
+                  globalLoginProgress.markStepError('rooms', roomsError.message || '房间获取失败')
                   globalLoginProgress.completeStep('rooms') // 即使出错也继续
                   return []
                 }
@@ -738,12 +738,12 @@ export const useMatrixStore = defineStore('matrix', () => {
       console.log('💡 没有找到有效登录信息')
       return false
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Matrix初始化失败:', error)
       
       // 导入进度管理并标记错误
       const { globalLoginProgress } = await import('@/composables/useLoginProgress')
-      globalLoginProgress.markStepError('auth', error.message)
+      globalLoginProgress.markStepError('auth', error?.message || '认证失败')
       globalLoginProgress.cancelLoginProgress()
       
       await cleanupMatrixClient()
@@ -1510,7 +1510,7 @@ export const useMatrixStore = defineStore('matrix', () => {
           globalLoginProgress.completeStep('rooms', { isTestUser: true })
         } catch (clientError) {
           console.warn('Failed to create Matrix client for test user:', clientError)
-          globalLoginProgress.markStepError('rooms', clientError.message)
+          globalLoginProgress.markStepError('rooms', clientError.message || '客户端错误')
           
           // 对于测试用户，即使客户端创建失败也继续，但设置一个模拟客户端
           matrixClient.value = {
@@ -1557,7 +1557,7 @@ export const useMatrixStore = defineStore('matrix', () => {
           await loadTestWorldChannel()
           globalLoginProgress.completeStep('messages', { isTestUser: true })
         } catch (error) {
-          globalLoginProgress.markStepError('messages', error.message)
+          globalLoginProgress.markStepError('messages', error.message || '消息同步失败')
           globalLoginProgress.completeStep('messages') // 继续完成
         }
 
@@ -1605,7 +1605,7 @@ export const useMatrixStore = defineStore('matrix', () => {
             globalLoginProgress.completeStep('ready')
           }, 1500)
         } catch (syncError) {
-          globalLoginProgress.markStepError('rooms', syncError.message)
+          globalLoginProgress.markStepError('rooms', syncError.message || '同步失败')
           globalLoginProgress.completeStep('rooms') // 继续完成
           globalLoginProgress.completeStep('messages')
           globalLoginProgress.completeStep('ready')
@@ -1621,7 +1621,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       console.error('Matrix login error:', err)
       
       // 标记登录失败并取消进度
-      globalLoginProgress.markStepError('auth', error.value)
+      globalLoginProgress.markStepError('auth', error.value || '登录失败')
       globalLoginProgress.cancelLoginProgress()
       
       return { success: false, error: error.value }
@@ -3848,7 +3848,7 @@ export const useMatrixStore = defineStore('matrix', () => {
             return null
           }
         })
-        .filter((msg): msg is MatrixMessage => msg !== null)
+        .filter((msg: any): msg is MatrixMessage => msg !== null)
         .sort((a: MatrixMessage, b: MatrixMessage) => a.timestamp - b.timestamp)
 
       // 更新本地消息存储
@@ -4003,6 +4003,620 @@ export const useMatrixStore = defineStore('matrix', () => {
     updateThreadReplyCount,
     sendReplyMessage,
     sendTypingNotification
+  }
+
+  // ==================== 高级房间管理功能 ====================
+
+  // 踢出房间成员
+  const kickMemberFromRoom = async (roomId: string, userId: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix客户端未初始化')
+      }
+
+      console.log(`👢 踢出成员: ${userId} from room: ${roomId}`)
+
+      // 检查权限
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      // 检查当前用户是否有权限踢出成员
+      const powerLevels = room.currentState.getStateEvents('m.room.power_levels', '')
+      if (powerLevels) {
+        const powerLevelContent = powerLevels.getContent()
+        const currentUserPower = powerLevels.getPowerLevelForUser(matrixClient.value.getUserId() || '')
+        const targetUserPower = powerLevels.getPowerLevelForUser(userId)
+        
+        if (currentUserPower <= targetUserPower) {
+          throw new Error('权限不足，无法踢出该成员')
+        }
+      }
+
+      // 调用Matrix API踢出成员
+      await matrixClient.value.kickUser(roomId, userId, '已被管理员踢出')
+      
+      console.log(`✅ 成功踢出成员: ${userId} from room: ${roomId}`)
+
+      // 从本地房间列表中移除该成员
+      const roomInStore = rooms.value.find(r => r.id === roomId)
+      if (roomInStore && roomInStore.members) {
+        const memberIndex = roomInStore.members.findIndex(member => member === userId)
+        if (memberIndex !== -1) {
+          roomInStore.members.splice(memberIndex, 1)
+          console.log(`🗑️ 从本地列表移除成员: ${userId}`)
+        }
+      }
+
+      return { success: true }
+
+    } catch (error: any) {
+      console.error('踢出成员失败:', error)
+      return {
+        success: false,
+        error: error.message || '踢出成员失败'
+      }
+    }
+  }
+
+  // 封禁用户
+  const banUserFromRoom = async (roomId: string, userId: string, reason?: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix客户端未初始化')
+      }
+
+      console.log(`🚫 封禁用户: ${userId} from room: ${roomId}`)
+
+      // 检查权限
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      // 检查当前用户是否有权限封禁成员
+      const powerLevels = room.currentState.getStateEvents('m.room.power_levels', '')
+      if (powerLevels) {
+        const powerLevelContent = powerLevels.getContent()
+        const currentUserPower = powerLevels.getPowerLevelForUser(matrixClient.value.getUserId() || '')
+        const targetUserPower = powerLevels.getPowerLevelForUser(userId)
+        
+        if (currentUserPower <= targetUserPower) {
+          throw new Error('权限不足，无法封禁该用户')
+        }
+      }
+
+      // 调用Matrix API封禁用户
+      await matrixClient.value.banUser(roomId, userId, reason || '已被管理员封禁')
+      
+      console.log(`✅ 成功封禁用户: ${userId} from room: ${roomId}`)
+
+      // 从本地房间列表中移除该成员
+      const roomInStore = rooms.value.find(r => r.id === roomId)
+      if (roomInStore && roomInStore.members) {
+        const memberIndex = roomInStore.members.findIndex(member => member === userId)
+        if (memberIndex !== -1) {
+          roomInStore.members.splice(memberIndex, 1)
+          console.log(`🗑️ 从本地列表移除被封禁用户: ${userId}`)
+        }
+      }
+
+      return { success: true }
+
+    } catch (error: any) {
+      console.error('封禁用户失败:', error)
+      return {
+        success: false,
+        error: error.message || '封禁用户失败'
+      }
+    }
+  }
+
+  // 解封用户
+  const unbanUserFromRoom = async (roomId: string, userId: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix客户端未初始化')
+      }
+
+      console.log(`🔓 解封用户: ${userId} in room: ${roomId}`)
+
+      // 检查权限
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      // 检查当前用户是否有权限解封用户
+      const powerLevels = room.currentState.getStateEvents('m.room.power_levels', '')
+      if (powerLevels) {
+        const powerLevelContent = powerLevels.getContent()
+        const currentUserPower = powerLevels.getPowerLevelForUser(matrixClient.value.getUserId() || '')
+        
+        // 只有高权限用户才能解封
+        if (currentUserPower < 50) { // 假设50为管理员权限
+          throw new Error('权限不足，无法解封用户')
+        }
+      }
+
+      // 调用Matrix API解封用户
+      await matrixClient.value.unbanUser(roomId, userId)
+      
+      console.log(`✅ 成功解封用户: ${userId} in room: ${roomId}`)
+
+      return { success: true }
+
+    } catch (error: any) {
+      console.error('解封用户失败:', error)
+      return {
+        success: false,
+        error: error.message || '解封用户失败'
+      }
+    }
+  }
+
+  // 设置房间权限级别
+  const setRoomPowerLevels = async (roomId: string, powerLevels: any): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix客户端未初始化')
+      }
+
+      console.log(`⚙️ 设置房间权限级别: ${roomId}`)
+
+      // 检查权限
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      // 检查当前用户是否有权限修改权限级别
+      const currentPowerLevels = room.currentState.getStateEvents('m.room.power_levels', '')
+      if (currentPowerLevels) {
+        const currentUserPower = currentPowerLevels.getPowerLevelForUser(matrixClient.value.getUserId() || '')
+        const currentMaxPower = currentPowerLevels.getContent().users_default || 0
+        
+        if (currentUserPower < currentMaxPower) {
+          throw new Error('权限不足，无法修改房间权限')
+        }
+      }
+
+      // 发送权限级别事件
+      await matrixClient.value.sendStateEvent(roomId, 'm.room.power_levels', powerLevels, '')
+      
+      console.log(`✅ 成功设置房间权限级别: ${roomId}`)
+
+      return { success: true }
+
+    } catch (error: any) {
+      console.error('设置房间权限级别失败:', error)
+      return {
+        success: false,
+        error: error.message || '设置房间权限级别失败'
+      }
+    }
+  }
+
+  // 获取房间成员列表
+  const getRoomMembersList = async (roomId: string): Promise<{ success: boolean; members?: Array<{ userId: string; displayName?: string; avatarUrl?: string; powerLevel: number }>; error?: string }> => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix客户端未初始化')
+      }
+
+      console.log(`👥 获取房间成员列表: ${roomId}`)
+
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      // 获取房间成员
+      const members = room.getJoinedMembers().map((member: any) => ({
+        userId: member.userId,
+        displayName: member.name,
+        avatarUrl: member.avatarUrl,
+        powerLevel: room.getPowerLevelForUser(member.userId) || 0
+      }))
+
+      console.log(`✅ 获取到 ${members.length} 个房间成员`)
+
+      return {
+        success: true,
+        members
+      }
+
+    } catch (error: any) {
+      console.error('获取房间成员列表失败:', error)
+      return {
+        success: false,
+        error: error.message || '获取房间成员列表失败'
+      }
+    }
+  }
+
+  // 获取房间权限设置
+  const getRoomPowerLevels = async (roomId: string): Promise<{ success: boolean; powerLevels?: any; error?: string }> => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix客户端未初始化')
+      }
+
+      console.log(`⚙️ 获取房间权限设置: ${roomId}`)
+
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      // 获取权限级别事件
+      const powerLevelsEvent = room.currentState.getStateEvents('m.room.power_levels', '')
+      if (powerLevelsEvent) {
+        const powerLevels = powerLevelsEvent.getContent()
+        console.log(`✅ 获取到房间权限设置:`, powerLevels)
+        return {
+          success: true,
+          powerLevels
+        }
+      } else {
+        // 使用默认权限级别
+        const defaultPowerLevels = {
+          version: 1,
+          users: {},
+          users_default: 0,
+          events: {
+            'm.room.power_levels': 100,
+            'm.room.create': 100,
+            'm.room.join_rules': 100,
+            'm.room.aliases': 100,
+            'm.room.avatar': 50,
+            'm.room.name': 50,
+            'm.room.topic': 50,
+            'm.room.canonical_alias': 50,
+            'm.room.pinned_events': 50,
+            'm.room.history_visibility': 100
+          },
+          events_default: 0,
+          state_default: 50,
+          ban: 50,
+          kick: 50,
+          redact: 50,
+          invite: 0
+        }
+        
+        console.log(`✅ 使用默认权限设置`)
+        return {
+          success: true,
+          powerLevels: defaultPowerLevels
+        }
+      }
+
+    } catch (error: any) {
+      console.error('获取房间权限设置失败:', error)
+      return {
+        success: false,
+        error: error.message || '获取房间权限设置失败'
+      }
+    }
+  }
+
+  // 设置房间设置
+  const setRoomSettings = async (roomId: string, settings: any): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix客户端未初始化')
+      }
+
+      console.log(`⚙️ 设置房间配置: ${roomId}`, settings)
+
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      // 检查权限
+      const powerLevels = room.currentState.getStateEvents('m.room.power_levels', '')
+      if (powerLevels) {
+        const currentUserPower = powerLevels.getPowerLevelForUser(matrixClient.value.getUserId() || '')
+        const currentMaxPower = powerLevels.getContent().users_default || 0
+        
+        if (currentUserPower < currentMaxPower) {
+          throw new Error('权限不足，无法修改房间设置')
+        }
+      }
+
+      // 根据设置类型发送相应的状态事件
+      if (settings.name) {
+        await matrixClient.value.sendStateEvent(roomId, 'm.room.name', { name: settings.name }, '')
+      }
+      if (settings.topic) {
+        await matrixClient.value.sendStateEvent(roomId, 'm.room.topic', { topic: settings.topic }, '')
+      }
+      if (settings.avatarUrl) {
+        await matrixClient.value.sendStateEvent(roomId, 'm.room.avatar', { url: settings.avatarUrl }, '')
+      }
+      if (settings.joinRule) {
+        await matrixClient.value.sendStateEvent(roomId, 'm.room.join_rules', { join_rule: settings.joinRule }, '')
+      }
+      if (settings.historyVisibility) {
+        await matrixClient.value.sendStateEvent(roomId, 'm.room.history_visibility', { history_visibility: settings.historyVisibility }, '')
+      }
+
+      console.log(`✅ 成功设置房间配置: ${roomId}`)
+
+      // 更新本地房间信息
+      const roomInStore = rooms.value.find(r => r.id === roomId)
+      if (roomInStore) {
+        if (settings.name) roomInStore.name = settings.name
+        if (settings.topic) roomInStore.topic = settings.topic
+        if (settings.avatarUrl) roomInStore.avatarUrl = settings.avatarUrl
+        if (settings.joinRule) roomInStore.joinRule = settings.joinRule
+        if (settings.historyVisibility) roomInStore.historyVisibility = settings.historyVisibility
+      }
+
+      return { success: true }
+
+    } catch (error: any) {
+      console.error('设置房间配置失败:', error)
+      return {
+        success: false,
+        error: error.message || '设置房间配置失败'
+      }
+    }
+  }
+
+  // 获取房间设置
+  const getRoomSettings = async (roomId: string): Promise<{ success: boolean; settings?: any; error?: string }> => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix客户端未初始化')
+      }
+
+      console.log(`⚙️ 获取房间配置: ${roomId}`)
+
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      const settings = {
+        name: room.name,
+        topic: room.currentState.getStateEvents('m.room.topic', '')?.getContent()?.topic || '',
+        avatarUrl: room.avatarUrl,
+        joinRule: room.getJoinRule(),
+        historyVisibility: room.getHistoryVisibility(),
+        memberCount: room.getJoinedMemberCount(),
+        encrypted: room.hasEncryptionStateEvent()
+      }
+
+      console.log(`✅ 获取到房间配置:`, settings)
+
+      return {
+        success: true,
+        settings
+      }
+
+    } catch (error: any) {
+      console.error('获取房间配置失败:', error)
+      return {
+        success: false,
+        error: error.message || '获取房间配置失败'
+      }
+    }
+  }
+
+  // 获取房间管理历史记录
+  const getRoomManagementHistory = async (roomId: string, limit: number = 50): Promise<{ success: boolean; history?: any[]; error?: string }> => {
+    try {
+      if (!matrixClient.value) {
+        throw new Error('Matrix客户端未初始化')
+      }
+
+      console.log(`📜 获取房间管理历史记录: ${roomId} (limit: ${limit})`)
+
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      // 从localStorage获取历史记录
+      const historyKey = `room-management-history-${roomId}`
+      const savedHistory = localStorage.getItem(historyKey)
+      
+      if (savedHistory) {
+        const history = JSON.parse(savedHistory)
+        console.log(`✅ 从localStorage获取到 ${history.length} 条历史记录`)
+        return {
+          success: true,
+          history: history.slice(-limit) // 返回最新的limit条记录
+        }
+      } else {
+        // 如果没有历史记录，返回空数组
+        console.log('📭 没有找到历史记录')
+        return {
+          success: true,
+          history: []
+        }
+      }
+
+    } catch (error: any) {
+      console.error('获取房间管理历史记录失败:', error)
+      return {
+        success: false,
+        error: error.message || '获取房间管理历史记录失败'
+      }
+    }
+  }
+
+  // 添加房间管理历史记录
+  const addRoomManagementHistory = (roomId: string, action: string, details: any): void => {
+    try {
+      console.log(`📝 添加房间管理历史记录: ${action} in room: ${roomId}`, details)
+
+      const historyKey = `room-management-history-${roomId}`
+      const timestamp = new Date().toISOString()
+      
+      const historyEntry = {
+        id: `${roomId}-${Date.now()}`,
+        timestamp,
+        action,
+        details,
+        operator: currentUser.value?.id || 'unknown'
+      }
+
+      // 从localStorage获取现有历史记录
+      const savedHistory = localStorage.getItem(historyKey)
+      const history = savedHistory ? JSON.parse(savedHistory) : []
+      
+      // 添加新记录
+      history.unshift(historyEntry)
+      
+      // 限制历史记录数量（最多保留100条）
+      if (history.length > 100) {
+        history.splice(100)
+      }
+      
+      // 保存到localStorage
+      localStorage.setItem(historyKey, JSON.stringify(history))
+      
+      console.log(`✅ 房间管理历史记录已保存: ${action}`)
+
+    } catch (error) {
+      console.error('添加房间管理历史记录失败:', error)
+    }
+  }
+
+  // 检查用户权限
+  const checkUserPermission = (roomId: string, userId: string, requiredPowerLevel: number): boolean => {
+    try {
+      if (!matrixClient.value) {
+        return false
+      }
+
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        return false
+      }
+
+      const powerLevels = room.currentState.getStateEvents('m.room.power_levels', '')
+      if (!powerLevels) {
+        return false
+      }
+
+      const userPowerLevel = powerLevels.getPowerLevelForUser(userId)
+      return userPowerLevel >= requiredPowerLevel
+
+    } catch (error) {
+      console.error('检查用户权限失败:', error)
+      return false
+    }
+  }
+
+  // 获取用户权限级别
+  const getUserPowerLevel = (roomId: string, userId: string): number => {
+    try {
+      if (!matrixClient.value) {
+        return 0
+      }
+
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        return 0
+      }
+
+      const powerLevels = room.currentState.getStateEvents('m.room.power_levels', '')
+      if (!powerLevels) {
+        return 0
+      }
+
+      return powerLevels.getPowerLevelForUser(userId)
+
+    } catch (error) {
+      console.error('获取用户权限级别失败:', error)
+      return 0
+    }
+  }
+
+  // 获取房间管理员列表
+  const getRoomAdmins = (roomId: string): string[] => {
+    try {
+      if (!matrixClient.value) {
+        return []
+      }
+
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        return []
+      }
+
+      const powerLevels = room.currentState.getStateEvents('m.room.power_levels', '')
+      if (!powerLevels) {
+        return []
+      }
+
+      const powerLevelContent = powerLevels.getContent()
+      const admins = room.getJoinedMembers()
+        .filter((member: any) => {
+          const powerLevel = powerLevels.getPowerLevelForUser(member.userId)
+          return powerLevel >= (powerLevelContent.users_default || 0)
+        })
+        .map((member: any) => member.userId)
+
+      console.log(`👑 获取到 ${admins.length} 个房间管理员`)
+      return admins
+
+    } catch (error) {
+      console.error('获取房间管理员列表失败:', error)
+      return []
+    }
+  }
+
+  // 获取房间所有者
+  const getRoomOwner = (roomId: string): string | null => {
+    try {
+      if (!matrixClient.value) {
+        return null
+      }
+
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        return null
+      }
+
+      // 房间创建者通常是房间所有者
+      const creationEvent = room.currentState.getStateEvents('m.room.create', '')
+      if (creationEvent) {
+        return creationEvent.getSender()
+      }
+
+      return null
+
+    } catch (error) {
+      console.error('获取房间所有者失败:', error)
+      return null
+    }
+  }
+
+  return {
+    // ... 现有返回内容
+    // ...matrixStore,
+    
+    // 高级房间管理功能
+    kickMemberFromRoom,
+    banUserFromRoom,
+    unbanUserFromRoom,
+    setRoomPowerLevels,
+    getRoomMembersList,
+    getRoomPowerLevels,
+    setRoomSettings,
+    getRoomSettings,
+    getRoomManagementHistory,
+    addRoomManagementHistory,
+    checkUserPermission,
+    getUserPowerLevel,
+    getRoomAdmins,
+    getRoomOwner
   }
 })
 
