@@ -36,6 +36,12 @@
         <button class="toolbar-btn" @click="toggleEmoji" title="表情">
           😊
         </button>
+        <button class="toolbar-btn voip-voice-btn" @click="initiateVoiceCall" title="语音通话">
+          📞
+        </button>
+        <button class="toolbar-btn voip-video-btn" @click="initiateVideoCall" title="视频通话">
+          📹
+        </button>
       </div>
       
       <div class="input-area">
@@ -241,6 +247,58 @@ const toggleEmoji = () => {
   const emojis = ['😊', '😂', '❤️', '👍', '👎', '😢', '😮', '😡', '🎉', '🔥']
   const emoji = emojis[Math.floor(Math.random() * emojis.length)]
   messageInput.value += emoji
+}
+
+// VoIP通话方法
+const initiateVoiceCall = () => {
+  console.log('📞 发起语音通话')
+  if (!props.roomId) {
+    alert('无法获取房间信息')
+    return
+  }
+  
+  // 获取房间成员信息
+  const targetUserId = getTargetUserId()
+  console.log('发起语音通话:', {
+    roomId: props.roomId,
+    targetUserId
+  })
+  
+  alert(`语音通话\n\n房间: ${props.roomId}\n目标用户: ${targetUserId || '未知'}\n\n功能开发中...`)
+}
+
+const initiateVideoCall = () => {
+  console.log('📹 发起视频通话')
+  if (!props.roomId) {
+    alert('无法获取房间信息')
+    return
+  }
+  
+  // 获取房间成员信息
+  const targetUserId = getTargetUserId()
+  console.log('发起视频通话:', {
+    roomId: props.roomId,
+    targetUserId
+  })
+  
+  alert(`视频通话\n\n房间: ${props.roomId}\n目标用户: ${targetUserId || '未知'}\n\n功能开发中...`)
+}
+
+// 获取目标用户ID（用于通话）
+const getTargetUserId = (): string | null => {
+  if (!matrixStore.matrixClient) return null
+  
+  const room = matrixStore.matrixClient.getRoom(props.roomId)
+  if (!room) return null
+  
+  // 对于私聊房间，获取对方用户ID
+  const members = room.getJoinedMembers()
+  const memberIds = Object.keys(members)
+  const currentUserId = matrixStore.matrixClient.getUserId()
+  
+  // 找到不是当前用户的成员
+  const otherUserId = memberIds.find(id => id !== currentUserId)
+  return otherUserId || null
 }
 
 const loadMessages = async () => {
@@ -497,6 +555,17 @@ onMounted(() => {
 .toolbar-btn:hover {
   background: var(--hover-bg, #f0f0f0);
   color: var(--accent-color, #07c160);
+}
+
+/* VoIP按钮特定样式 */
+.voip-voice-btn:hover {
+  background: rgba(76, 175, 80, 0.1);
+  color: #4CAF50;
+}
+
+.voip-video-btn:hover {
+  background: rgba(33, 150, 243, 0.1);
+  color: #2196F3;
 }
 
 .input-area {
