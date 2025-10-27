@@ -24,6 +24,11 @@ const router = createRouter({
       component: () => import('@/components/WeChatStyleLayout.vue')
     },
     {
+      path: '/thread-demo',
+      name: 'thread-demo',
+      component: () => import('@/components/ThreadDemo.vue')
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       redirect: '/login'

@@ -152,6 +152,11 @@ export interface MatrixMessage {
     senderName: string
     content: string
   }
+  // 线程相关字段
+  threadRootId?: string  // 线程根消息ID
+  threadId?: string      // 线程ID
+  isThreadRoot?: boolean // 是否为线程根消息
+  threadReplyCount?: number // 线程回复数量
 }
 
 export interface MessageReaction {
@@ -1219,17 +1224,44 @@ export const useMatrixStore = defineStore('matrix', () => {
 
           const content = eventContent?.body || eventContent?.formatted_body || ''
 
+          // 获取发送者显示名称
+          const sender = event.getSender()
+          let senderName = sender
+          
+          // 尝试获取用户的显示名称
+          try {
+            const senderMember = room.getMember(sender)
+            if (senderMember && senderMember.name) {
+              senderName = senderMember.name
+            } else {
+              // 从Matrix ID中提取用户名
+              const match = sender.match(/@([^:]+):/)
+              if (match) {
+                senderName = match[1]
+              }
+            }
+          } catch (error) {
+            console.warn('获取发送者显示名称失败:', error)
+            // 从Matrix ID中提取用户名作为备用
+            const match = sender.match(/@([^:]+):/)
+            if (match) {
+              senderName = match[1]
+            }
+          }
+
           const newMessage: MatrixMessage = {
             id: event.getId(),
             roomId: room.roomId,
             content,
-            sender: event.getSender(),
-            senderName: event.getSender(),
+            sender: sender,
+            senderName: senderName,
             timestamp: event.getTs(),
             type: event.getType(),
             eventId: event.getId(),
             encrypted: !!eventContent?.algorithm,
-            status: 'sent' as const
+            status: 'sent' as const,
+            isOwn: sender === matrixClient.value?.getUserId(),
+            msgtype: eventContent?.msgtype || 'm.text'
           }
 
           // 处理文件消息
@@ -2385,10 +2417,15 @@ export const useMatrixStore = defineStore('matrix', () => {
         const welcomeMessage: MatrixMessage = {
           id: 'welcome-msg-' + Date.now(),
           sender: 'system',
+          senderName: '文件传输助手',
           content: '欢迎使用文件传输助手！\n\n您可以在这里：\n• 发送文件和图片\n• 保存重要消息\n• 进行文件管理\n\n开始发送您的第一个文件吧！',
           timestamp: Date.now(),
           roomId: roomId,
-          type: 'm.room.message'
+          type: 'm.room.message',
+          eventId: 'welcome-msg-' + Date.now(),
+          encrypted: false,
+          status: 'sent',
+          isOwn: false
         }
 
         const welcomeMessages = [welcomeMessage]
@@ -2818,9 +2855,14 @@ export const useMatrixStore = defineStore('matrix', () => {
           roomId,
           content,
           sender: currentUser.value.id,
-          senderName: currentUser.value.displayName || currentUser.value.username,
+          senderName: currentUser.value.displayName || currentUser.value.username || '我',
           timestamp: Date.now(),
-          type: 'm.room.message'
+          type: 'm.room.message',
+          eventId: 'msg-' + Date.now(),
+          encrypted: false,
+          status: 'sent',
+          isOwn: true,
+          msgtype: 'm.text'
         }
 
         // 添加到消息列表
@@ -2841,7 +2883,11 @@ export const useMatrixStore = defineStore('matrix', () => {
           senderName: currentUser.value.displayName || 'Test User',
           timestamp: Date.now(),
           type: 'm.room.message',
-          status: 'sent'
+          eventId: Date.now().toString(),
+          encrypted: false,
+          status: 'sent',
+          isOwn: true,
+          msgtype: 'm.text'
         }
 
         // 添加到本地消息列表
@@ -3689,6 +3735,190 @@ export const useMatrixStore = defineStore('matrix', () => {
   // 优化的fetchMatrixMessages函数（已整合到主函数中）
   const fetchMatrixMessagesOptimized = fetchMatrixMessages
 
+  // ==================== 线程功能 ====================
+
+  /**
+   * 发送线程回复
+   */
+  const sendThreadReply = async (roomId: string, rootEventId: string, content: string): Promise<void> => {
+    if (!matrixClient?.value) {
+      throw new Error('Matrix客户端未初始化')
+    }
+
+    try {
+      console.log(`🧵 发送线程回复: ${rootEventId} -> ${content}`)
+
+      // 发送线程回复事件
+      const response = await matrixClient.value.sendEvent(roomId, 'm.room.message', {
+        msgtype: 'm.text',
+        body: content,
+        'm.relates_to': {
+          rel_type: 'm.thread',
+          event_id: rootEventId,
+          is_falling_back: true,
+          'm.in_reply_to': {
+            event_id: rootEventId
+          }
+        }
+      })
+
+      console.log('✅ 线程回复发送成功:', response)
+
+      // 创建本地消息对象
+      const threadMessage: MatrixMessage = {
+        id: response.event_id,
+        roomId: roomId,
+        content: content,
+        sender: matrixClient.value.getUserId() || '',
+        senderName: matrixClient.value.getUserId() || '',
+        timestamp: Date.now(),
+        type: 'm.room.message',
+        eventId: response.event_id,
+        encrypted: false,
+        status: 'sent',
+        isOwn: true,
+        threadRootId: rootEventId,
+        threadId: rootEventId
+      }
+
+      // 添加到本地消息列表
+      const roomMessages = messages.value.get(roomId) || []
+      messages.value.set(roomId, [...roomMessages, threadMessage])
+
+      // 更新根消息的线程回复计数
+      updateThreadReplyCount(roomId, rootEventId, 1)
+
+      // 保存消息到存储
+      saveMessagesToStorage()
+
+    } catch (error) {
+      console.error('❌ 发送线程回复失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 获取线程消息
+   */
+  const fetchThreadMessages = async (roomId: string, rootEventId: string): Promise<MatrixMessage[]> => {
+    if (!matrixClient?.value) {
+      throw new Error('Matrix客户端未初始化')
+    }
+
+    try {
+      console.log(`🧵 获取线程消息: ${rootEventId}`)
+
+      const room = matrixClient.value.getRoom(roomId)
+      if (!room) {
+        throw new Error('房间不存在')
+      }
+
+      // 使用Matrix客户端的关系API获取线程消息
+      const threadRelations = await matrixClient.value.relations(
+        roomId,
+        rootEventId,
+        'm.thread',
+        'm.room.message'
+      )
+
+      console.log(`✅ 获取到 ${threadRelations.events?.length || 0} 条线程消息`)
+
+      // 转换为本地消息格式
+      const threadMessages: MatrixMessage[] = (threadRelations.events || [])
+        .map((event: any): MatrixMessage | null => {
+          try {
+            const eventContent = event.getContent()
+            return {
+              id: event.getId(),
+              roomId: roomId,
+              content: eventContent?.body || '',
+              sender: event.getSender(),
+              senderName: event.getSender(),
+              timestamp: event.getTs(),
+              type: event.getType(),
+              eventId: event.getId(),
+              encrypted: !!eventContent?.algorithm,
+              status: 'sent',
+              isOwn: event.getSender() === matrixClient.value?.getUserId(),
+              threadRootId: rootEventId,
+              threadId: rootEventId
+            }
+          } catch (error) {
+            console.warn('处理线程消息失败:', error)
+            return null
+          }
+        })
+        .filter((msg): msg is MatrixMessage => msg !== null)
+        .sort((a: MatrixMessage, b: MatrixMessage) => a.timestamp - b.timestamp)
+
+      // 更新本地消息存储
+      const roomMessages = messages.value.get(roomId) || []
+      const existingIds = new Set(roomMessages.map((m: MatrixMessage) => m.id))
+      const newThreadMessages = threadMessages.filter((msg: MatrixMessage) => !existingIds.has(msg.id))
+
+      if (newThreadMessages.length > 0) {
+        messages.value.set(roomId, [...roomMessages, ...newThreadMessages])
+        saveMessagesToStorage()
+      }
+
+      return threadMessages
+
+    } catch (error) {
+      console.error('❌ 获取线程消息失败:', error)
+      
+      // 返回本地缓存的线程消息
+      return getThreadMessages(roomId, rootEventId)
+    }
+  }
+
+  /**
+   * 从本地获取线程消息
+   */
+  const getThreadMessages = (roomId: string, rootEventId: string): MatrixMessage[] => {
+    const roomMessages = messages.value.get(roomId) || []
+    return roomMessages
+      .filter((msg: MatrixMessage) => msg.threadRootId === rootEventId && msg.id !== rootEventId)
+      .sort((a: MatrixMessage, b: MatrixMessage) => a.timestamp - b.timestamp)
+  }
+
+  /**
+   * 标记消息为线程根消息
+   */
+  const markMessageAsThreadRoot = (roomId: string, messageId: string): void => {
+    const roomMessages = messages.value.get(roomId) || []
+    const messageIndex = roomMessages.findIndex((msg: MatrixMessage) => msg.id === messageId)
+    
+    if (messageIndex !== -1) {
+      roomMessages[messageIndex].isThreadRoot = true
+      roomMessages[messageIndex].threadId = messageId
+      roomMessages[messageIndex].threadReplyCount = 0
+      
+      messages.value.set(roomId, [...roomMessages])
+      saveMessagesToStorage()
+      
+      console.log(`✅ 消息 ${messageId} 已标记为线程根消息`)
+    }
+  }
+
+  /**
+   * 更新线程回复计数
+   */
+  const updateThreadReplyCount = (roomId: string, rootEventId: string, increment: number): void => {
+    const roomMessages = messages.value.get(roomId) || []
+    const rootMessageIndex = roomMessages.findIndex((msg: MatrixMessage) => msg.id === rootEventId)
+    
+    if (rootMessageIndex !== -1) {
+      const rootMessage = roomMessages[rootMessageIndex]
+      rootMessage.threadReplyCount = (rootMessage.threadReplyCount || 0) + increment
+      rootMessage.isThreadRoot = true
+      
+      messages.value.set(roomId, [...roomMessages])
+      saveMessagesToStorage()
+      
+      console.log(`✅ 线程 ${rootEventId} 回复计数更新: ${rootMessage.threadReplyCount}`)
+    }
+  }
+
   return {
     // Matrix状态
     connection,
@@ -3764,7 +3994,15 @@ export const useMatrixStore = defineStore('matrix', () => {
     addReaction,
     removeReaction,
     searchMessages,
+
+    // 线程功能
+    sendThreadReply,
+    fetchThreadMessages,
+    getThreadMessages,
+    markMessageAsThreadRoot,
+    updateThreadReplyCount,
     sendReplyMessage,
     sendTypingNotification
   }
 })
+
