@@ -61,6 +61,25 @@
           <span class="nav-icon">🏠</span>
         </div>
 
+        <!-- 主题选择 -->
+        <div
+          class="nav-item"
+          :class="{ active: activeNav === 'themes' }"
+          title="主题设置"
+          @click="setActiveNav('themes')"
+        >
+          <span class="nav-icon">🎨</span>
+        </div>
+
+        <!-- 创建私聊 -->
+        <div
+          class="nav-item"
+          title="创建私聊"
+          @click="showDirectMessageDialog"
+        >
+          <span class="nav-icon">💬</span>
+        </div>
+
         <!-- 探索房间 -->
         <div
           class="nav-item"
@@ -199,6 +218,11 @@
             </svg>
           </button>
         </div>
+      </div>
+
+      <!-- 主题选择面板 -->
+      <div v-if="activeNav === 'themes'" class="theme-panel">
+        <ThemeSelector />
       </div>
 
       <!-- 通讯录内容区域 -->
@@ -513,6 +537,23 @@
     class="context-menu-overlay"
     @click="hideContextMenu"
   ></div>
+
+
+
+  <!-- 私聊对话框 -->
+  <DirectMessageDialog
+    :visible="showDirectMessage"
+    @close="closeDirectMessageDialog"
+    @created="handleDirectMessageCreated"
+  />
+
+  <!-- 用户邀请对话框 -->
+  <UserInviteDialog
+    :visible="showUserInvite"
+    :room-info="inviteRoomInfo"
+    @close="closeUserInviteDialog"
+    @invited="handleUsersInvited"
+  />
 </template>
 
 <script setup lang="ts">
@@ -522,6 +563,9 @@ import { useMatrixStore } from '@/stores/matrix'
 import MatrixMessageAreaSimple from './MatrixMessageAreaSimple.vue'
 import StartDirectMessageDialog from './StartDirectMessageDialog.vue'
 import CreateGroupChatDialog from './CreateGroupChatDialog.vue'
+import ThemeSelector from './ThemeSelector.vue'
+import DirectMessageDialog from './DirectMessageDialog.vue'
+import UserInviteDialog from './UserInviteDialog.vue'
 import { passiveEventManager } from '@/utils/passiveEventManager'
 import { useErrorHandler } from '@/utils/errorSetup'
 // 导入缓存工具（开发环境）
@@ -540,6 +584,9 @@ const showStartDM = ref(false)
 const showCreateGroup = ref(false)
 const showExplore = ref(false)
 const showJoinRoom = ref(false)
+const showDirectMessage = ref(false)
+const showUserInvite = ref(false)
+const inviteRoomInfo = ref<any>(null)
 const joinRoomInput = ref('')
 const isJoiningRoom = ref(false)
 const retryingInit = ref(false)
@@ -575,6 +622,34 @@ const toggleMoreMenu = () => {
 
 const toggleSidebarMenu = () => {
   showSidebarMenu.value = !showSidebarMenu.value
+}
+
+// 新增功能方法
+const showDirectMessageDialog = () => {
+  showDirectMessage.value = true
+}
+
+const closeDirectMessageDialog = () => {
+  showDirectMessage.value = false
+}
+
+const handleDirectMessageCreated = (roomId: string) => {
+  console.log('私聊创建成功:', roomId)
+  selectRoom(roomId)
+}
+
+const showUserInviteDialog = (roomInfo: any) => {
+  inviteRoomInfo.value = roomInfo
+  showUserInvite.value = true
+}
+
+const closeUserInviteDialog = () => {
+  showUserInvite.value = false
+  inviteRoomInfo.value = null
+}
+
+const handleUsersInvited = (userIds: string[]) => {
+  console.log('用户邀请成功:', userIds)
 }
 
 // 点击外部关闭更多菜单
@@ -1197,6 +1272,12 @@ const joinPublicRoom = async (roomId: string) => {
 
 onMounted(async () => {
   console.log('🚀 WeChatStyleLayout 组件挂载开始')
+
+  // 监听主题切换事件
+  document.addEventListener('switchToChat', () => {
+    console.log('🎨 收到主题切换事件，切换到聊天界面')
+    setActiveNav('chat')
+  })
 
   // 初始化缓存监控（开发环境）
   if (process.env.NODE_ENV === 'development') {
@@ -2221,14 +2302,15 @@ if (typeof window !== 'undefined') {
 .wechat-layout {
   display: flex;
   height: 100vh;
-  background: linear-gradient(135deg, #2d5a27 0%, #3d6b35 100%);
+  background: var(--primary-bg, linear-gradient(135deg, #2d5a27 0%, #3d6b35 100%));
   font-family: 'Microsoft YaHei', sans-serif;
+  color: var(--primary-text, #000000);
 }
 
 /* 微信风格左侧导航栏 */
 .wechat-sidebar {
   width: 60px;
-  background: #2e2e2e;
+  background: var(--secondary-bg, #2e2e2e);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2378,9 +2460,9 @@ if (typeof window !== 'undefined') {
 /* 左侧聊天列表面板 */
 .chat-list-panel {
   width: 300px;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--secondary-bg, rgba(255, 255, 255, 0.95));
   backdrop-filter: blur(10px);
-  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  border-right: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
   display: flex;
   flex-direction: column;
 }
@@ -2388,10 +2470,12 @@ if (typeof window !== 'undefined') {
 /* 聊天列表头部 */
 .chat-list-header {
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
   display: flex;
   align-items: center;
   justify-content: space-between;
+  background: var(--secondary-bg, transparent);
+  color: var(--primary-text, #000000);
   background: rgba(255, 255, 255, 0.98);
   backdrop-filter: blur(10px);
 }
@@ -2555,6 +2639,7 @@ if (typeof window !== 'undefined') {
 .chat-list {
   flex: 1;
   overflow-y: auto;
+  background: var(--secondary-bg, transparent);
   /* 性能优化 */
   will-change: scroll-position;
   transform: translateZ(0);
@@ -2798,12 +2883,13 @@ if (typeof window !== 'undefined') {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  background: var(--primary-bg, #fafafa);
 }
 .message-list {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
-  background: #fafafa;
+  padding: 0;
+  background: var(--primary-bg, #fafafa);
   min-height: 0;
   /* 性能优化 */
   will-change: scroll-position;
@@ -3158,6 +3244,14 @@ if (typeof window !== 'undefined') {
 
 .join-btn:hover {
   background: linear-gradient(135deg, #4CAF50, #45a049);
+}
+
+/* 主题面板 */
+.theme-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  background: var(--primary-bg, #f8f8f8);
 }
 
 /* 通讯录面板 */

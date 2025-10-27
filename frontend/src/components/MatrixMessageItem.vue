@@ -91,13 +91,23 @@
       </div>
     </div>
 
-    <!-- 消息反应 -->
-    <div v-if="message.reactions && Object.keys(message.reactions).length > 0" class="message-reactions">
-      <button
-        v-for="(reaction, emoji) in message.reactions"
-        :key="emoji"
-        @click="toggleReaction(emoji)"
-        class="reaction-btn"
+    <!-- 消息反应面板 -->
+    <MessageReactionsPanel
+      :message="message"
+      :room-id="roomId"
+      :show-add-button="!message.isRedacted"
+    />
+
+    <!-- 已读回执指示器 -->
+    <ReadReceiptIndicator
+      :room-id="roomId"
+      :event-id="message.eventId || message.id"
+      :timestamp="message.timestamp"
+      :is-own-message="message.isOwn"
+    />
+
+    <!-- 输入状态指示器 -->
+    <TypingIndicator :room-id="roomId" />
         :class="{ 'has-reacted': reaction.hasReacted }"
       >
         <span class="reaction-emoji">{{ emoji }}</span>
@@ -153,6 +163,9 @@
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
 import { useMatrixStore } from '@/stores/matrix'
+import MessageReactionsPanel from './MessageReactionsPanel.vue'
+import ReadReceiptIndicator from './ReadReceiptIndicator.vue'
+import TypingIndicator from './TypingIndicator.vue'
 
 interface MessageReaction {
   count: number
