@@ -386,11 +386,34 @@
         </div>
       </div>
       <div v-else class="active-chat-container">
+        <!-- 聊天头部 -->
+        <div class="chat-header">
+          <div class="chat-header-info">
+            <div class="chat-avatar">
+              {{ getCurrentRoomInitials() }}
+            </div>
+            <div class="chat-details">
+              <div class="chat-name">{{ getCurrentRoomDisplayName() }}</div>
+              <div class="chat-status">{{ getCurrentRoomStatus() }}</div>
+            </div>
+          </div>
+          <div class="chat-header-actions">
+            <button class="header-action-btn" @click="showRoomInfo" title="房间信息">
+              ℹ️
+            </button>
+            <button class="header-action-btn" @click="showRoomMembers" title="成员列表">
+              👥
+            </button>
+            <button class="header-action-btn" @click="showRoomSettings" title="房间设置">
+              ⚙️
+            </button>
+          </div>
+        </div>
+        
+        <!-- 消息区域 -->
         <div class="message-list">
           <MatrixMessageAreaSimple :room-id="currentRoomId" />
         </div>
-        <!-- 预留输入区（如有输入框可放这里） -->
-        <!-- <div class="message-input"><YourInputComponent /></div> -->
       </div>
     </div>
 
@@ -688,6 +711,71 @@ const getUserInitials = (name: string) => {
 const getRoomInitials = (name: string) => {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
+
+// 获取当前房间的显示信息
+const getCurrentRoomInitials = () => {
+  const room = getCurrentRoom()
+  if (!room) return '?'
+  
+  // 对于私聊房间，尝试显示对方用户的首字母
+  if (room.memberCount === 2 && room.members) {
+    const currentUserId = matrixStore.matrixClient?.getUserId()
+    const otherUser = room.members.find(member => member !== currentUserId)
+    if (otherUser) {
+      const displayName = otherUser.split(':')[0].replace('@', '')
+      return getUserInitials(displayName)
+    }
+  }
+  
+  return getRoomInitials(room.name || room.id)
+}
+
+const getCurrentRoomDisplayName = () => {
+  const room = getCurrentRoom()
+  if (!room) return '未知房间'
+  
+  // 对于私聊房间，显示对方用户名
+  if (room.memberCount === 2 && room.members) {
+    const currentUserId = matrixStore.matrixClient?.getUserId()
+    const otherUser = room.members.find(member => member !== currentUserId)
+    if (otherUser) {
+      // 尝试从Matrix客户端获取用户显示名
+      if (matrixStore.matrixClient) {
+        const matrixRoom = matrixStore.matrixClient.getRoom(room.id)
+        if (matrixRoom) {
+          const member = matrixRoom.getMember(otherUser)
+          if (member && member.name) {
+            return member.name
+          }
+        }
+      }
+      // 回退到用户ID的显示名
+      return otherUser.split(':')[0].replace('@', '')
+    }
+  }
+  
+  return room.name || room.id
+}
+
+const getCurrentRoomStatus = () => {
+  const room = getCurrentRoom()
+  if (!room) return ''
+  
+  // 对于私聊房间，显示在线状态（如果可用）
+  if (room.memberCount === 2) {
+    return '私聊'
+  }
+  
+  // 对于群聊，显示成员数
+  return `${room.memberCount || 0} 人`
+}
+
+const getCurrentRoom = () => {
+  if (!currentRoomId.value) return null
+  return matrixStore.rooms.find(room => room.id === currentRoomId.value)
+}
+
+// 头部操作方法将在下面实现（避免重复声明）
 
 const formatTime = (timestamp: number) => {
   const date = new Date(timestamp)
@@ -2022,6 +2110,46 @@ const showRoomMembers = async () => {
   hideContextMenu()
 }
 
+// Matrix房间设置
+const showRoomSettings = () => {
+  const room = getCurrentRoom()
+  if (!room) {
+    console.log('❌ 未选择房间')
+    return
+  }
+  
+  console.log('⚙️ 显示房间设置:', room.name)
+  
+  const settingsInfo = [
+    `房间设置 - ${room.name}`,
+    ``,
+    `🏠 基本设置:`,
+    `• 房间名称: ${room.name}`,
+    `• 房间别名: ${room.alias || '无'}`,
+    `• 房间主题: ${room.topic || '无'}`,
+    `• 房间类型: ${room.type === 'public' ? '公开房间' : '私有房间'}`,
+    ``,
+    `👥 成员设置:`,
+    `• 成员数量: ${room.memberCount || 0} 人`,
+    `• 加入规则: ${room.joinRule || 'invite'}`,
+    `• 历史可见性: ${room.historyVisibility || 'shared'}`,
+    ``,
+    `🔐 安全设置:`,
+    `• 端到端加密: ${room.encrypted ? '已启用' : '未启用'}`,
+    `• 消息保留: 永久保存`,
+    ``,
+    `🔔 通知设置:`,
+    `• 未读消息: ${room.unreadCount || 0} 条`,
+    `• 消息提醒: 已启用`,
+    ``,
+    `💡 提示: 更多设置功能正在开发中`,
+    `详细信息请查看控制台`
+  ].join('\n')
+  
+  console.log('⚙️ 房间设置详情:', room)
+  alert(settingsInfo)
+}
+
 // Matrix加密信息
 const showEncryptionInfo = () => {
   if (!contextMenu.value.room) return
@@ -2884,6 +3012,83 @@ if (typeof window !== 'undefined') {
   flex-direction: column;
   min-height: 0;
   background: var(--primary-bg, #fafafa);
+}
+
+/* 聊天头部 */
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  min-height: 60px;
+}
+
+.chat-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chat-avatar {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #66BB6A, #4CAF50);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.chat-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  line-height: 1.2;
+}
+
+.chat-status {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.2;
+}
+
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-action-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #666;
+  transition: all 0.2s ease;
+}
+
+.header-action-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
 }
 .message-list {
   flex: 1;
