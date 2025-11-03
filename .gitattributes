@@ -1,2 +1,81 @@
-*.jar filter=lfs diff=lfs merge=lfs -text
-*.exe filter=lfs diff=lfs merge=lfs -text
+# Git LFS配置文件 - 用于管理大文件
+# 这些文件将被存储在Git LFS中，而不是直接存储在Git仓库中
+
+# PostgreSQL相关的大文件
+electron/postgres-full/bin/icudt67.dll filter=lfs diff=lfs merge=lfs -text
+electron/postgres-full/bin/icuin67.dll filter=lfs diff=lfs merge=lfs -text
+electron/postgres-full/bin/libcrypto-3-x64.dll filter=lfs diff=lfs merge=lfs -text
+electron/postgres-full/bin/libxml2.dll filter=lfs diff=lfs merge=lfs -text
+electron/postgres-full/bin/libxslt.dll filter=lfs diff=lfs merge=lfs -text
+electron/postgres-full/bin/wxbase317u_vc_custom.dll filter=lfs diff=lfs merge=lfs -text
+electron/postgres-full/bin/wxmsw317u_core_vc_custom.dll filter=lfs diff=lfs merge=lfs -text
+
+# Redis相关的大文件
+electron/redis-full/bin/redis-server.exe filter=lfs diff=lfs merge=lfs -text
+electron/redis-full/bin/redis-check-aof.exe filter=lfs diff=lfs merge=lfs -text
+electron/redis-full/bin/redis-check-rdb.exe filter=lfs diff=lfs merge=lfs -text
+
+# 构建输出的大文件
+electron/dist/*.exe filter=lfs diff=lfs merge=lfs -text
+electron/dist/*.msi filter=lfs diff=lfs merge=lfs -text
+electron/dist/*.dmg filter=lfs diff=lfs merge=lfs -text
+electron/dist/*.zip filter=lfs diff=lfs merge=lfs -text
+
+# 日志文件（如果很大）
+backend/logs/*.log filter=lfs diff=lfs merge=lfs -text
+*.log.202*.gz filter=lfs diff=lfs merge=lfs -text
+
+# 数据库文件
+**/*.db filter=lfs diff=lfs merge=lfs -text
+**/*.sqlite filter=lfs diff=lfs merge=lfs -text
+**/*.sqlite3 filter=lfs diff=lfs merge=lfs -text
+
+# 备份文件
+**/*.bak filter=lfs diff=lfs merge=lfs -text
+**/*.backup filter=lfs diff=lfs merge=lfs -text
+
+# 压缩包和安装包
+**/*.zip filter=lfs diff=lfs merge=lfs -text
+**/*.tar.gz filter=lfs diff=lfs merge=lfs -text
+**/*.7z filter=lfs diff=lfs merge=lfs -text
+**/*.rar filter=lfs diff=lfs merge=lfs -text
+
+# 镜像文件
+**/*.iso filter=lfs diff=lfs merge=lfs -text
+**/*.img filter=lfs diff=lfs merge=lfs -text
+
+# 大型文档和资源文件
+**/*.pdf filter=lfs diff=lfs merge=lfs -text
+**/*.psd filter=lfs diff=lfs merge=lfs -text
+**/*.ai filter=lfs diff=lfs merge=lfs -text
+**/*.sketch filter=lfs diff=lfs merge=lfs -text
+
+# 视频和音频文件
+**/*.mp4 filter=lfs diff=lfs merge=lfs -text
+**/*.avi filter=lfs diff=lfs merge=lfs -text
+**/*.mov filter=lfs diff=lfs merge=lfs -text
+**/*.mp3 filter=lfs diff=lfs merge=lfs -text
+**/*.wav filter=lfs diff=lfs merge=lfs -text
+**/*.flac filter=lfs diff=lfs merge=lfs -text
+
+# 大型测试数据文件
+**/test-data/** filter=lfs diff=lfs merge=lfs -text
+**/sample-data/** filter=lfs diff=lfs merge=lfs -text
+**/benchmark-data/** filter=lfs diff=lfs merge=lfs -text
+
+# 机器学习模型文件
+**/*.h5 filter=lfs diff=lfs merge=lfs -text
+**/*.pb filter=lfs diff=lfs merge=lfs -text
+**/*.pth filter=lfs diff=lfs merge=lfs -text
+**/*.model filter=lfs diff=lfs merge=lfs -text
+
+# 字体文件
+**/*.ttf filter=lfs diff=lfs merge=lfs -text
+**/*.otf filter=lfs diff=lfs merge=lfs -text
+**/*.woff filter=lfs diff=lfs merge=lfs -text
+**/*.woff2 filter=lfs diff=lfs merge=lfs -text
+
+# 大型配置文件（如果超过10MB）
+**/*.json filter=lfs diff=lfs merge=lfs -text
+**/*.yaml filter=lfs diff=lfs merge=lfs -text
+**/*.yml filter=lfs diff=lfs merge=lfs -text
