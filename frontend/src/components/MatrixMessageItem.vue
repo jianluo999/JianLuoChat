@@ -21,7 +21,10 @@
 
     <!-- 消息头部信息 -->
     <div class="message-header" v-if="!message.isOwn">
-      <span class="sender-name">{{ message.senderName }}</span>
+      <div class="sender-avatar">
+        {{ getSenderInitials(message.senderName || message.sender) }}
+      </div>
+      <span class="sender-name">{{ getDisplayName(message) }}</span>
       <span class="message-time">{{ formatTime(message.timestamp) }}</span>
     </div>
 
@@ -55,32 +58,44 @@
 
         <!-- 正常消息 -->
         <div v-else>
-          <!-- 文本消息 -->
-          <div v-if="message.msgtype === 'm.text'" class="text-message">
+          <!-- 文件消息 -->
+          <div v-if="message.msgtype === 'm.file' || (message.fileInfo && !message.fileInfo.isImage)" class="file-message">
+            <div class="file-info">
+              <span class="file-icon">{{ getFileIcon(message.fileInfo?.name || message.filename || '', message.fileInfo?.type) }}</span>
+              <div class="file-details">
+                <span class="file-name">{{ message.fileInfo?.name || message.filename || '未知文件' }}</span>
+                <span class="file-size" v-if="message.fileInfo?.size || message.filesize">
+                  ({{ formatFileSize(message.fileInfo?.size || message.filesize || 0) }})
+                </span>
+              </div>
+            </div>
+            <button @click="downloadFile(message)" class="download-btn" v-if="message.fileInfo?.url">
+              下载
+            </button>
+          </div>
+
+          <!-- 图片消息 -->
+          <div v-else-if="message.msgtype === 'm.image' || (message.fileInfo && message.fileInfo.isImage)" class="image-message">
+            <img 
+              :src="getImageUrl(message)" 
+              :alt="message.fileInfo?.name || message.filename || '图片'"
+              @click="previewImage(message)"
+              @error="handleImageError"
+              class="message-image"
+              v-if="getImageUrl(message)"
+            />
+            <div v-else class="image-placeholder">
+              <span class="image-icon">🖼️</span>
+              <span class="image-text">图片加载失败</span>
+            </div>
+          </div>
+
+          <!-- 文本消息（默认，包括所有其他类型） -->
+          <div v-else class="text-message">
             <div v-html="formatMessageContent(message.content)"></div>
             <div v-if="message.isEdited" class="edited-indicator">
               <span class="edited-text">(已编辑)</span>
             </div>
-          </div>
-
-          <!-- 文件消息 -->
-          <div v-else-if="message.msgtype === 'm.file'" class="file-message">
-            <div class="file-info">
-              <span class="file-icon">📄</span>
-              <span class="file-name">{{ message.filename }}</span>
-              <span class="file-size">({{ formatFileSize(message.filesize) }})</span>
-            </div>
-            <button @click="downloadFile(message)" class="download-btn">下载</button>
-          </div>
-
-          <!-- 图片消息 -->
-          <div v-else-if="message.msgtype === 'm.image'" class="image-message">
-            <img 
-              :src="getImageUrl(message)" 
-              :alt="message.filename"
-              @click="previewImage(message)"
-              class="message-image"
-            />
           </div>
         </div>
       </div>
@@ -91,12 +106,47 @@
       </div>
     </div>
 
+    <!-- 线程信息 -->
+    <div v-if="message.threadReplyCount && message.threadReplyCount > 0" class="thread-info">
+      <button @click="openThread" class="thread-button">
+        <span class="thread-icon">🧵</span>
+        <span class="thread-count">{{ message.threadReplyCount }} 条回复</span>
+        <span class="thread-arrow">→</span>
+      </button>
+    </div>
+
     <!-- 消息反应面板 -->
     <MessageReactionsPanel
       :message="message"
       :room-id="roomId"
       :show-add-button="!message.isRedacted"
     />
+
+    <!-- 消息操作按钮 -->
+    <div class="message-actions" v-if="!message.isRedacted && !isEditing">
+      <button @click="handleReply" class="action-btn reply-btn" title="回复">
+        <span class="action-icon">↩️</span>
+      </button>
+      <button @click="startThread" class="action-btn thread-btn" title="开始线程">
+        <span class="action-icon">🧵</span>
+      </button>
+      <button 
+        v-if="message.isOwn" 
+        @click="handleEdit" 
+        class="action-btn edit-btn" 
+        title="编辑"
+      >
+        <span class="action-icon">✏️</span>
+      </button>
+      <button 
+        v-if="message.isOwn" 
+        @click="handleDelete" 
+        class="action-btn delete-btn" 
+        title="删除"
+      >
+        <span class="action-icon">🗑️</span>
+      </button>
+    </div>
 
     <!-- 已读回执指示器 -->
     <ReadReceiptIndicator
@@ -108,55 +158,6 @@
 
     <!-- 输入状态指示器 -->
     <TypingIndicator :room-id="roomId" />
-        :class="{ 'has-reacted': reaction.hasReacted }"
-      >
-        <span class="reaction-emoji">{{ emoji }}</span>
-        <span class="reaction-count">{{ reaction.count }}</span>
-      </button>
-      <button @click="showEmojiPicker" class="add-reaction-btn">+</button>
-    </div>
-
-    <!-- 操作菜单 -->
-    <div v-if="showMenu" class="context-menu" :style="menuPosition">
-      <button @click="replyToMessage" class="menu-item">
-        <span class="menu-icon">↩️</span>
-        <span>回复</span>
-      </button>
-      
-      <button v-if="canEdit" @click="startEdit" class="menu-item">
-        <span class="menu-icon">✏️</span>
-        <span>编辑</span>
-      </button>
-      
-      <button @click="showEmojiPicker" class="menu-item">
-        <span class="menu-icon">😊</span>
-        <span>添加反应</span>
-      </button>
-      
-      <button @click="copyMessage" class="menu-item">
-        <span class="menu-icon">📋</span>
-        <span>复制</span>
-      </button>
-      
-      <button v-if="canDelete" @click="deleteMessage" class="menu-item delete-item">
-        <span class="menu-icon">🗑️</span>
-        <span>删除</span>
-      </button>
-    </div>
-
-    <!-- 表情选择器 -->
-    <div v-if="showEmojiSelector" class="emoji-selector">
-      <div class="emoji-grid">
-        <button
-          v-for="emoji in commonEmojis"
-          :key="emoji"
-          @click="addReaction(emoji)"
-          class="emoji-option"
-        >
-          {{ emoji }}
-        </button>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -166,6 +167,7 @@ import { useMatrixStore } from '@/stores/matrix'
 import MessageReactionsPanel from './MessageReactionsPanel.vue'
 import ReadReceiptIndicator from './ReadReceiptIndicator.vue'
 import TypingIndicator from './TypingIndicator.vue'
+import { formatFileSize, getFileIcon } from '@/utils/fileUtils'
 
 interface MessageReaction {
   count: number
@@ -203,6 +205,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   'reply-to': [message: MatrixMessage]
   'scroll-to': [eventId: string]
+  'start-thread': [message: MatrixMessage]
+  'open-thread': [message: MatrixMessage]
 }>()
 
 const matrixStore = useMatrixStore()
@@ -353,6 +357,34 @@ const scrollToMessage = (eventId: string) => {
   emit('scroll-to', eventId)
 }
 
+// 线程相关方法
+const startThread = () => {
+  // 标记消息为线程根消息
+  matrixStore.markMessageAsThreadRoot(props.roomId, props.message.id)
+  
+  // 触发打开线程面板事件
+  emit('start-thread', props.message)
+  hideContextMenu()
+}
+
+const openThread = () => {
+  // 打开现有线程
+  emit('open-thread', props.message)
+}
+
+const handleReply = () => {
+  emit('reply-to', props.message)
+  hideContextMenu()
+}
+
+const handleEdit = () => {
+  startEdit()
+}
+
+const handleDelete = () => {
+  deleteMessage()
+}
+
 const formatTime = (timestamp: number) => {
   return new Date(timestamp).toLocaleTimeString('zh-CN', {
     hour: '2-digit',
@@ -369,25 +401,130 @@ const formatMessageContent = (content: string) => {
     .replace(/\n/g, '<br>')
 }
 
-const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+// 获取发送者显示名称
+const getDisplayName = (message: MatrixMessage) => {
+  // 如果有显示名称，使用显示名称
+  if (message.senderName && message.senderName !== message.sender) {
+    return message.senderName
+  }
+  
+  // 从Matrix ID中提取用户名
+  if (message.sender) {
+    const match = message.sender.match(/@([^:]+):/)
+    if (match) {
+      return match[1] // 返回用户名部分
+    }
+  }
+  
+  return message.sender || '未知用户'
 }
 
+// 获取发送者头像首字母
+const getSenderInitials = (name: string) => {
+  if (!name) return '?'
+  
+  // 如果是Matrix ID，提取用户名部分
+  if (name.startsWith('@')) {
+    const match = name.match(/@([^:]+):/)
+    if (match) {
+      name = match[1]
+    }
+  }
+  
+  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
+// formatFileSize 现在从工具函数导入
+
 const getImageUrl = (message: MatrixMessage) => {
-  // TODO: 实现Matrix媒体URL获取
+  // 从fileInfo中获取图片URL
+  if (message.fileInfo && message.fileInfo.url) {
+    return message.fileInfo.url
+  }
+  
+  // 如果没有fileInfo，尝试从内容中提取URL
+  if (message.content && message.content.includes('http')) {
+    const urlMatch = message.content.match(/(https?:\/\/[^\s]+)/)
+    if (urlMatch) {
+      return urlMatch[1]
+    }
+  }
+  
   return ''
 }
 
 const downloadFile = (message: MatrixMessage) => {
-  // TODO: 实现文件下载
+  if (message.fileInfo && message.fileInfo.url) {
+    // 创建下载链接
+    const link = document.createElement('a')
+    link.href = message.fileInfo.url
+    link.download = message.fileInfo.name || 'download'
+    link.target = '_blank'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 }
 
 const previewImage = (message: MatrixMessage) => {
-  // TODO: 实现图片预览
+  const imageUrl = getImageUrl(message)
+  if (imageUrl) {
+    // 创建图片预览模态框
+    const modal = document.createElement('div')
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      cursor: pointer;
+    `
+    
+    const img = document.createElement('img')
+    img.src = imageUrl
+    img.style.cssText = `
+      max-width: 90%;
+      max-height: 90%;
+      object-fit: contain;
+      border-radius: 8px;
+    `
+    
+    modal.appendChild(img)
+    document.body.appendChild(modal)
+    
+    // 点击关闭预览
+    modal.addEventListener('click', () => {
+      document.body.removeChild(modal)
+    })
+    
+    // ESC键关闭预览
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        document.body.removeChild(modal)
+        document.removeEventListener('keydown', handleKeydown)
+      }
+    }
+    document.addEventListener('keydown', handleKeydown)
+  }
+}
+
+const handleImageError = (event: Event) => {
+  const img = event.target as HTMLImageElement
+  console.error('图片加载失败:', img.src)
+  
+  // 隐藏失败的图片
+  img.style.display = 'none'
+  
+  // 显示错误提示
+  const errorDiv = document.createElement('div')
+  errorDiv.className = 'image-error'
+  errorDiv.innerHTML = '🖼️ 图片加载失败'
+  img.parentNode?.appendChild(errorDiv)
 }
 </script>
 
@@ -446,6 +583,20 @@ const previewImage = (message: MatrixMessage) => {
   gap: 8px;
   margin-bottom: 4px;
   font-size: 12px;
+}
+
+.sender-avatar {
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  flex-shrink: 0;
 }
 
 .sender-name {
@@ -542,26 +693,107 @@ const previewImage = (message: MatrixMessage) => {
   max-width: 300px;
 }
 
+.file-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+}
+
 .file-info {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 8px;
+  flex: 1;
+}
+
+.file-icon {
+  font-size: 20px;
+}
+
+.file-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-name {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.file-size {
+  font-size: 12px;
+  color: #666;
 }
 
 .download-btn {
-  background: rgba(255, 255, 255, 0.2);
+  background: #007bff;
+  color: white;
   border: none;
-  color: inherit;
-  padding: 4px 8px;
+  padding: 6px 12px;
   border-radius: 4px;
   cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.download-btn:hover {
+  background: #0056b3;
+}
+
+.own-message .download-btn {
+  background: rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.own-message .download-btn:hover {
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .message-image {
   max-width: 100%;
+  max-height: 300px;
   border-radius: 8px;
   cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.message-image:hover {
+  transform: scale(1.02);
+}
+
+.image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  color: #666;
+}
+
+.image-icon {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.image-text {
+  font-size: 12px;
+}
+
+.image-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background: rgba(255, 0, 0, 0.1);
+  border-radius: 4px;
+  color: #d32f2f;
+  font-size: 12px;
 }
 
 .own-message-time {
@@ -686,4 +918,101 @@ const previewImage = (message: MatrixMessage) => {
 .emoji-option:hover {
   background: #f5f5f5;
 }
-</style>
+</style>/* 
+线程相关样式 */
+.thread-info {
+  margin-top: 8px;
+  margin-left: 12px;
+}
+
+.thread-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(0, 123, 255, 0.1);
+  border: 1px solid rgba(0, 123, 255, 0.2);
+  border-radius: 16px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #007bff;
+  transition: all 0.2s ease;
+}
+
+.thread-button:hover {
+  background: rgba(0, 123, 255, 0.15);
+  border-color: rgba(0, 123, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.thread-icon {
+  font-size: 14px;
+}
+
+.thread-count {
+  font-weight: 500;
+}
+
+.thread-arrow {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* 消息操作按钮 */
+.message-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.message-item:hover .message-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+  transform: scale(1.1);
+}
+
+.action-icon {
+  font-size: 12px;
+}
+
+.reply-btn:hover {
+  background: rgba(0, 123, 255, 0.1);
+}
+
+.thread-btn:hover {
+  background: rgba(255, 193, 7, 0.1);
+}
+
+.edit-btn:hover {
+  background: rgba(40, 167, 69, 0.1);
+}
+
+.delete-btn:hover {
+  background: rgba(220, 53, 69, 0.1);
+}
+
+.own-message .action-btn {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.own-message .action-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

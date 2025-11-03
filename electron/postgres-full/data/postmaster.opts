@@ -1,0 +1,1 @@
+d:/StudyPlanT/mygithub/jilouchat/electron/postgres-full/bin/postgres "-D" "data" "-p" "5432"

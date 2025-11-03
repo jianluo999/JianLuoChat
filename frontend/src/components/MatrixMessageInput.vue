@@ -75,7 +75,18 @@
       </div>
 
       <!-- 表情选择器 -->
-      <div v-if="showEmoji" class="emoji-picker">
+      <div v-if="showEmoji" class="emoji-picker" ref="emojiPicker">
+        <!-- 搜索框 -->
+        <div class="emoji-search">
+          <input
+            v-model="emojiSearch"
+            type="text"
+            placeholder="🔍 搜索表情..."
+            class="search-input"
+          />
+        </div>
+        
+        <!-- 分类标签 -->
         <div class="emoji-categories">
           <button
             v-for="category in emojiCategories"
@@ -86,15 +97,23 @@
             {{ category.icon }}
           </button>
         </div>
+        
+        <!-- 表情网格 -->
         <div class="emoji-grid">
           <button
-            v-for="emoji in currentEmojis"
+            v-for="emoji in filteredEmojis"
             :key="emoji"
             @click="insertEmoji(emoji)"
             class="emoji-btn"
+            :title="emoji"
           >
             {{ emoji }}
           </button>
+        </div>
+        
+        <!-- 搜索结果提示 -->
+        <div v-if="emojiSearch && filteredEmojis.length === 0" class="no-results">
+          没有找到匹配的表情
         </div>
       </div>
 
@@ -203,21 +222,77 @@ const showEmoji = ref(false)
 const showFormatting = ref(false)
 const encryptionEnabled = ref(false)
 const selectedEmojiCategory = ref('smileys')
+const emojiSearch = ref('')
 const uploadingFiles = ref<any[]>([])
 const typingUsers = ref<string[]>([])
 const messageInput = ref<HTMLTextAreaElement>()
+const emojiPicker = ref<HTMLElement>()
 
 // 表情符号数据
 const emojiCategories = ref([
-  { name: 'smileys', icon: '😊', emojis: ['😊', '😂', '🥰', '😍', '🤔', '😅', '😎', '🙄', '😴', '🤗'] },
-  { name: 'gestures', icon: '👍', emojis: ['👍', '👎', '👌', '✌️', '🤞', '👏', '🙌', '🤝', '💪', '🙏'] },
-  { name: 'objects', icon: '🎉', emojis: ['🎉', '🎊', '🔥', '💯', '⭐', '❤️', '💔', '💡', '🚀', '🎯'] }
+  { 
+    name: 'smileys', 
+    icon: '😊', 
+    emojis: ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈', '👿', '👹', '👺', '🤡', '💩', '👻', '💀', '☠️', '👽', '👾', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'] 
+  },
+  { 
+    name: 'gestures', 
+    icon: '👍', 
+    emojis: ['👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '👊', '✊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃', '🧠', '🦷', '🦴', '👀', '👁️', '👅', '👄', '👶', '🧒', '👦', '👧', '🧑', '👱', '👨', '🧔', '👨‍🦰', '👨‍🦱', '👨‍🦳', '👨‍🦲', '👩', '👩‍🦰', '👩‍🦱', '👩‍🦳', '👩‍🦲', '🧓', '👴', '👵', '🙍', '🙎', '🙅', '🙆', '💁', '🙋', '🧏', '🙇', '🤦', '🤷', '👮', '🕵️', '💂', '👷', '🤴', '👸', '👳', '👲', '🧕', '🤵', '👰', '🤰', '🤱', '👼', '🎅', '🤶', '🦸', '🦹', '🧙', '🧚', '🧛', '🧜', '🧝', '🧞', '🧟', '💆', '💇', '🚶', '🏃', '💃', '🕺', '🕴️', '👯', '🧖', '🧗', '🤺', '🏇', '⛷️', '🏂', '🏌️', '🏄', '🚣', '🏊', '⛹️', '🏋️', '🚴', '🚵', '🤸', '🤼', '🤽', '🤾', '🤹', '🧘', '🛀', '🛌', '👭', '👫', '👬', '💏', '💑', '👪'] 
+  },
+  { 
+    name: 'hearts', 
+    icon: '❤️', 
+    emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️', '✝️', '☪️', '🕉️', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐', '⛎', '♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓', '🆔', '⚛️', '🉑', '☢️', '☣️', '📴', '📳', '🈶', '🈚', '🈸', '🈺', '🈷️', '✴️', '🆚', '💮', '🉐', '㊙️', '㊗️', '🈴', '🈵', '🈹', '🈲', '🅰️', '🅱️', '🆎', '🆑', '🅾️', '🆘', '❌', '⭕', '🛑', '⛔', '📛', '🚫', '💯', '💢', '♨️', '🚷', '🚯', '🚳', '🚱', '🔞', '📵', '🚭'] 
+  },
+  { 
+    name: 'symbols', 
+    icon: '✨', 
+    emojis: ['✨', '⭐', '🌟', '💫', '⚡', '🔥', '💥', '💦', '💨', '💧', '🌊', '🎯', '🎲', '🎪', '🎭', '🖼️', '🎨', '🧵', '🪡', '🧶', '🪢', '👓', '🕶️', '🥽', '🥼', '🦺', '👔', '👕', '👖', '🧣', '🧤', '🧥', '🧦', '👗', '👘', '🥻', '🩱', '🩲', '🩳', '👙', '👚', '👛', '👜', '👝', '🛍️', '🎒', '🩴', '👞', '👟', '🥾', '🥿', '👠', '👡', '🩰', '👢', '👑', '👒', '🎩', '🎓', '🧢', '🪖', '⛑️', '💄', '💍', '💼'] 
+  },
+  { 
+    name: 'objects', 
+    icon: '🎉', 
+    emojis: ['🎉', '🎊', '🎈', '🎁', '🎀', '🎄', '🎃', '🎆', '🎇', '🧨', '✨', '🎎', '🎏', '🎐', '🎑', '🧧', '🎀', '🎁', '🎗️', '🎟️', '🎫', '🎪', '🎭', '🖼️', '🎨', '🧵', '🪡', '🧶', '🪢', '👓', '🕶️', '🥽', '🥼', '🦺', '👔', '👕', '👖', '🧣', '🧤', '🧥', '🧦', '👗', '👘', '🥻', '🩱', '🩲', '🩳', '👙', '👚', '👛', '👜', '👝', '🛍️', '🎒', '🩴', '👞', '👟', '🥾', '🥿', '👠', '👡', '🩰', '👢', '👑', '👒', '🎩', '🎓', '🧢', '🪖', '⛑️', '💄', '💍', '💼'] 
+  },
+  { 
+    name: 'animals', 
+    icon: '🐶', 
+    emojis: ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐽', '🐸', '🐵', '🙈', '🙉', '🙊', '🐒', '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🪱', '🐛', '🦋', '🐌', '🐞', '🐜', '🪰', '🪲', '🪳', '🦟', '🦗', '🕷️', '🦂', '🐢', '🐍', '🦎', '🦖', '🦕', '🐙', '🦑', '🦐', '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🐊', '🐅', '🐆', '🦓', '🦍', '🦧', '🦣', '🐘', '🦛', '🦏', '🐪', '🐫', '🦒', '🦘', '🐃', '🐂', '🐄', '🐎', '🐖', '🐏', '🐑', '🦙', '🐐', '🦌', '🐕', '🐩', '🦮', '🐕‍🦺', '🐈', '🐈‍⬛', '🪶', '🐓', '🦃', '🦤', '🦚', '🦜', '🦢', '🦩', '🕊️', '🐇', '🦝', '🦨', '🦡', '🦫', '🦦', '🦥', '🐁', '🐀', '🐿️', '🦔'] 
+  },
+  { 
+    name: 'food', 
+    icon: '🍎', 
+    emojis: ['🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🫒', '🧄', '🧅', '🥔', '🍠', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🥓', '🥩', '🍗', '🍖', '🦴', '🌭', '🍔', '🍟', '🍕', '🫓', '🥪', '🥙', '🧆', '🌮', '🌯', '🫔', '🥗', '🥘', '🫕', '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍢', '🍡', '🍧', '🍨', '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍿', '🧈', '🍩', '🍪', '🌰', '🥜', '🍯', '🥛', '🍼', '🫖', '☕', '🍵', '🧃', '🥤', '🧋', '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🧉', '🍾', '🧊', '🥄', '🍴', '🍽️', '🥣', '🥡', '🥢'] 
+  },
+  { 
+    name: 'travel', 
+    icon: '🚗', 
+    emojis: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🦯', '🦽', '🦼', '🛴', '🚲', '🛵', '🏍️', '🛺', '🚨', '🚔', '🚍', '🚘', '🚖', '🚡', '🚠', '🚟', '🚃', '🚋', '🚞', '🚝', '🚄', '🚅', '🚈', '🚂', '🚆', '🚇', '🚊', '🚉', '✈️', '🛫', '🛬', '🛩️', '💺', '🛰️', '🚀', '🛸', '🚁', '🛶', '⛵', '🚤', '🛥️', '🛳️', '⛴️', '🚢', '⚓', '🪝', '🌋', '🗻', '🏕️', '🏖️', '🏜️', '🏝️', '🏞️', '🏟️', '🏛️', '🏗️', '🧱', '🪨', '🪵', '🛖', '🏘️', '🏚️', '🏠', '🏡', '🏢', '🏣', '🏤', '🏥', '🏦', '🏨', '🏩', '🏪', '🏫', '🏬', '🏭', '🏯', '🏰', '💒', '🗼', '🗽', '⛪', '🕌', '🛕', '🕍', '⛩️', '🕋', '⛲', '⛺', '🌁', '🌃', '🏙️', '🌄', '🌅', '🌆', '🌇', '🌉', '🎠', '🎡', '🎢', '💈', '🎪', '🚂', '🚃', '🚄', '🚅', '🚆', '🚇', '🚈', '🚉', '🚊', '🚝', '🚞', '🚋', '🚌', '🚍', '🚎', '🚐', '🚑', '🚒', '🚓', '🚔', '🚕', '🚖', '🚗', '🚘', '🚙', '🚚', '🚛', '🚜', '🚲', '🛴', '🛵', '🏍️', '🛺', '🚨', '🚔', '🚍', '🚘', '🚖', '🚡', '🚠', '🚟', '🚃', '🚋', '🚞', '🚝', '🚄', '🚅', '🚈', '🚂', '🚆', '🚇', '🚊', '🚉', '✈️', '🛫', '🛬', '🛩️', '💺', '🛰️', '🚀', '🛸', '🚁', '🛶', '⛵', '🚤', '🛥️', '🛳️', '⛴️', '🚢', '⚓', '🪝', '⛽', '🚧', '🚦', '🚥', '🚏', '🗺️', '🗿', '🪦', '🪧'] 
+  },
+  { 
+    name: 'activities', 
+    icon: '⚽', 
+    emojis: ['⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓', '🏸', '🏒', '🏑', '🥍', '🏏', '🪃', '🥅', '⛳', '🪁', '🏹', '🎣', '🤿', '🥊', '🥋', '🎽', '🛹', '🛼', '⛸️', '🥌', '🎿', '⛷️', '🏂', '🪂', '🏋️', '🤼', '🤸', '⛹️', '🤾', '🏌️', '🏇', '🧘', '🏄', '🏊', '🤽', '🚣', '🧗', '🚴', '🚵', '🎯', '🎮', '🕹️', '🎲', '🧩', '🧸', '🪅', '🪆', '♠️', '♥️', '♦️', '♣️', '♟️', '🃏', '🀄', '🎴', '🎭', '🖼️', '🎨', '🧵', '🪡', '🧶', '🪢', '👓', '🕶️', '🥽', '🥼', '🦺', '👔', '👕', '👖', '🧣', '🧤', '🧥', '🧦', '👗', '👘', '🥻', '🩱', '🩲', '🩳', '👙', '👚', '👛', '👜', '👝', '🛍️', '🎒', '🩴', '👞', '👟', '🥾', '🥿', '👠', '👡', '🩰', '👢', '👑', '👒', '🎩', '🎓', '🧢', '🪖', '⛑️', '💄', '💍', '💼'] 
+  }
 ])
 
 // 计算属性
 const currentEmojis = computed(() => {
   const category = emojiCategories.value.find(c => c.name === selectedEmojiCategory.value)
   return category?.emojis || []
+})
+
+const filteredEmojis = computed(() => {
+  if (!emojiSearch.value) {
+    return currentEmojis.value
+  }
+  
+  const searchTerm = emojiSearch.value.toLowerCase()
+  return currentEmojis.value.filter(emoji => 
+    emoji.includes(searchTerm) || 
+    emoji.includes(emojiSearch.value)
+  )
 })
 
 const canSend = computed(() => {
@@ -254,17 +329,66 @@ const handleInput = () => {
 }
 
 const handlePaste = (event: ClipboardEvent) => {
+  console.log('📋 粘贴事件触发')
   const items = event.clipboardData?.items
+  let hasImage = false
+  
   if (items) {
+    console.log(`📄 剪贴板中有 ${items.length} 个项目`)
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
-      if (item.type.indexOf('image') !== -1) {
+      console.log(`📄 项目 ${i}: ${item.type}`)
+      
+      // 检测各种图片类型
+      if (item.type.indexOf('image') !== -1 || 
+          item.type === 'image/png' || 
+          item.type === 'image/jpeg' || 
+          item.type === 'image/gif' || 
+          item.type === 'image/webp') {
+        console.log('🖼️ 检测到图片文件')
         const file = item.getAsFile()
         if (file) {
+          console.log(`📤 获取到文件: ${file.name} (${file.size} bytes)`)
+          hasImage = true
+          uploadFile(file)
+        } else {
+          console.log('❌ 无法从剪贴板项目获取文件，尝试备用方案')
+          // 备用方案：尝试从剪贴板数据中获取图片
+          try {
+            const blob = item.getAsFile()
+            if (blob) {
+              const file = new File([blob], 'pasted-image.png', { type: 'image/png' })
+              hasImage = true
+              uploadFile(file)
+            }
+          } catch (error) {
+            console.error('备用方案也失败了:', error)
+          }
+        }
+      }
+    }
+  } else {
+    console.log('❌ 剪贴板中没有项目，尝试检查files属性')
+    // 检查是否有files属性
+    if (event.clipboardData?.files && event.clipboardData.files.length > 0) {
+      console.log(`📄 通过files属性找到 ${event.clipboardData.files.length} 个文件`)
+      for (let i = 0; i < event.clipboardData.files.length; i++) {
+        const file = event.clipboardData.files[i]
+        if (file.type.startsWith('image/')) {
+          console.log(`🖼️ 检测到图片文件: ${file.name}`)
+          hasImage = true
           uploadFile(file)
         }
       }
     }
+  }
+  
+  // 如果检测到图片，阻止默认粘贴行为
+  if (hasImage) {
+    console.log('🛑 阻止默认粘贴行为')
+    event.preventDefault()
+  } else {
+    console.log('📝 允许默认文本粘贴行为')
   }
 }
 
@@ -307,6 +431,10 @@ const cancelReply = () => {
 const toggleEmoji = () => {
   showEmoji.value = !showEmoji.value
   showFormatting.value = false
+  if (showEmoji.value) {
+    emojiSearch.value = ''
+    selectedEmojiCategory.value = 'smileys'
+  }
 }
 
 const toggleFormatting = () => {
@@ -369,12 +497,20 @@ const attachFile = () => {
 }
 
 const uploadFile = async (file: File) => {
+  // 检查文件大小限制（10MB）
+  const maxSize = 10 * 1024 * 1024 // 10MB
+  if (file.size > maxSize) {
+    alert(`文件大小超过限制（${maxSize / 1024 / 1024}MB），请选择较小的文件`)
+    return
+  }
+
   const fileObj = {
     id: Date.now() + Math.random(),
-    name: file.name,
+    name: file.name || 'pasted-image.png',
     size: file.size,
     progress: 0,
-    file
+    file,
+    status: 'uploading' as 'uploading' | 'success' | 'failed'
   }
 
   uploadingFiles.value.push(fileObj)
@@ -382,6 +518,7 @@ const uploadFile = async (file: File) => {
   try {
     // 显示上传进度
     fileObj.progress = 10
+    fileObj.status = 'uploading'
 
     // 上传文件到Matrix
     const contentUri = await matrixStore.uploadFileToMatrix(file)
@@ -391,6 +528,7 @@ const uploadFile = async (file: File) => {
       // 发送文件消息
       await matrixStore.sendFileMessage(props.roomId, file, contentUri)
       fileObj.progress = 100
+      fileObj.status = 'success'
 
       // 移除上传完成的文件
       setTimeout(() => {
@@ -398,22 +536,72 @@ const uploadFile = async (file: File) => {
         if (index > -1) {
           uploadingFiles.value.splice(index, 1)
         }
-      }, 1000)
+      }, 2000)
 
       console.log(`✅ 文件 ${file.name} 上传并发送成功`)
     }
   } catch (error) {
     console.error('❌ 文件上传失败:', error)
     fileObj.progress = -1 // 标记为失败
+    fileObj.status = 'failed'
 
-    // 3秒后移除失败的文件
+    // 尝试备用上传方案
+    try {
+      console.log('🔄 尝试备用上传方案...')
+      await uploadFileAlternative(file)
+    } catch (altError) {
+      console.error('❌ 备用上传方案也失败了:', altError)
+    }
+
+    // 5秒后移除失败的文件
     setTimeout(() => {
       const index = uploadingFiles.value.findIndex(f => f.id === fileObj.id)
       if (index > -1) {
         uploadingFiles.value.splice(index, 1)
       }
-    }, 3000)
+    }, 5000)
   }
+}
+
+// 备用文件上传方案
+const uploadFileAlternative = async (file: File) => {
+  console.log('🔄 使用备用方案上传文件')
+  
+  // 如果Matrix上传失败，尝试直接发送base64编码的图片
+  const reader = new FileReader()
+  
+  return new Promise((resolve, reject) => {
+    reader.onload = async (e) => {
+      try {
+        const base64Data = e.target?.result as string
+        console.log('📊 文件已转换为base64，准备发送...')
+        
+        // 直接发送图片消息
+        await matrixStore.sendMatrixMessage(props.roomId, {
+          msgtype: 'm.image',
+          body: file.name || '图片',
+          url: base64Data,
+          info: {
+            mimetype: file.type,
+            size: file.size
+          }
+        })
+        
+        console.log('✅ 备用方案上传成功')
+        resolve(true)
+      } catch (error) {
+        console.error('❌ 备用方案上传失败:', error)
+        reject(error)
+      }
+    }
+    
+    reader.onerror = (error) => {
+      console.error('❌ 文件读取失败:', error)
+      reject(error)
+    }
+    
+    reader.readAsDataURL(file)
+  })
 }
 
 const removeFile = (fileId: number) => {
@@ -444,15 +632,24 @@ const getFileIcon = (file: any) => {
   return '📄'
 }
 
+// 点击外部关闭表情选择器
+const handleClickOutside = (event: MouseEvent) => {
+  if (emojiPicker.value && !emojiPicker.value.contains(event.target as Node)) {
+    showEmoji.value = false
+  }
+}
+
 // 生命周期
 onMounted(() => {
   if (messageInput.value) {
     messageInput.value.focus()
   }
+  document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
   emit('typing-stop')
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -522,7 +719,7 @@ onUnmounted(() => {
 }
 
 .input-toolbar {
-  display: none; /* 隐藏工具栏，保持简洁的微信风格 */
+  display: flex; /* 显示工具栏，让用户可以使用表情等功能 */
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -581,16 +778,45 @@ onUnmounted(() => {
 }
 
 .emoji-picker {
-  background: rgba(255, 255, 255, 0.05);
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #ddd;
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 320px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.emoji-search {
+  margin-bottom: 12px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #f9f9f9;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #07c160;
+  background: #fff;
 }
 
 .emoji-categories {
   display: flex;
   gap: 4px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .emoji-category-btn {
@@ -610,9 +836,9 @@ onUnmounted(() => {
 
 .emoji-grid {
   display: grid;
-  grid-template-columns: repeat(10, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   gap: 4px;
-  max-height: 120px;
+  max-height: 200px;
   overflow-y: auto;
 }
 
@@ -627,7 +853,33 @@ onUnmounted(() => {
 }
 
 .emoji-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 123, 255, 0.1);
+}
+
+.no-results {
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+  padding: 20px;
+}
+
+/* 滚动条样式 */
+.emoji-picker::-webkit-scrollbar {
+  width: 6px;
+}
+
+.emoji-picker::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.emoji-picker::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.emoji-picker::-webkit-scrollbar-thumb:hover {
+  background: #999;
 }
 
 .input-wrapper {

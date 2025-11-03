@@ -377,7 +377,7 @@
     </div>
 
     <!-- 右侧聊天面板 -->
-    <div class="chat-panel">
+    <div class="chat-panel" :class="{ 'thread-panel-open': showThreadPanel }">
       <div v-if="!currentRoomId" class="no-chat-selected">
         <div class="welcome-chat">
           <div class="icon-message-large">💬</div>
@@ -412,10 +412,23 @@
         
         <!-- 消息区域 -->
         <div class="message-list">
-          <MatrixMessageAreaSimple :room-id="currentRoomId" />
+          <MatrixMessageAreaSimple 
+            :room-id="currentRoomId" 
+            @start-thread="handleStartThread"
+            @open-thread="handleOpenThread"
+          />
         </div>
       </div>
     </div>
+
+    <!-- 线程面板 -->
+    <ThreadPanel
+      :is-open="showThreadPanel"
+      :room-id="currentRoomId || ''"
+      :root-message-id="threadRootMessageId"
+      @close="closeThreadPanel"
+      @message-added="handleThreadMessageAdded"
+    />
 
     <!-- 探索面板 -->
     <div v-if="showExplore" class="explore-panel">
@@ -589,6 +602,7 @@ import CreateGroupChatDialog from './CreateGroupChatDialog.vue'
 import ThemeSelector from './ThemeSelector.vue'
 import DirectMessageDialog from './DirectMessageDialog.vue'
 import UserInviteDialog from './UserInviteDialog.vue'
+import ThreadPanel from './ThreadPanel.vue'
 import { passiveEventManager } from '@/utils/passiveEventManager'
 import { useErrorHandler } from '@/utils/errorSetup'
 // 导入缓存工具（开发环境）
@@ -619,6 +633,10 @@ const showMoreMenu = ref(false)
 const moreActionsRef = ref<HTMLElement>()
 const showSidebarMenu = ref(false)
 const sidebarMenuRef = ref<HTMLElement>()
+
+// 线程相关状态
+const showThreadPanel = ref(false)
+const threadRootMessageId = ref<string | null>(null)
 
 
 
@@ -790,6 +808,7 @@ const formatTime = (timestamp: number) => {
 }
 
 const selectRoom = async (roomId: string) => {
+  console.log(`🎯 选择房间: ${roomId}`)
   currentRoomId.value = roomId
   matrixStore.setCurrentRoom(roomId)
 
@@ -2025,6 +2044,34 @@ const showFeedback = () => {
   hideContextMenu()
 }
 
+// ==================== 线程功能 ====================
+
+// 处理开始线程
+const handleStartThread = (message: any) => {
+  console.log('🧵 开始线程:', message.id)
+  threadRootMessageId.value = message.id
+  showThreadPanel.value = true
+}
+
+// 处理打开现有线程
+const handleOpenThread = (message: any) => {
+  console.log('🧵 打开线程:', message.id)
+  threadRootMessageId.value = message.threadId || message.id
+  showThreadPanel.value = true
+}
+
+// 关闭线程面板
+const closeThreadPanel = () => {
+  showThreadPanel.value = false
+  threadRootMessageId.value = null
+}
+
+// 处理线程消息添加
+const handleThreadMessageAdded = (message: any) => {
+  console.log('🧵 线程消息已添加:', message)
+  // 可以在这里添加额外的处理逻辑，比如更新未读计数等
+}
+
 // Matrix房间信息
 const showRoomInfo = () => {
   if (!contextMenu.value.room) return
@@ -2973,6 +3020,11 @@ if (typeof window !== 'undefined') {
   background: rgba(255, 255, 255, 0.98);
   display: flex;
   flex-direction: column;
+  transition: width 0.3s ease;
+}
+
+.chat-panel.thread-panel-open {
+  width: calc(100% - 400px);
 }
 
 .no-chat-selected {

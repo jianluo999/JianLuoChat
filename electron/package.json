@@ -61,7 +61,17 @@
         "from": "jre-runtime",
         "to": "jre-runtime",
         "filter": ["**/*"]
-      }
+      },
+      {
+              "from": "postgres-full",
+              "to": "postgres-full",
+              "filter": ["**/*"]
+            },
+            {
+              "from": "redis-full",
+              "to": "redis-full",
+              "filter": ["**/*"]
+            }
     ],
     "win": {
       "target": [

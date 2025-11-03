@@ -14,37 +14,16 @@
       </div>
       
       <div v-else class="messages-list">
-        <div
+        <MatrixMessageItem
           v-for="message in displayMessages"
           :key="message.id"
-          class="message-item"
-          :class="{ 'own-message': isOwnMessage(message) }"
-        >
-          <div class="message-avatar">
-            {{ getMessageAvatar(message) }}
-          </div>
-          <div class="message-content">
-            <div class="message-header">
-              <span class="sender-name">{{ getSenderName(message) }}</span>
-              <span class="message-time">{{ formatMessageTime(message.timestamp) }}</span>
-            </div>
-            <div class="message-body">
-              <div v-if="message.fileInfo" class="file-message">
-                <div class="file-icon">{{ getFileIcon(message.fileInfo) }}</div>
-                <div class="file-info">
-                  <div class="file-name">{{ message.fileInfo.name }}</div>
-                  <div class="file-size">{{ formatFileSize(message.fileInfo.size) }}</div>
-                </div>
-                <a v-if="message.fileInfo.url" :href="message.fileInfo.url" target="_blank" class="file-download">
-                  下载
-                </a>
-              </div>
-              <div v-else class="text-message">
-                {{ message.content }}
-              </div>
-            </div>
-          </div>
-        </div>
+          :message="message"
+          :room-id="roomId"
+          @start-thread="handleStartThread"
+          @open-thread="handleOpenThread"
+          @reply-to="handleReplyTo"
+          @scroll-to="handleScrollTo"
+        />
       </div>
     </div>
     
@@ -56,6 +35,12 @@
         </button>
         <button class="toolbar-btn" @click="toggleEmoji" title="表情">
           😊
+        </button>
+        <button class="toolbar-btn voip-voice-btn" @click="initiateVoiceCall" title="语音通话">
+          📞
+        </button>
+        <button class="toolbar-btn voip-video-btn" @click="initiateVideoCall" title="视频通话">
+          📹
         </button>
       </div>
       
@@ -92,9 +77,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useMatrixStore } from '@/stores/matrix'
+import MatrixMessageItem from './MatrixMessageItem.vue'
 
 const props = defineProps<{
   roomId: string
+}>()
+
+const emit = defineEmits<{
+  'start-thread': [message: any]
+  'open-thread': [message: any]
 }>()
 
 const matrixStore = useMatrixStore()
@@ -169,6 +160,29 @@ const getFileIcon = (fileInfo: any) => {
   return '📎'
 }
 
+// 线程相关方法
+const handleStartThread = (message: any) => {
+  emit('start-thread', message)
+}
+
+const handleOpenThread = (message: any) => {
+  emit('open-thread', message)
+}
+
+const handleReplyTo = (message: any) => {
+  // 处理回复消息
+  messageInput.value = `@${getSenderName(message)} `
+  messageTextarea.value?.focus()
+}
+
+const handleScrollTo = (eventId: string) => {
+  // 滚动到指定消息
+  const messageElement = document.querySelector(`[data-event-id="${eventId}"]`)
+  if (messageElement) {
+    messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
+
 const scrollToBottom = () => {
   nextTick(() => {
     if (messagesContainer.value) {
@@ -235,12 +249,74 @@ const toggleEmoji = () => {
   messageInput.value += emoji
 }
 
+// VoIP通话方法
+const initiateVoiceCall = () => {
+  console.log('📞 发起语音通话')
+  if (!props.roomId) {
+    alert('无法获取房间信息')
+    return
+  }
+  
+  // 获取房间成员信息
+  const targetUserId = getTargetUserId()
+  console.log('发起语音通话:', {
+    roomId: props.roomId,
+    targetUserId
+  })
+  
+  alert(`语音通话\n\n房间: ${props.roomId}\n目标用户: ${targetUserId || '未知'}\n\n功能开发中...`)
+}
+
+const initiateVideoCall = () => {
+  console.log('📹 发起视频通话')
+  if (!props.roomId) {
+    alert('无法获取房间信息')
+    return
+  }
+  
+  // 获取房间成员信息
+  const targetUserId = getTargetUserId()
+  console.log('发起视频通话:', {
+    roomId: props.roomId,
+    targetUserId
+  })
+  
+  alert(`视频通话\n\n房间: ${props.roomId}\n目标用户: ${targetUserId || '未知'}\n\n功能开发中...`)
+}
+
+// 获取目标用户ID（用于通话）
+const getTargetUserId = (): string | null => {
+  if (!matrixStore.matrixClient) return null
+  
+  const room = matrixStore.matrixClient.getRoom(props.roomId)
+  if (!room) return null
+  
+  // 对于私聊房间，获取对方用户ID
+  const members = room.getJoinedMembers()
+  const memberIds = Object.keys(members)
+  const currentUserId = matrixStore.matrixClient.getUserId()
+  
+  // 找到不是当前用户的成员
+  const otherUserId = memberIds.find(id => id !== currentUserId)
+  return otherUserId || null
+}
+
 const loadMessages = async () => {
   if (!props.roomId) return
   
   try {
     loading.value = true
-    await matrixStore.fetchMatrixMessages(props.roomId)
+    console.log(`🔄 开始加载房间 ${props.roomId} 的消息`)
+    
+    const loadedMessages = await matrixStore.fetchMatrixMessages(props.roomId)
+    console.log(`✅ 加载完成，获得 ${loadedMessages.length} 条消息`)
+    
+    // 如果没有消息，尝试创建一些测试消息（仅用于调试）
+    if (loadedMessages.length === 0 && props.roomId !== 'file-transfer-assistant') {
+      console.log('🔧 没有消息，创建测试消息')
+      // 这里可以添加一些测试消息用于调试
+    }
+    
     scrollToBottom()
   } catch (error) {
     console.error('加载消息失败:', error)
@@ -253,6 +329,14 @@ const loadMessages = async () => {
 watch(() => props.roomId, (newRoomId) => {
   if (newRoomId) {
     loadMessages()
+  }
+}, { immediate: true })
+
+// 调试消息数据
+watch(messages, (newMessages) => {
+  if (newMessages.length > 0) {
+    console.log(`🔍 房间 ${props.roomId} 消息数据:`, newMessages)
+    console.log('第一条消息:', newMessages[0])
   }
 }, { immediate: true })
 
@@ -471,6 +555,17 @@ onMounted(() => {
 .toolbar-btn:hover {
   background: var(--hover-bg, #f0f0f0);
   color: var(--accent-color, #07c160);
+}
+
+/* VoIP按钮特定样式 */
+.voip-voice-btn:hover {
+  background: rgba(76, 175, 80, 0.1);
+  color: #4CAF50;
+}
+
+.voip-video-btn:hover {
+  background: rgba(33, 150, 243, 0.1);
+  color: #2196F3;
 }
 
 .input-area {
