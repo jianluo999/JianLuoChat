@@ -61,6 +61,11 @@
         "from": "jre-runtime",
         "to": "jre-runtime",
         "filter": ["**/*"]
+      },
+      {
+        "from": "postgres",
+        "to": "postgres",
+        "filter": ["**/*"]
       }
     ],
     "win": {
