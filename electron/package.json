@@ -63,10 +63,15 @@
         "filter": ["**/*"]
       },
       {
-        "from": "postgres",
-        "to": "postgres",
-        "filter": ["**/*"]
-      }
+              "from": "postgres-full",
+              "to": "postgres-full",
+              "filter": ["**/*"]
+            },
+            {
+              "from": "redis-full",
+              "to": "redis-full",
+              "filter": ["**/*"]
+            }
     ],
     "win": {
       "target": [
